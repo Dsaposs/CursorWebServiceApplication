@@ -33,16 +33,42 @@ Open **http://localhost:5294** in your browser (register, sign in, manage notes)
 
 ## Docker
 
-Build and run the API plus built-in web UI in Docker:
+The easiest way to run the app is with the Docker helper script:
+
+```text
+scripts/run-docker.cmd
+```
+
+The script lives in the [`scripts`](scripts/) folder at the project root.
+
+### Requirements
+
+- Docker Desktop installed
+- Docker Desktop running before you start the script
+
+### Run The App
 
 ```powershell
 cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
 .\scripts\run-docker.cmd
 ```
 
-Open **http://localhost:5294**.
+Keep that terminal open while you use the app. When the startup logs say the app is listening, open:
 
-The script builds the Docker image, creates the `notes-data` volume if needed, removes any old `notes-api` container, and starts the app with SQLite stored at `/data/notes.db`.
+```text
+http://localhost:5294
+```
+
+### What The Script Does
+
+- Builds the Docker image `notes-api:local`
+- Creates the Docker volume `notes-data` if it does not already exist
+- Removes any old container named `notes-api`
+- Starts a new `notes-api` container
+- Maps your browser port `5294` to the app port `8080` in the container
+- Stores SQLite data in the Docker volume at `/data/notes.db`
+
+To stop the app, press `Ctrl+C` in the terminal running the script.
 
 ## Kubernetes
 

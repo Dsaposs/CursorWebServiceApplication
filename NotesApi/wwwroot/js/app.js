@@ -1,118 +1,288 @@
 const app = document.getElementById("app");
-let token = localStorage.getItem("notes_token");
 
-async function request(path, options = {}) {
-  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (token) headers.Authorization = `Bearer ${token}`;
+const state = {
+  mode: "login",
+  token: localStorage.getItem("notes_token"),
+  email: localStorage.getItem("notes_email") || "",
+  notes: [],
+  selectedId: null,
+  showLoginPassword: false,
+  error: "",
+};
+
+async function api(path, options = {}) {
+  const headers = new Headers(options.headers);
+  if (options.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (state.token) {
+    headers.set("Authorization", `Bearer ${state.token}`);
+  }
 
   const response = await fetch(path, { ...options, headers });
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
-    const errors = Array.isArray(data?.errors)
-      ? data.errors
-      : data?.errors && typeof data.errors === "object"
-        ? Object.values(data.errors).flat()
-        : [data?.title || `Request failed (${response.status})`];
-    throw new Error(errors.join(" "));
+    throw new Error(extractError(data, response.status));
   }
 
   return data;
 }
 
-function renderAuth(error = "") {
-  app.innerHTML = `
-    <section class="card">
-      <h1>Notes</h1>
-      <p>Create an account or sign in to manage notes.</p>
-      <form id="auth-form">
-        <input id="email" type="email" placeholder="Email" required />
-        <input id="password" type="text" placeholder="Password" minlength="7" required />
-        <input id="confirm-password" type="text" placeholder="Confirm password (register only)" minlength="7" />
-        ${error ? `<p class="error">${error}</p>` : ""}
-        <div class="actions">
-          <button type="submit" data-mode="login">Sign in</button>
-          <button type="submit" data-mode="register">Register</button>
-        </div>
-      </form>
-      <p><a href="/swagger">Open Swagger</a></p>
-    </section>`;
-
-  document.getElementById("auth-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const mode = event.submitter.dataset.mode;
-    const email = document.getElementById("email").value;
-    const password = document.getElementById("password").value;
-    const confirmPassword = document.getElementById("confirm-password").value;
-
-    try {
-      if (mode === "register") {
-        if (password !== confirmPassword) throw new Error("Passwords do not match.");
-        await request("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password }) });
-      }
-
-      const auth = await request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
-      token = auth.token;
-      localStorage.setItem("notes_token", token);
-      renderNotes();
-    } catch (err) {
-      renderAuth(err.message);
-    }
-  });
+function extractError(data, status) {
+  if (Array.isArray(data?.errors)) return data.errors.join(" ");
+  if (data?.errors && typeof data.errors === "object") return Object.values(data.errors).flat().join(" ");
+  return data?.title || `Request failed (${status})`;
 }
 
-async function renderNotes(error = "") {
-  let notes = [];
-  try {
-    notes = await request("/api/notes");
-  } catch (err) {
-    renderAuth(err.message);
-    return;
-  }
+function escapeHtml(value) {
+  const div = document.createElement("div");
+  div.textContent = value ?? "";
+  return div.innerHTML;
+}
 
+function setSession(token, email) {
+  state.token = token;
+  state.email = email;
+  localStorage.setItem("notes_token", token);
+  localStorage.setItem("notes_email", email);
+}
+
+function clearSession() {
+  state.token = null;
+  state.email = "";
+  state.notes = [];
+  state.selectedId = null;
+  localStorage.removeItem("notes_token");
+  localStorage.removeItem("notes_email");
+}
+
+function renderAuth() {
+  const isLogin = state.mode === "login";
   app.innerHTML = `
-    <section class="card wide">
-      <div class="header">
-        <h1>Your notes</h1>
-        <button id="logout">Sign out</button>
-      </div>
-      <form id="note-form">
-        <input id="title" placeholder="Title" maxlength="200" />
-        <textarea id="content" placeholder="Write a note" required></textarea>
-        ${error ? `<p class="error">${error}</p>` : ""}
-        <button type="submit">Create note</button>
-      </form>
-      <ul class="notes">
-        ${notes.map((note) => `<li><strong>${note.title || "Untitled"}</strong><p>${note.content}</p></li>`).join("")}
-      </ul>
-    </section>`;
+    <section class="page">
+      <div class="card">
+        <h1>Notes</h1>
+        <p>${isLogin ? "Sign in to manage your notes." : "Create an account. Passwords are visible while registering."}</p>
 
-  document.getElementById("logout").onclick = () => {
-    localStorage.removeItem("notes_token");
-    token = null;
+        <div class="tabs">
+          <button class="btn secondary ${isLogin ? "active" : ""}" id="login-tab" type="button">Sign in</button>
+          <button class="btn secondary ${!isLogin ? "active" : ""}" id="register-tab" type="button">Register</button>
+        </div>
+
+        <form id="auth-form">
+          <label>
+            Email
+            <input id="email" type="email" autocomplete="email" required value="${escapeHtml(state.email)}" />
+          </label>
+
+          ${isLogin ? renderLoginPassword() : renderRegisterPasswords()}
+
+          ${state.error ? `<div class="error">${escapeHtml(state.error)}</div>` : ""}
+
+          <button class="btn" type="submit">${isLogin ? "Sign in" : "Register"}</button>
+        </form>
+      </div>
+    </section>
+  `;
+
+  document.getElementById("login-tab").onclick = () => {
+    state.mode = "login";
+    state.error = "";
+    renderAuth();
+  };
+  document.getElementById("register-tab").onclick = () => {
+    state.mode = "register";
+    state.error = "";
     renderAuth();
   };
 
-  document.getElementById("note-form").onsubmit = async (event) => {
-    event.preventDefault();
-    try {
-      await request("/api/notes", {
-        method: "POST",
-        body: JSON.stringify({
-          title: document.getElementById("title").value || undefined,
-          content: document.getElementById("content").value,
-        }),
-      });
-      renderNotes();
-    } catch (err) {
-      renderNotes(err.message);
-    }
-  };
+  const toggle = document.getElementById("toggle-login-password");
+  if (toggle) {
+    toggle.onclick = () => {
+      state.showLoginPassword = !state.showLoginPassword;
+      renderAuth();
+    };
+  }
+
+  document.getElementById("auth-form").onsubmit = handleAuthSubmit;
 }
 
-if (token) {
-  renderNotes();
+function renderLoginPassword() {
+  return `
+    <label>
+      Password
+      <div class="password-row">
+        <input id="password" type="${state.showLoginPassword ? "text" : "password"}" autocomplete="current-password" required />
+        <button class="btn secondary" id="toggle-login-password" type="button">${state.showLoginPassword ? "Hide" : "Show"}</button>
+      </div>
+    </label>
+  `;
+}
+
+function renderRegisterPasswords() {
+  return `
+    <label>
+      Password
+      <input id="password" type="text" autocomplete="new-password" minlength="7" required />
+    </label>
+    <label>
+      Confirm password
+      <input id="confirm-password" type="text" autocomplete="new-password" minlength="7" required />
+    </label>
+  `;
+}
+
+async function handleAuthSubmit(event) {
+  event.preventDefault();
+  state.error = "";
+
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+
+  try {
+    if (state.mode === "register") {
+      const confirmPassword = document.getElementById("confirm-password").value;
+      if (password !== confirmPassword) throw new Error("Passwords do not match.");
+      await api("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password }) });
+    }
+
+    const auth = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+    setSession(auth.token, email);
+    await loadNotes();
+  } catch (error) {
+    state.error = error.message;
+    renderAuth();
+  }
+}
+
+async function loadNotes() {
+  try {
+    state.notes = await api("/api/notes");
+    state.error = "";
+    renderNotes();
+  } catch (error) {
+    clearSession();
+    state.error = error.message;
+    renderAuth();
+  }
+}
+
+function renderNotes() {
+  const selected = state.notes.find((note) => note.id === state.selectedId);
+  app.innerHTML = `
+    <section class="app-shell">
+      <header class="topbar">
+        <div>
+          <strong>Notes</strong>
+          <span class="muted">${escapeHtml(state.email)}</span>
+        </div>
+        <button class="btn secondary" id="logout" type="button">Sign out</button>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar">
+          <div class="actions">
+            <h2>Your notes</h2>
+            <button class="btn secondary" id="new-note" type="button">New</button>
+          </div>
+          <ul class="note-list">
+            ${state.notes.map(renderNoteListItem).join("") || `<li class="muted">No notes yet.</li>`}
+          </ul>
+        </aside>
+
+        <main class="editor">
+          <h2>${selected ? "Edit note" : "Create note"}</h2>
+          <form id="note-form">
+            <label>
+              Title
+              <input id="title" maxlength="200" value="${escapeHtml(selected?.title || "")}" />
+            </label>
+            <label>
+              Content
+              <textarea id="content" required>${escapeHtml(selected?.content || "")}</textarea>
+            </label>
+            ${state.error ? `<div class="error">${escapeHtml(state.error)}</div>` : ""}
+            <div class="actions">
+              <button class="btn" type="submit">${selected ? "Save changes" : "Create note"}</button>
+              ${selected ? `<button class="btn danger" id="delete-note" type="button">Delete</button>` : ""}
+            </div>
+          </form>
+        </main>
+      </div>
+    </section>
+  `;
+
+  document.getElementById("logout").onclick = () => {
+    clearSession();
+    renderAuth();
+  };
+  document.getElementById("new-note").onclick = () => {
+    state.selectedId = null;
+    state.error = "";
+    renderNotes();
+  };
+  document.querySelectorAll("[data-note-id]").forEach((button) => {
+    button.onclick = () => {
+      state.selectedId = button.dataset.noteId;
+      state.error = "";
+      renderNotes();
+    };
+  });
+  document.getElementById("note-form").onsubmit = saveNote;
+
+  const deleteButton = document.getElementById("delete-note");
+  if (deleteButton) deleteButton.onclick = deleteNote;
+}
+
+function renderNoteListItem(note) {
+  const active = note.id === state.selectedId ? "active" : "";
+  return `
+    <li>
+      <button class="${active}" type="button" data-note-id="${note.id}">
+        <strong>${escapeHtml(note.title || "Untitled")}</strong><br />
+        <span class="muted">${escapeHtml(note.content.slice(0, 80))}</span>
+      </button>
+    </li>
+  `;
+}
+
+async function saveNote(event) {
+  event.preventDefault();
+  const payload = {
+    title: document.getElementById("title").value || undefined,
+    content: document.getElementById("content").value,
+  };
+
+  try {
+    if (state.selectedId) {
+      await api(`/api/notes/${state.selectedId}`, { method: "PUT", body: JSON.stringify(payload) });
+    } else {
+      const created = await api("/api/notes", { method: "POST", body: JSON.stringify(payload) });
+      state.selectedId = created.id;
+    }
+    await loadNotes();
+  } catch (error) {
+    state.error = error.message;
+    renderNotes();
+  }
+}
+
+async function deleteNote() {
+  if (!state.selectedId || !confirm("Delete this note?")) return;
+  try {
+    await api(`/api/notes/${state.selectedId}`, { method: "DELETE" });
+    state.selectedId = null;
+    await loadNotes();
+  } catch (error) {
+    state.error = error.message;
+    renderNotes();
+  }
+}
+
+if (state.token) {
+  loadNotes();
 } else {
   renderAuth();
 }
