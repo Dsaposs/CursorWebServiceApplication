@@ -4,7 +4,7 @@ setlocal
 set "GITHUB_REPO=dsaposs/CursorWebServiceApplication"
 set "REMOTE_URL=https://github.com/%GITHUB_REPO%.git"
 
-cd /d "%~dp0"
+cd /d "%~dp0.."
 if errorlevel 1 exit /b 1
 
 where gh >nul 2>nul

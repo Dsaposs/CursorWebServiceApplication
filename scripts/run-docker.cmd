@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 set "IMAGE_NAME=notes-api:local"
 set "CONTAINER_NAME=notes-api"
@@ -32,7 +32,6 @@ if not exist "Dockerfile" (
 if not exist "NotesApi\NotesApi.csproj" (
   echo NotesApi\NotesApi.csproj was not found.
   echo This folder does not currently have the expected project structure.
-  echo Re-run the move script from the original workspace, then run this script again.
   exit /b 1
 )
 

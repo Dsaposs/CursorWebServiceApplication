@@ -9,28 +9,13 @@ ASP.NET Core Web API for user registration, JWT login, and owner-scoped text not
 
 ## Run locally
 
-This repo includes **dotnet-ef as a local tool** (see [`.config/dotnet-tools.json`](.config/dotnet-tools.json)), so you do not need a global `dotnet ef` install.
+SQLite is created automatically when the application starts.
 
 ```powershell
-cd C:\Users\Dan\.cursor\projects\empty-window
+cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
 dotnet restore NotesApi\NotesApi.csproj
 .\scripts\setup-database.cmd
 dotnet run --project NotesApi\NotesApi.csproj
-```
-
-Use `setup-database.cmd` (not `.ps1`) so you avoid PowerShell execution-policy blocks on unsigned scripts.
-
-Or run the migration manually after restoring tools:
-
-```powershell
-dotnet tool restore
-dotnet dotnet-ef database update --project NotesApi\NotesApi.csproj
-```
-
-Optional global install (if you prefer `dotnet ef` everywhere):
-
-```powershell
-dotnet tool install --global dotnet-ef
 ```
 
 Open Swagger at `http://localhost:5294/swagger` (or the URL shown in the console).
@@ -40,8 +25,8 @@ Open Swagger at `http://localhost:5294/swagger` (or the URL shown in the console
 The UI is served from the API at **`http://localhost:5294`** (static files in `NotesApi/wwwroot/`).
 
 ```powershell
-cd C:\Users\Dan\.cursor\projects\empty-window
-.\run-app.cmd
+cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
+.\scripts\run-app.cmd
 ```
 
 Open **http://localhost:5294** in your browser (register, sign in, manage notes).
@@ -52,7 +37,7 @@ Build and run the API plus built-in web UI in Docker:
 
 ```powershell
 cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
-.\run-docker.cmd
+.\scripts\run-docker.cmd
 ```
 
 Open **http://localhost:5294**.
@@ -73,7 +58,7 @@ SQLite is a single-file database, so the deployment intentionally uses **1 repli
 Build the image and deploy:
 
 ```powershell
-cd C:\Users\Dan\.cursor\projects\empty-window
+cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
 .\scripts\docker-build.cmd
 .\scripts\k8s-deploy.cmd
 ```

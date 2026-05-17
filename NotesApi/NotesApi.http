@@ -23,6 +23,31 @@ Content-Type: application/json
 ### List notes
 GET {{NotesApi_HostAddress}}/api/notes
 Authorization: Bearer {{token}}
+@NotesApi_HostAddress = http://localhost:5294
+@token = {{login.response.body.token}}
+
+### Register
+POST {{NotesApi_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "Secret1"
+}
+
+### Login
+# @name login
+POST {{NotesApi_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "Secret1"
+}
+
+### List notes
+GET {{NotesApi_HostAddress}}/api/notes
+Authorization: Bearer {{token}}
 
 ### Create note
 POST {{NotesApi_HostAddress}}/api/notes

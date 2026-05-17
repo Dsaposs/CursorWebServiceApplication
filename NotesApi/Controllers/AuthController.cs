@@ -14,10 +14,7 @@ public class AuthController : ControllerBase
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly JwtTokenService _jwtTokenService;
 
-    public AuthController(
-        UserManager<ApplicationUser> userManager,
-        SignInManager<ApplicationUser> signInManager,
-        JwtTokenService jwtTokenService)
+    public AuthController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, JwtTokenService jwtTokenService)
     {
         _userManager = userManager;
         _signInManager = signInManager;
@@ -25,69 +22,28 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult<RegisterResponse>> Register([FromBody] RegisterRequest request)
+    public async Task<ActionResult<RegisterResponse>> Register(RegisterRequest request)
     {
-        if (!ModelState.IsValid)
-        {
-            return ValidationProblem(ModelState);
-        }
-
         var existing = await _userManager.FindByEmailAsync(request.Email);
-        if (existing is not null)
-        {
-            return BadRequest(new { errors = new[] { "A user with this email already exists." } });
-        }
+        if (existing is not null) return BadRequest(new { errors = new[] { "A user with this email already exists." } });
 
-        var user = new ApplicationUser
-        {
-            UserName = request.Email,
-            Email = request.Email,
-            EmailConfirmed = true,
-        };
-
+        var user = new ApplicationUser { UserName = request.Email, Email = request.Email, EmailConfirmed = true };
         var result = await _userManager.CreateAsync(user, request.Password);
-        if (!result.Succeeded)
-        {
-            return BadRequest(new
-            {
-                errors = result.Errors.Select(e => e.Description),
-            });
-        }
+        if (!result.Succeeded) return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
 
-        return CreatedAtAction(
-            nameof(Register),
-            new RegisterResponse
-            {
-                UserId = user.Id,
-                Email = user.Email!,
-            });
+        return CreatedAtAction(nameof(Register), new RegisterResponse { UserId = user.Id, Email = user.Email! });
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
+    public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
-        if (!ModelState.IsValid)
-        {
-            return ValidationProblem(ModelState);
-        }
-
         var user = await _userManager.FindByEmailAsync(request.Email);
-        if (user is null)
-        {
-            return Unauthorized(new { errors = new[] { "Invalid email or password." } });
-        }
+        if (user is null) return Unauthorized(new { errors = new[] { "Invalid email or password." } });
 
         var result = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: false);
-        if (!result.Succeeded)
-        {
-            return Unauthorized(new { errors = new[] { "Invalid email or password." } });
-        }
+        if (!result.Succeeded) return Unauthorized(new { errors = new[] { "Invalid email or password." } });
 
         var (token, expiresAt) = _jwtTokenService.CreateToken(user);
-        return Ok(new AuthResponse
-        {
-            Token = token,
-            ExpiresAt = expiresAt,
-        });
+        return Ok(new AuthResponse { Token = token, ExpiresAt = expiresAt });
     }
 }
