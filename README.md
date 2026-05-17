@@ -51,17 +51,13 @@ Open **http://localhost:5294** in your browser (register, sign in, manage notes)
 Build and run the API plus built-in web UI in Docker:
 
 ```powershell
-cd C:\Users\Dan\.cursor\projects\empty-window
-.\scripts\docker-build.cmd
-docker volume create notes-data
-docker run --rm -p 5294:8080 `
-  -v notes-data:/data `
-  -e ConnectionStrings__DefaultConnection="Data Source=/data/notes.db" `
-  -e Jwt__Key="ChangeThisDockerJwtSigningKeyToARealLongRandomValue123!" `
-  notes-api:local
+cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
+.\run-docker.cmd
 ```
 
 Open **http://localhost:5294**.
+
+The script builds the Docker image, creates the `notes-data` volume if needed, removes any old `notes-api` container, and starts the app with SQLite stored at `/data/notes.db`.
 
 ## Kubernetes
 
