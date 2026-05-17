@@ -1,0 +1,12 @@
+## .NET
+bin/
+obj/
+*.db
+*.db-shm
+*.db-wal
+
+*.user
+*.suo
+.vs/
+appsettings.*.local.json
+secrets.json
