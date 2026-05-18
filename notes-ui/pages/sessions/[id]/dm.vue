@@ -79,7 +79,7 @@ async function submitNpcAction() {
 }
 
 async function resolveAction(action: ActionQueueItemResponse) {
-  if (!resolutionText.value[action.id]?.trim()) {
+  if (!String(resolutionText.value[action.id] ?? '').trim()) {
     toastError('Resolution text is required.');
     return;
   }
@@ -121,8 +121,9 @@ function buildStatChanges(actionId: string) {
   return [change];
 }
 
-function optNum(v?: string) {
-  return v?.trim() ? Number(v) : undefined;
+function optNum(v?: string | number) {
+  const s = String(v ?? '').trim();
+  return s !== '' && !Number.isNaN(Number(s)) ? Number(s) : undefined;
 }
 
 async function setupCombat() {
@@ -199,6 +200,9 @@ function toggleAction(id: string) {
       <div class="topbar-actions" v-if="state">
         <span class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
         <NuxtLink class="btn ghost sm" to="/games">← Games</NuxtLink>
+        <NuxtLink v-if="!state.isActive" class="btn ghost sm" :to="`/sessions/${route.params.id}/summary`">
+          View Summary
+        </NuxtLink>
         <button v-if="state.isActive" class="btn danger sm" type="button" :disabled="isSaving" @click="stopSession">
           Stop Session
         </button>
@@ -300,9 +304,9 @@ function toggleAction(id: string) {
                         </select>
                       </label>
                       <div class="inline-fields">
-                        <label>HP delta<input v-model.trim="statChangeHealthDelta[action.id]" type="number" placeholder="-5 or +3" /></label>
-                        <label>Set HP<input v-model.trim="statChangeSetHealth[action.id]" type="number" min="0" /></label>
-                        <label>Set AC<input v-model.trim="statChangeSetArmor[action.id]" type="number" min="0" /></label>
+                        <label>HP delta<input v-model="statChangeHealthDelta[action.id]" type="number" placeholder="-5 or +3" /></label>
+                        <label>Set HP<input v-model="statChangeSetHealth[action.id]" type="number" min="0" /></label>
+                        <label>Set AC<input v-model="statChangeSetArmor[action.id]" type="number" min="0" /></label>
                       </div>
                     </div>
                   </details>

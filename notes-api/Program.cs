@@ -120,14 +120,24 @@ app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
     {
+        var exceptionFeature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        var exception = exceptionFeature?.Error;
+
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(exception, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+
         context.Response.StatusCode = 500;
         context.Response.ContentType = "application/problem+json";
+
+        var isDev = context.RequestServices.GetRequiredService<IWebHostEnvironment>().IsDevelopment();
         await context.Response.WriteAsJsonAsync(new
         {
             type = "https://tools.ietf.org/html/rfc7807",
             title = "An unexpected error occurred.",
             status = 500,
-            detail = "The server encountered an error and could not complete your request.",
+            detail = isDev
+                ? $"{exception?.GetType().Name}: {exception?.Message}"
+                : "The server encountered an error and could not complete your request.",
         });
     });
 });

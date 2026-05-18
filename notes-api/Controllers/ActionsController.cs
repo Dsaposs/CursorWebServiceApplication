@@ -115,27 +115,41 @@ public class ActionsController : ControllerBase
             .Include(a => a.Resolution)
             .FirstOrDefaultAsync(a => a.Id == actionId);
 
-        if (action is null || !IsDm(action.Session.Game.DmUserId))
+        if (action is null || action.Session is null || action.Session.Game is null)
         {
             return NotFound();
         }
 
+        if (!IsDm(action.Session.Game.DmUserId))
+        {
+            return NotFound();
+        }
+
+        var statChanges = request.StatChanges ?? [];
+
         var now = DateTime.UtcNow;
         action.Status = ActionStatus.Published;
         action.PublishedAt = now;
-        action.Resolution ??= new ActionResolution
+
+        // Explicitly add the resolution to the change tracker so EF Core
+        // correctly issues an INSERT rather than relying on relationship fixup.
+        if (action.Resolution is null)
         {
-            Id = Guid.NewGuid(),
-            ActionRequestId = action.Id,
-        };
+            action.Resolution = new ActionResolution
+            {
+                Id = Guid.NewGuid(),
+                ActionRequestId = action.Id,
+            };
+            _db.ActionResolutions.Add(action.Resolution);
+        }
 
         action.Resolution.ResolutionText = request.ResolutionText;
         action.Resolution.RollSummary = request.RollSummary;
         action.Resolution.AdditionalActions = request.AdditionalActions;
-        action.Resolution.StatChangesJson = JsonSerializer.Serialize(request.StatChanges);
+        action.Resolution.StatChangesJson = JsonSerializer.Serialize(statChanges);
         action.Resolution.PublishedAt = now;
 
-        foreach (var statChange in request.StatChanges)
+        foreach (var statChange in statChanges)
         {
             await ApplyStatChangeAsync(action.Session.GameId, statChange);
         }

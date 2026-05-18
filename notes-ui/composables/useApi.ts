@@ -65,7 +65,7 @@ export function useApi() {
 
 export function extractError(fetchError: unknown) {
   const errorResponse = fetchError as {
-    data?: { errors?: string[] | Record<string, string[]>; title?: string };
+    data?: { errors?: string[] | Record<string, string[]>; title?: string; detail?: string };
     status?: number;
     statusCode?: number;
     statusMessage?: string;
@@ -80,5 +80,6 @@ export function extractError(fetchError: unknown) {
     return Object.values(data.errors).flat().join(' ');
   }
 
-  return data?.title || errorResponse.statusMessage || `Request failed (${errorResponse.status ?? errorResponse.statusCode ?? 'unknown'})`;
+  // Prefer detail (contains actual exception in dev) over the generic title
+  return data?.detail || data?.title || errorResponse.statusMessage || `Request failed (${errorResponse.status ?? errorResponse.statusCode ?? 'unknown'})`;
 }

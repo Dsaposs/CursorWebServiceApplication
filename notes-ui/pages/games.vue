@@ -217,6 +217,10 @@ function sessionBadgeText(session: SessionSummaryResponse) {
   if (!session.isActive) return 'Ended';
   return session.state;
 }
+
+function sessionRoute(session: SessionSummaryResponse) {
+  return session.isActive ? `/sessions/${session.id}/dm` : `/sessions/${session.id}/summary`;
+}
 </script>
 
 <template>
@@ -360,13 +364,16 @@ function sessionBadgeText(session: SessionSummaryResponse) {
             <ul v-else style="list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem;">
               <li v-for="session in selectedGame.sessions" :key="session.id">
                 <NuxtLink
-                  :to="`/sessions/${session.id}/dm`"
+                  :to="sessionRoute(session)"
                   class="flex items-center gap-2"
                   style="padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); display: flex; text-decoration: none; background: var(--surface); transition: border-color 0.15s;"
                 >
                   <span class="badge" :class="sessionBadge(session)">{{ sessionBadgeText(session) }}</span>
-                  <span class="flex-1 text-sm" style="color: var(--ink-bright);">Session</span>
+                  <span class="flex-1 text-sm" style="color: var(--ink-bright);">
+                    {{ session.isActive ? 'Live session' : 'Session recap' }}
+                  </span>
                   <span class="text-xs muted font-mono">{{ session.joinCode }}</span>
+                  <span class="text-xs muted">{{ session.isActive ? '→ DM Screen' : '→ Summary' }}</span>
                 </NuxtLink>
               </li>
             </ul>
