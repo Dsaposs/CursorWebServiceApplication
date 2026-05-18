@@ -20,72 +20,43 @@ dotnet run --project NotesApi\NotesApi.csproj
 
 Open Swagger at `http://localhost:5294/swagger` (or the URL shown in the console).
 
-## Web frontend (no Node/npm required)
+## Start The App
 
 The UI is served from the API at **`http://localhost:5294`** (static files in `NotesApi/wwwroot/`).
 
+Use `start-app.cmd` when you want the script to build and start the local Docker app only if no instance is already present:
+
 ```powershell
 cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
-.\scripts\run-app.cmd
+.\scripts\start-app.cmd
 ```
 
 Open **http://localhost:5294** in your browser (register, sign in, manage notes).
 
-## Docker
+If an app instance is already running on port `5294`, or a `notes-api` Docker/Kubernetes instance already exists, the script exits with an error instead of replacing it.
 
-The easiest way to run the app is with the Docker helper script:
+## Stop The App
 
-```text
-scripts/run-docker.cmd
+Use `stop-app.cmd` to stop the local app process, remove the Docker container, and remove the Kubernetes app deployment/service while preserving SQLite data:
+
+```powershell
+.\scripts\stop-app.cmd
 ```
 
-The script lives in the [`scripts`](scripts/) folder at the project root.
+## Docker Details
 
 ### Requirements
 
 - Docker Desktop installed
 - Docker Desktop running before you start the script
 
-### Run The App
-
-```powershell
-cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
-.\scripts\run-docker.cmd
-```
-
-Keep that terminal open while you use the app. When the startup logs say the app is listening, open:
-
-```text
-http://localhost:5294
-```
-
-### What The Script Does
+### What `start-app.cmd` Does
 
 - Builds the Docker image `notes-api:local`
 - Creates the Docker volume `notes-data` if it does not already exist
-- Removes any old container named `notes-api`
-- Starts a new `notes-api` container
+- Starts a new detached `notes-api` container
 - Maps your browser port `5294` to the app port `8080` in the container
 - Stores SQLite data in the Docker volume at `/data/notes.db`
-
-To stop the app, press `Ctrl+C` in the terminal running the script.
-
-### Refresh The Local Docker App
-
-Use this when you changed code and want a fresh local container:
-
-```powershell
-cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
-.\scripts\refresh-docker.cmd
-```
-
-The refresh script stops the existing `notes-api` container, keeps the `notes-data` SQLite volume, rebuilds the project and Docker image, then starts a new container.
-
-Only reset SQLite data when you intentionally want to delete local app data:
-
-```powershell
-.\scripts\refresh-docker.cmd /reset-sqlite
-```
 
 ## Kubernetes
 
@@ -98,45 +69,13 @@ The Kubernetes manifests live in [`k8s/`](k8s/). They deploy:
 
 SQLite is a single-file database, so the deployment intentionally uses **1 replica**.
 
-Build the image and deploy:
+Build the image and deploy manually if you want to run through Kubernetes:
 
 ```powershell
 cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
-.\scripts\docker-build.cmd
-.\scripts\k8s-deploy.cmd
-```
-
-### Refresh The Kubernetes App
-
-Use this when Kubernetes is running the app and you want to rebuild and restart it with a new image:
-
-```powershell
-cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
-.\scripts\refresh-k8s.cmd
-```
-
-The script:
-
-- Stops any standalone Docker container named `notes-api`
-- Scales the Kubernetes deployment down to `0`
-- Preserves the SQLite PVC by default
-- Builds the project
-- Builds the Docker image `notes-api:local`
-- Applies the Kubernetes manifests
-- Scales the deployment back to `1`
-- Waits for rollout to complete
-
-If you need to push to a registry, set `IMAGE_REPOSITORY` before running the script:
-
-```powershell
-$env:IMAGE_REPOSITORY = "your-registry/notes-api:latest"
-.\scripts\refresh-k8s.cmd
-```
-
-Only reset the Kubernetes SQLite PVC when you intentionally want to delete persisted notes/users:
-
-```powershell
-.\scripts\refresh-k8s.cmd /reset-sqlite
+docker build -t notes-api:local .
+kubectl apply -k k8s
+kubectl rollout status deployment/notes-api -n notes
 ```
 
 If you use Docker Desktop Kubernetes, make sure the image exists in Docker Desktop before deploying. For minikube, build inside minikube instead:
