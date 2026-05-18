@@ -62,6 +62,11 @@ button {
   border-bottom: 1px solid var(--border);
 }
 
+.topbar div {
+  display: grid;
+  gap: 0.2rem;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(16rem, 22rem) 1fr;
@@ -118,6 +123,10 @@ textarea {
 .password-row {
   display: flex;
   gap: 0.75rem;
+}
+
+.actions {
+  align-items: center;
 }
 
 .password-row input {

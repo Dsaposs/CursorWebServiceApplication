@@ -37,6 +37,8 @@ spec:
                 secretKeyRef:
                   name: notes-api-secret
                   key: Jwt__Key
+            - name: Cors__AllowedOrigins__0
+              value: http://localhost:3000
           volumeMounts:
             - name: sqlite-data
               mountPath: /data

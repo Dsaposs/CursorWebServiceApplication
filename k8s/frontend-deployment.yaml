@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notes-ui
+  namespace: notes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notes-ui
+  template:
+    metadata:
+      labels:
+        app: notes-ui
+    spec:
+      containers:
+        - name: notes-ui
+          image: notes-ui:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: NUXT_API_BASE_URL
+              value: http://notes-api
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "3000"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20

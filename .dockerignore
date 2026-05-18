@@ -3,6 +3,9 @@
 **/.vscode
 **/bin
 **/obj
+**/node_modules
+**/.nuxt
+**/.output
 **/*.user
 **/*.suo
 **/*.db

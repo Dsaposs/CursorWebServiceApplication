@@ -10,6 +10,7 @@ using NotesApi.Models;
 using NotesApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+const string FrontendCorsPolicy = "Frontend";
 
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
 
@@ -56,6 +57,17 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddCors(options =>
+{
+    var allowedOrigins = builder.Configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>() ?? new[] { "http://localhost:3000" };
+
+    options.AddPolicy(FrontendCorsPolicy, policy =>
+        policy.WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+});
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddHealthChecks();
 builder.Services.AddControllers();
@@ -102,8 +114,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseCors(FrontendCorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
