@@ -1,11 +1,11 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY NotesApi/NotesApi.csproj NotesApi/
-RUN dotnet restore NotesApi/NotesApi.csproj
+COPY notes-api/NotesApi.csproj notes-api/
+RUN dotnet restore notes-api/NotesApi.csproj
 
-COPY NotesApi/ NotesApi/
-WORKDIR /src/NotesApi
+COPY notes-api/ notes-api/
+WORKDIR /src/notes-api
 RUN dotnet publish NotesApi.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime

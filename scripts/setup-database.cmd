@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0.."
 
 echo Restoring project dependencies...
-dotnet restore NotesApi\NotesApi.csproj
+dotnet restore notes-api\NotesApi.csproj
 if errorlevel 1 exit /b 1
 
 echo SQLite database will be created automatically when the application starts.
@@ -17,7 +17,7 @@ dotnet tool restore
 if errorlevel 1 exit /b 1
 
 echo Applying database migrations...
-dotnet dotnet-ef database update --project NotesApi\NotesApi.csproj
+dotnet dotnet-ef database update --project notes-api\NotesApi.csproj
 if errorlevel 1 exit /b 1
 
 echo Database is up to date.

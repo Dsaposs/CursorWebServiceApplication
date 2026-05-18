@@ -17,15 +17,15 @@ Start the API:
 
 ```powershell
 cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
-dotnet restore NotesApi\NotesApi.csproj
+dotnet restore notes-api\NotesApi.csproj
 .\scripts\setup-database.cmd
-dotnet run --project NotesApi\NotesApi.csproj
+dotnet run --project notes-api\NotesApi.csproj
 ```
 
 In another terminal, start the Nuxt UI:
 
 ```powershell
-cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application\frontend"
+cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application\notes-ui"
 npm install
 $env:NUXT_API_BASE_URL = "http://localhost:5294"
 npm run dev
@@ -93,7 +93,7 @@ Build both images and deploy manually if you want to run through Kubernetes:
 ```powershell
 cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
 docker build -t notes-api:local .
-docker build -t notes-ui:local frontend
+docker build -t notes-ui:local notes-ui
 kubectl apply -k k8s
 kubectl rollout status deployment/notes-api -n notes
 kubectl rollout status deployment/notes-ui -n notes
@@ -103,7 +103,7 @@ If you use Docker Desktop Kubernetes, make sure both images exist in Docker Desk
 
 ```powershell
 minikube image build -t notes-api:local .
-minikube image build -t notes-ui:local frontend
+minikube image build -t notes-ui:local notes-ui
 kubectl apply -k k8s
 ```
 
@@ -144,6 +144,6 @@ Before using this outside local development, replace the placeholder value in [`
 
 ## Configuration
 
-- Connection string: `NotesApi/appsettings.json` → `ConnectionStrings:DefaultConnection`
-- SQLite database file: `NotesApi/notes.db` (created automatically by migrations)
+- Connection string: `notes-api/appsettings.json` -> `ConnectionStrings:DefaultConnection`
+- SQLite database file: `notes-api/notes.db` (created automatically by migrations)
 - JWT signing key: override `Jwt:Key` via User Secrets or environment variables in production

@@ -32,19 +32,19 @@ if not exist "Dockerfile" (
   exit /b 1
 )
 
-if not exist "frontend\Dockerfile" (
-  echo ERROR: frontend\Dockerfile was not found.
+if not exist "notes-ui\Dockerfile" (
+  echo ERROR: notes-ui\Dockerfile was not found.
   exit /b 1
 )
 
-if not exist "NotesApi\NotesApi.csproj" (
-  echo ERROR: NotesApi\NotesApi.csproj was not found.
+if not exist "notes-api\NotesApi.csproj" (
+  echo ERROR: notes-api\NotesApi.csproj was not found.
   echo This folder does not currently have the expected project structure.
   exit /b 1
 )
 
-if not exist "frontend\package.json" (
-  echo ERROR: frontend\package.json was not found.
+if not exist "notes-ui\package.json" (
+  echo ERROR: notes-ui\package.json was not found.
   exit /b 1
 )
 
@@ -67,7 +67,7 @@ call :FailIfKubernetesInstanceExists "notes-ui"
 if errorlevel 1 exit /b 1
 
 echo Building backend project...
-dotnet publish NotesApi\NotesApi.csproj -c Release -o "%TEMP%\notes-api-publish-check" /p:UseAppHost=false
+dotnet publish notes-api\NotesApi.csproj -c Release -o "%TEMP%\notes-api-publish-check" /p:UseAppHost=false
 if errorlevel 1 exit /b 1
 
 echo Building Docker image %API_IMAGE_NAME%...
@@ -75,7 +75,7 @@ docker build -t "%API_IMAGE_NAME%" .
 if errorlevel 1 exit /b 1
 
 echo Building Docker image %UI_IMAGE_NAME%...
-docker build -t "%UI_IMAGE_NAME%" frontend
+docker build -t "%UI_IMAGE_NAME%" notes-ui
 if errorlevel 1 exit /b 1
 
 docker volume inspect "%VOLUME_NAME%" >nul 2>nul
