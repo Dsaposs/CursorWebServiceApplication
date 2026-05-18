@@ -33,7 +33,7 @@ public class AuthController : ControllerBase
 
         await _userManager.AddToRoleAsync(user, "User");
 
-        return CreatedAtAction(nameof(Register), new RegisterResponse { UserId = user.Id, Email = user.Email! });
+        return Ok(new RegisterResponse { UserId = user.Id, Email = user.Email! });
     }
 
     [HttpPost("login")]

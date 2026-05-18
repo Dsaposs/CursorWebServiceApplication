@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: notes-api
-  namespace: notes
+  name: ttrpg-api
+  namespace: ttrpg
 spec:
   type: ClusterIP
   selector:
-    app: notes-api
+    app: ttrpg-api
   ports:
     - name: http
       port: 80

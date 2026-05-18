@@ -74,7 +74,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo { Title = "Notes API", Version = "v1" });
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "TTRPG Table API", Version = "v1" });
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -101,11 +101,13 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     db.Database.EnsureCreated();
-    EnsureUserCounterColumns(db);
+    await SeedRulesetsAsync(db);
 
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-    await SeedDefaultUsersAsync(roleManager, userManager);
+    var adminPassword = builder.Configuration["Seed:AdminPassword"]
+        ?? throw new InvalidOperationException("Seed:AdminPassword is not configured.");
+    await SeedDefaultUsersAsync(roleManager, userManager, adminPassword);
 }
 
 if (app.Environment.IsDevelopment())
@@ -113,6 +115,22 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/problem+json";
+        await context.Response.WriteAsJsonAsync(new
+        {
+            type = "https://tools.ietf.org/html/rfc7807",
+            title = "An unexpected error occurred.",
+            status = 500,
+            detail = "The server encountered an error and could not complete your request.",
+        });
+    });
+});
 
 app.UseCors(FrontendCorsPolicy);
 app.UseAuthentication();
@@ -122,71 +140,12 @@ app.MapHealthChecks("/health");
 
 app.Run();
 
-static void EnsureUserCounterColumns(ApplicationDbContext db)
-{
-    AddColumnIfMissing(db, "NotesCreatedCount");
-    AddColumnIfMissing(db, "NotesDeletedCount");
-    db.Database.ExecuteSqlRaw("""
-        UPDATE AspNetUsers
-        SET NotesCreatedCount = (
-            SELECT COUNT(*)
-            FROM Notes
-            WHERE Notes.UserId = AspNetUsers.Id
-        )
-        WHERE NotesCreatedCount < (
-            SELECT COUNT(*)
-            FROM Notes
-            WHERE Notes.UserId = AspNetUsers.Id
-        )
-        """);
-}
-
-static void AddColumnIfMissing(ApplicationDbContext db, string columnName)
-{
-    if (UserColumnExists(db, columnName))
-    {
-        return;
-    }
-
-    if (columnName == "NotesCreatedCount")
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE AspNetUsers ADD COLUMN NotesCreatedCount INTEGER NOT NULL DEFAULT 0");
-    }
-    else if (columnName == "NotesDeletedCount")
-    {
-        db.Database.ExecuteSqlRaw("ALTER TABLE AspNetUsers ADD COLUMN NotesDeletedCount INTEGER NOT NULL DEFAULT 0");
-    }
-}
-
-static bool UserColumnExists(ApplicationDbContext db, string columnName)
-{
-    var connection = db.Database.GetDbConnection();
-    var shouldClose = connection.State == System.Data.ConnectionState.Closed;
-    if (shouldClose) connection.Open();
-
-    try
-    {
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM pragma_table_info('AspNetUsers') WHERE name = $columnName";
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = "$columnName";
-        parameter.Value = columnName;
-        command.Parameters.Add(parameter);
-        return Convert.ToInt32(command.ExecuteScalar()) > 0;
-    }
-    finally
-    {
-        if (shouldClose) connection.Close();
-    }
-}
-
-static async Task SeedDefaultUsersAsync(RoleManager<IdentityRole> roleManager, UserManager<ApplicationUser> userManager)
+static async Task SeedDefaultUsersAsync(RoleManager<IdentityRole> roleManager, UserManager<ApplicationUser> userManager, string adminPassword)
 {
     const string adminRole = "Admin";
     const string userRole = "User";
     const string adminUserName = "admin";
     const string adminEmail = "admin@example.local";
-    const string adminPassword = "Password1";
 
     foreach (var role in new[] { adminRole, userRole })
     {
@@ -237,4 +196,74 @@ static async Task SeedDefaultUsersAsync(RoleManager<IdentityRole> roleManager, U
             await userManager.AddToRoleAsync(user, userRole);
         }
     }
+}
+
+static async Task SeedRulesetsAsync(ApplicationDbContext db)
+{
+    var rulesets = new[]
+    {
+        new Ruleset
+        {
+            Code = "alien-rpg",
+            DisplayName = "Alien RPG",
+            Description = "A horror sci-fi ruleset using attributes, skills, stress, and d6 dice pools.",
+            DiceNotation = "d6 dice pool",
+            IsPlaceholder = false,
+            CharacterTemplateJson = """
+                {
+                  "attributes": { "strength": 2, "agility": 2, "wits": 2, "empathy": 2 },
+                  "skills": { "closeCombat": 0, "rangedCombat": 0, "mobility": 0, "observation": 0, "survival": 0, "medicalAid": 0 },
+                  "stress": 0
+                }
+                """,
+        },
+        new Ruleset
+        {
+            Code = "dnd-5e",
+            DisplayName = "Dungeons & Dragons",
+            Description = "Placeholder for a fantasy d20 ruleset.",
+            DiceNotation = "d20",
+            IsPlaceholder = true,
+            CharacterTemplateJson = """
+                {
+                  "attributes": { "strength": 10, "dexterity": 10, "constitution": 10, "intelligence": 10, "wisdom": 10, "charisma": 10 },
+                  "skills": {},
+                  "level": 1
+                }
+                """,
+        },
+        new Ruleset
+        {
+            Code = "pathfinder-2e",
+            DisplayName = "Pathfinder",
+            Description = "Placeholder for a tactical fantasy d20 ruleset.",
+            DiceNotation = "d20",
+            IsPlaceholder = true,
+            CharacterTemplateJson = """
+                {
+                  "attributes": { "strength": 10, "dexterity": 10, "constitution": 10, "intelligence": 10, "wisdom": 10, "charisma": 10 },
+                  "skills": {},
+                  "level": 1
+                }
+                """,
+        },
+    };
+
+    foreach (var ruleset in rulesets)
+    {
+        var existing = await db.Rulesets.FindAsync(ruleset.Code);
+        if (existing is null)
+        {
+            db.Rulesets.Add(ruleset);
+            continue;
+        }
+
+        existing.DisplayName = ruleset.DisplayName;
+        existing.Description = ruleset.Description;
+        existing.DiceNotation = ruleset.DiceNotation;
+        existing.IsPlaceholder = ruleset.IsPlaceholder;
+        existing.CharacterTemplateJson = ruleset.CharacterTemplateJson;
+    }
+
+    await db.SaveChangesAsync();
 }

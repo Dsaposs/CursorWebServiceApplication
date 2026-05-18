@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: notes-api
-  namespace: notes
+  name: ttrpg-api
+  namespace: ttrpg
 spec:
   # SQLite uses a single writable database file, so keep this at 1 replica.
   replicas: 1
   selector:
     matchLabels:
-      app: notes-api
+      app: ttrpg-api
   template:
     metadata:
       labels:
-        app: notes-api
+        app: ttrpg-api
     spec:
       containers:
-        - name: notes-api
-          image: notes-api:local
+        - name: ttrpg-api
+          image: ttrpg-api:local
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -27,15 +27,15 @@ spec:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
             - name: ConnectionStrings__DefaultConnection
-              value: Data Source=/data/notes.db
+              value: Data Source=/data/ttrpg.db
             - name: Jwt__Issuer
-              value: NotesApi
+              value: TtrpgApi
             - name: Jwt__Audience
-              value: NotesApi
+              value: TtrpgApi
             - name: Jwt__Key
               valueFrom:
                 secretKeyRef:
-                  name: notes-api-secret
+                  name: ttrpg-api-secret
                   key: Jwt__Key
             - name: Cors__AllowedOrigins__0
               value: http://localhost:3000
@@ -57,4 +57,4 @@ spec:
       volumes:
         - name: sqlite-data
           persistentVolumeClaim:
-            claimName: notes-sqlite-data
+            claimName: ttrpg-sqlite-data

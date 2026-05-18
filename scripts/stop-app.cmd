@@ -2,21 +2,21 @@
 setlocal
 cd /d "%~dp0.."
 
-set "API_CONTAINER_NAME=notes-api"
-set "UI_CONTAINER_NAME=notes-ui"
-set "NETWORK_NAME=notes-network"
-set "NAMESPACE=notes"
-set "API_DEPLOYMENT=notes-api"
-set "UI_DEPLOYMENT=notes-ui"
-set "API_SERVICE=notes-api"
-set "UI_SERVICE=notes-ui"
+set "API_CONTAINER_NAME=ttrpg-api"
+set "UI_CONTAINER_NAME=ttrpg-ui"
+set "NETWORK_NAME=ttrpg-network"
+set "NAMESPACE=ttrpg"
+set "API_DEPLOYMENT=ttrpg-api"
+set "UI_DEPLOYMENT=ttrpg-ui"
+set "API_SERVICE=ttrpg-api"
+set "UI_SERVICE=ttrpg-ui"
 
 echo Stopping local dotnet app process if it is running...
 powershell -NoProfile -Command "$processes = Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'dotnet.exe' -or $_.Name -eq 'NotesApi.exe') -and ($_.CommandLine -like '*notes-api\NotesApi.csproj*' -or $_.CommandLine -like '*NotesApi.dll*') }; if (-not $processes) { Write-Output 'No local dotnet app process found.'; exit 0 }; foreach ($process in $processes) { Write-Output ('Stopping process {0} ({1})' -f $process.ProcessId, $process.Name); Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }"
 
 echo.
 echo Stopping Kubernetes port-forward if it is running...
-powershell -NoProfile -Command "$processes = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'kubectl.exe' -and $_.CommandLine -like '*port-forward*' -and ($_.CommandLine -like '*notes-api*' -or $_.CommandLine -like '*notes-ui*') }; if (-not $processes) { Write-Output 'No notes app port-forward process found.'; exit 0 }; foreach ($process in $processes) { Write-Output ('Stopping kubectl port-forward process {0}' -f $process.ProcessId); Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }"
+powershell -NoProfile -Command "$processes = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'kubectl.exe' -and $_.CommandLine -like '*port-forward*' -and ($_.CommandLine -like '*ttrpg-api*' -or $_.CommandLine -like '*ttrpg-ui*') }; if (-not $processes) { Write-Output 'No TTRPG app port-forward process found.'; exit 0 }; foreach ($process in $processes) { Write-Output ('Stopping kubectl port-forward process {0}' -f $process.ProcessId); Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }"
 
 echo.
 echo Stopping local Nuxt app process if it is running...

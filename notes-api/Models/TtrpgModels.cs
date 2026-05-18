@@ -1,0 +1,270 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace NotesApi.Models;
+
+public enum SessionMode
+{
+    Exploration = 0,
+    Combat = 1,
+}
+
+public enum ActionStatus
+{
+    Pending = 0,
+    Published = 1,
+}
+
+public enum CombatantType
+{
+    Character = 0,
+    NpcOrMonster = 1,
+}
+
+public class Ruleset
+{
+    [MaxLength(50)]
+    public string Code { get; set; } = string.Empty;
+
+    [MaxLength(120)]
+    public string DisplayName { get; set; } = string.Empty;
+
+    [MaxLength(500)]
+    public string Description { get; set; } = string.Empty;
+
+    [MaxLength(80)]
+    public string DiceNotation { get; set; } = string.Empty;
+
+    public bool IsPlaceholder { get; set; }
+
+    public string CharacterTemplateJson { get; set; } = "{}";
+
+    public ICollection<Game> Games { get; set; } = new List<Game>();
+}
+
+public class Game
+{
+    public Guid Id { get; set; }
+
+    [Required]
+    public string DmUserId { get; set; } = string.Empty;
+
+    public ApplicationUser DmUser { get; set; } = null!;
+
+    [Required, MaxLength(50)]
+    public string RulesetCode { get; set; } = string.Empty;
+
+    public Ruleset Ruleset { get; set; } = null!;
+
+    [Required, MaxLength(160)]
+    public string Name { get; set; } = string.Empty;
+
+    [MaxLength(1000)]
+    public string? Description { get; set; }
+
+    [Required, MaxLength(32)]
+    public string InviteCode { get; set; } = string.Empty;
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
+
+    public ICollection<GameSession> Sessions { get; set; } = new List<GameSession>();
+
+    public ICollection<Character> Characters { get; set; } = new List<Character>();
+
+    public ICollection<NpcOrMonster> NpcsAndMonsters { get; set; } = new List<NpcOrMonster>();
+}
+
+public class GameParticipant
+{
+    public Guid Id { get; set; }
+
+    public Guid GameId { get; set; }
+
+    public Game Game { get; set; } = null!;
+
+    public Guid CharacterId { get; set; }
+
+    public Character Character { get; set; } = null!;
+
+    [Required, MaxLength(160)]
+    public string DisplayName { get; set; } = string.Empty;
+
+    [Required, MaxLength(80)]
+    public string JoinToken { get; set; } = string.Empty;
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime LastSeenAt { get; set; }
+}
+
+public class Character
+{
+    public Guid Id { get; set; }
+
+    public Guid GameId { get; set; }
+
+    public Game Game { get; set; } = null!;
+
+    [Required, MaxLength(160)]
+    public string Name { get; set; } = string.Empty;
+
+    [MaxLength(160)]
+    public string PlayerName { get; set; } = string.Empty;
+
+    public int MaxHealth { get; set; } = 10;
+
+    public int Health { get; set; } = 10;
+
+    public int Armor { get; set; }
+
+    public string AttributesJson { get; set; } = "{}";
+
+    public string SkillsJson { get; set; } = "{}";
+
+    public string InventoryJson { get; set; } = "[]";
+
+    public string RulesetDataJson { get; set; } = "{}";
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
+
+    public ICollection<GameParticipant> Participants { get; set; } = new List<GameParticipant>();
+}
+
+public class NpcOrMonster
+{
+    public Guid Id { get; set; }
+
+    public Guid GameId { get; set; }
+
+    public Game Game { get; set; } = null!;
+
+    [Required, MaxLength(160)]
+    public string Name { get; set; } = string.Empty;
+
+    [MaxLength(80)]
+    public string Kind { get; set; } = "NPC";
+
+    public int MaxHealth { get; set; } = 10;
+
+    public int Health { get; set; } = 10;
+
+    public int Armor { get; set; }
+
+    public string StatBlockJson { get; set; } = "{}";
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class GameSession
+{
+    public Guid Id { get; set; }
+
+    public Guid GameId { get; set; }
+
+    public Game Game { get; set; } = null!;
+
+    [Required, MaxLength(32)]
+    public string JoinCode { get; set; } = string.Empty;
+
+    public bool IsActive { get; set; } = true;
+
+    public SessionMode State { get; set; } = SessionMode.Exploration;
+
+    public int Version { get; set; }
+
+    public DateTime StartedAt { get; set; }
+
+    public DateTime? EndedAt { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
+
+    public ICollection<ActionRequest> Actions { get; set; } = new List<ActionRequest>();
+
+    public ICollection<InitiativeEntry> InitiativeEntries { get; set; } = new List<InitiativeEntry>();
+}
+
+public class ActionRequest
+{
+    public Guid Id { get; set; }
+
+    public Guid SessionId { get; set; }
+
+    public GameSession Session { get; set; } = null!;
+
+    public Guid? ActorCharacterId { get; set; }
+
+    public Guid? ActorNpcId { get; set; }
+
+    [Required, MaxLength(160)]
+    public string ActorName { get; set; } = string.Empty;
+
+    [Required, MaxLength(240)]
+    public string ActionText { get; set; } = string.Empty;
+
+    public Guid? TargetCharacterId { get; set; }
+
+    public Guid? TargetNpcId { get; set; }
+
+    [MaxLength(160)]
+    public string? TargetName { get; set; }
+
+    [MaxLength(1000)]
+    public string? Description { get; set; }
+
+    public ActionStatus Status { get; set; }
+
+    public int Sequence { get; set; }
+
+    public DateTime SubmittedAt { get; set; }
+
+    public DateTime? PublishedAt { get; set; }
+
+    public ActionResolution? Resolution { get; set; }
+}
+
+public class ActionResolution
+{
+    public Guid Id { get; set; }
+
+    public Guid ActionRequestId { get; set; }
+
+    public ActionRequest ActionRequest { get; set; } = null!;
+
+    [Required]
+    public string ResolutionText { get; set; } = string.Empty;
+
+    public string? RollSummary { get; set; }
+
+    public string? AdditionalActions { get; set; }
+
+    public string StatChangesJson { get; set; } = "[]";
+
+    public DateTime PublishedAt { get; set; }
+}
+
+public class InitiativeEntry
+{
+    public Guid Id { get; set; }
+
+    public Guid SessionId { get; set; }
+
+    public GameSession Session { get; set; } = null!;
+
+    public CombatantType CombatantType { get; set; }
+
+    public Guid CombatantId { get; set; }
+
+    [Required, MaxLength(160)]
+    public string CombatantName { get; set; } = string.Empty;
+
+    public int SortOrder { get; set; }
+
+    public bool IsCurrentTurn { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+}

@@ -2,19 +2,19 @@
 setlocal
 cd /d "%~dp0.."
 
-set "API_IMAGE_NAME=notes-api:local"
-set "UI_IMAGE_NAME=notes-ui:local"
-set "API_CONTAINER_NAME=notes-api"
-set "UI_CONTAINER_NAME=notes-ui"
-set "NETWORK_NAME=notes-network"
-set "VOLUME_NAME=notes-data"
+set "API_IMAGE_NAME=ttrpg-api:local"
+set "UI_IMAGE_NAME=ttrpg-ui:local"
+set "API_CONTAINER_NAME=ttrpg-api"
+set "UI_CONTAINER_NAME=ttrpg-ui"
+set "NETWORK_NAME=ttrpg-network"
+set "VOLUME_NAME=ttrpg-data"
 set "API_HOST_PORT=5294"
 set "UI_HOST_PORT=3000"
 set "API_CONTAINER_PORT=8080"
 set "UI_CONTAINER_PORT=3000"
-set "SQLITE_CONNECTION=Data Source=/data/notes.db"
+set "SQLITE_CONNECTION=Data Source=/data/ttrpg.db"
 set "JWT_KEY=ChangeThisDockerJwtSigningKeyToARealLongRandomValue123!"
-set "NAMESPACE=notes"
+set "NAMESPACE=ttrpg"
 
 where dotnet >nul 2>nul || (echo ERROR: dotnet was not found.& exit /b 1)
 where docker >nul 2>nul || (echo ERROR: Docker was not found.& exit /b 1)
@@ -60,10 +60,10 @@ if errorlevel 1 exit /b 1
 call :FailIfDockerInstanceExists "%UI_CONTAINER_NAME%"
 if errorlevel 1 exit /b 1
 
-call :FailIfKubernetesInstanceExists "notes-api"
+call :FailIfKubernetesInstanceExists "ttrpg-api"
 if errorlevel 1 exit /b 1
 
-call :FailIfKubernetesInstanceExists "notes-ui"
+call :FailIfKubernetesInstanceExists "ttrpg-ui"
 if errorlevel 1 exit /b 1
 
 echo Building backend project...

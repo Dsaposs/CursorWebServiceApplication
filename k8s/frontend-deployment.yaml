@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: notes-ui
-  namespace: notes
+  name: ttrpg-ui
+  namespace: ttrpg
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: notes-ui
+      app: ttrpg-ui
   template:
     metadata:
       labels:
-        app: notes-ui
+        app: ttrpg-ui
     spec:
       containers:
-        - name: notes-ui
-          image: notes-ui:local
+        - name: ttrpg-ui
+          image: ttrpg-ui:local
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 3000
           env:
             - name: NUXT_API_BASE_URL
-              value: http://notes-api
+              value: http://ttrpg-api
             - name: HOST
               value: 0.0.0.0
             - name: PORT

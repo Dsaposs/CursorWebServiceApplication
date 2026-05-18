@@ -30,8 +30,7 @@ public class AdminController : ControllerBase
                 UserName = user.UserName ?? string.Empty,
                 Email = user.Email,
                 HasPasswordHash = user.PasswordHash != null,
-                NotesCreatedCount = user.NotesCreatedCount,
-                NotesDeletedCount = user.NotesDeletedCount,
+                GamesHostedCount = _db.Games.Count(game => game.DmUserId == user.Id),
             })
             .ToListAsync();
 
