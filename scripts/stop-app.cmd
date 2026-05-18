@@ -14,7 +14,7 @@ set "API_SERVICE=ttrpg-api"
 set "UI_SERVICE=ttrpg-ui"
 
 echo Stopping local dotnet app process if it is running...
-powershell -NoProfile -Command "$processes = Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'dotnet.exe' -or $_.Name -eq 'NotesApi.exe') -and ($_.CommandLine -like '*notes-api\NotesApi.csproj*' -or $_.CommandLine -like '*NotesApi.dll*') }; if (-not $processes) { Write-Output 'No local dotnet app process found.'; exit 0 }; foreach ($process in $processes) { Write-Output ('Stopping process {0} ({1})' -f $process.ProcessId, $process.Name); Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }"
+powershell -NoProfile -Command "$processes = Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'dotnet.exe' -or $_.Name -eq 'NotesApi.exe') -and ($_.CommandLine -like '*api\src\NotesApi\NotesApi.csproj*' -or $_.CommandLine -like '*NotesApi.dll*') }; if (-not $processes) { Write-Output 'No local dotnet app process found.'; exit 0 }; foreach ($process in $processes) { Write-Output ('Stopping process {0} ({1})' -f $process.ProcessId, $process.Name); Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }"
 
 echo.
 echo Stopping Kubernetes port-forward if it is running...
@@ -22,7 +22,7 @@ powershell -NoProfile -Command "$processes = Get-CimInstance Win32_Process | Whe
 
 echo.
 echo Stopping local Nuxt app process if it is running...
-powershell -NoProfile -Command "$processes = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*notes-ui*' -and ($_.CommandLine -like '*nuxt*' -or $_.CommandLine -like '*index.mjs*') }; if (-not $processes) { Write-Output 'No local Nuxt app process found.'; exit 0 }; foreach ($process in $processes) { Write-Output ('Stopping process {0} ({1})' -f $process.ProcessId, $process.Name); Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }"
+powershell -NoProfile -Command "$processes = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*ui\src*' -and ($_.CommandLine -like '*nuxt*' -or $_.CommandLine -like '*index.mjs*') }; if (-not $processes) { Write-Output 'No local Nuxt app process found.'; exit 0 }; foreach ($process in $processes) { Write-Output ('Stopping process {0} ({1})' -f $process.ProcessId, $process.Name); Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }"
 
 echo.
 echo Stopping stale WSL port relays on app ports if they are running...

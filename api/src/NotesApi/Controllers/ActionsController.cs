@@ -206,8 +206,13 @@ public class ActionsController : ControllerBase
 
         if (participant is not null)
         {
-            participant.LastSeenAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+            // Avoid writing on every polling/action-read request; a recent
+            // presence heartbeat is enough for session ownership checks.
+            if ((DateTime.UtcNow - participant.LastSeenAt).TotalSeconds > 30)
+            {
+                participant.LastSeenAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
         }
 
         return participant;

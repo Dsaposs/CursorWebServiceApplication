@@ -13,7 +13,16 @@ set "UI_HOST_PORT=3000"
 set "API_CONTAINER_PORT=8080"
 set "UI_CONTAINER_PORT=3000"
 set "SQLITE_CONNECTION=Data Source=/data/ttrpg.db"
-set "JWT_KEY=ChangeThisDockerJwtSigningKeyToARealLongRandomValue123!"
+if "%TTRPG_JWT_KEY%"=="" (
+  for /f "delims=" %%K in ('powershell -NoProfile -Command "$bytes = New-Object byte[] 48; $rng = [Security.Cryptography.RandomNumberGenerator]::Create(); try { $rng.GetBytes($bytes); [Convert]::ToBase64String($bytes) } finally { $rng.Dispose() }"') do set "JWT_KEY=%%K"
+) else (
+  set "JWT_KEY=%TTRPG_JWT_KEY%"
+)
+if "%TTRPG_SEED_ADMIN_PASSWORD%"=="" (
+  set "SEED_ADMIN_PASSWORD=LocalAdminPassword1!"
+) else (
+  set "SEED_ADMIN_PASSWORD=%TTRPG_SEED_ADMIN_PASSWORD%"
+)
 set "NAMESPACE=ttrpg"
 
 where dotnet >nul 2>nul || (echo ERROR: dotnet was not found.& exit /b 1)
@@ -32,19 +41,19 @@ if not exist "Dockerfile" (
   exit /b 1
 )
 
-if not exist "notes-ui\Dockerfile" (
-  echo ERROR: notes-ui\Dockerfile was not found.
+if not exist "ui\src\Dockerfile" (
+  echo ERROR: ui\src\Dockerfile was not found.
   exit /b 1
 )
 
-if not exist "notes-api\NotesApi.csproj" (
-  echo ERROR: notes-api\NotesApi.csproj was not found.
+if not exist "api\src\NotesApi\NotesApi.csproj" (
+  echo ERROR: api\src\NotesApi\NotesApi.csproj was not found.
   echo This folder does not currently have the expected project structure.
   exit /b 1
 )
 
-if not exist "notes-ui\package.json" (
-  echo ERROR: notes-ui\package.json was not found.
+if not exist "ui\src\package.json" (
+  echo ERROR: ui\src\package.json was not found.
   exit /b 1
 )
 
@@ -67,7 +76,7 @@ call :FailIfKubernetesInstanceExists "ttrpg-ui"
 if errorlevel 1 exit /b 1
 
 echo Building backend project...
-dotnet publish notes-api\NotesApi.csproj -c Release -o "%TEMP%\notes-api-publish-check" /p:UseAppHost=false
+dotnet publish api\src\NotesApi\NotesApi.csproj -c Release -o "%TEMP%\ttrpg-api-publish-check" /p:UseAppHost=false
 if errorlevel 1 exit /b 1
 
 echo Building Docker image %API_IMAGE_NAME%...
@@ -75,7 +84,7 @@ docker build -t "%API_IMAGE_NAME%" .
 if errorlevel 1 exit /b 1
 
 echo Building Docker image %UI_IMAGE_NAME%...
-docker build -t "%UI_IMAGE_NAME%" notes-ui
+docker build -t "%UI_IMAGE_NAME%" ui\src
 if errorlevel 1 exit /b 1
 
 docker volume inspect "%VOLUME_NAME%" >nul 2>nul
@@ -101,6 +110,7 @@ docker run --name "%API_CONTAINER_NAME%" -d ^
   -e ASPNETCORE_ENVIRONMENT="Production" ^
   -e ConnectionStrings__DefaultConnection="%SQLITE_CONNECTION%" ^
   -e Jwt__Key="%JWT_KEY%" ^
+  -e Seed__AdminPassword="%SEED_ADMIN_PASSWORD%" ^
   -e Cors__AllowedOrigins__0="http://localhost:%UI_HOST_PORT%" ^
   "%API_IMAGE_NAME%"
 if errorlevel 1 exit /b 1

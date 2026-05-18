@@ -37,6 +37,11 @@ spec:
                 secretKeyRef:
                   name: ttrpg-api-secret
                   key: Jwt__Key
+            - name: Seed__AdminPassword
+              valueFrom:
+                secretKeyRef:
+                  name: ttrpg-api-secret
+                  key: Seed__AdminPassword
             - name: Cors__AllowedOrigins__0
               value: http://localhost:3000
           volumeMounts:

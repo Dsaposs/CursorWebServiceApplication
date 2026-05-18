@@ -6,7 +6,7 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 Write-Host "Restoring project dependencies..." -ForegroundColor Cyan
-dotnet restore notes-api\NotesApi.csproj
+dotnet restore api\src\NotesApi\NotesApi.csproj
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "SQLite database will be created automatically when the application starts." -ForegroundColor Green
@@ -22,7 +22,7 @@ dotnet tool restore
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Applying database migrations..." -ForegroundColor Cyan
-dotnet dotnet-ef database update --project notes-api\NotesApi.csproj
+dotnet dotnet-ef database update --project api\src\NotesApi\NotesApi.csproj
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Database is up to date." -ForegroundColor Green

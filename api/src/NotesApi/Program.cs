@@ -19,6 +19,8 @@ var jwtSettings = builder.Configuration
     .GetSection(JwtSettings.SectionName)
     .Get<JwtSettings>() ?? throw new InvalidOperationException("JWT settings are not configured.");
 
+ValidateSecurityConfiguration(builder.Environment, builder.Configuration, jwtSettings);
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -152,6 +154,36 @@ app.MapControllers();
 app.MapHealthChecks("/health");
 
 app.Run();
+
+static void ValidateSecurityConfiguration(IHostEnvironment environment, IConfiguration configuration, JwtSettings jwtSettings)
+{
+    if (string.IsNullOrWhiteSpace(jwtSettings.Key) || jwtSettings.Key.Length < 32)
+    {
+        throw new InvalidOperationException("Jwt:Key must be configured with at least 32 characters.");
+    }
+
+    if (!environment.IsProduction())
+    {
+        return;
+    }
+
+    var insecureJwtKeys = new[]
+    {
+        "TtrpgApi-Dev-Signing-Key-Min-32-Chars-Long!",
+        "ChangeThisDockerJwtSigningKeyToARealLongRandomValue123!",
+        "ChangeThisKubernetesJwtSigningKeyToARealLongRandomValue123!",
+    };
+    if (insecureJwtKeys.Contains(jwtSettings.Key) || jwtSettings.Key.StartsWith("ChangeThis", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException("Production Jwt:Key must be supplied from a secret and cannot use a checked-in placeholder.");
+    }
+
+    var adminPassword = configuration["Seed:AdminPassword"];
+    if (string.IsNullOrWhiteSpace(adminPassword) || adminPassword == "Password1" || adminPassword.Length < 12)
+    {
+        throw new InvalidOperationException("Production Seed:AdminPassword must be supplied from a secret and cannot use the development default.");
+    }
+}
 
 static async Task ApplySchemaUpdatesAsync(ApplicationDbContext db)
 {

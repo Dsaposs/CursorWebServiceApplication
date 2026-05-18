@@ -26,14 +26,14 @@ SQLite is created automatically on first startup.
 
 ```powershell
 cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
-dotnet restore notes-api\NotesApi.csproj
-dotnet run --project notes-api\NotesApi.csproj
+dotnet restore api\src\NotesApi\NotesApi.csproj
+dotnet run --project api\src\NotesApi\NotesApi.csproj
 ```
 
 **Start the UI (separate terminal):**
 
 ```powershell
-cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application\notes-ui"
+cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application\ui\src"
 npm install
 $env:NUXT_API_BASE_URL = "http://localhost:5294"
 npm run dev
@@ -51,12 +51,13 @@ npm run dev
 ```
 
 The script builds `ttrpg-api:local` and `ttrpg-ui:local`, creates the `ttrpg-network` and `ttrpg-data` volume, and wires `NUXT_API_BASE_URL` inside the Docker network.
+For local Docker runs, the script generates a per-container JWT key unless `TTRPG_JWT_KEY` is set. Set `TTRPG_SEED_ADMIN_PASSWORD` to control the seeded admin password.
 
 ## Kubernetes
 
 ```powershell
 docker build -t ttrpg-api:local .
-docker build -t ttrpg-ui:local notes-ui
+docker build -t ttrpg-ui:local ui\src
 kubectl apply -k k8s
 kubectl rollout status deployment/ttrpg-api -n ttrpg
 kubectl rollout status deployment/ttrpg-ui -n ttrpg
@@ -64,7 +65,7 @@ kubectl rollout status deployment/ttrpg-ui -n ttrpg
 kubectl port-forward service/ttrpg-ui 3000:80 -n ttrpg
 ```
 
-> Before deploying outside localhost, replace the placeholder JWT key in [`k8s/secret.yaml`](k8s/secret.yaml) and set a strong `Seed:AdminPassword` environment variable on the API deployment.
+> Before deploying outside localhost, replace the placeholder `Jwt__Key` and `Seed__AdminPassword` values in [`k8s/secret.yaml`](k8s/secret.yaml). The API refuses to start in production with checked-in placeholder secrets.
 
 SQLite is single-file — the deployment uses **1 replica** intentionally.
 
@@ -120,6 +121,14 @@ SQLite is single-file — the deployment uses **1 replica** intentionally.
 | `Cors:AllowedOrigins` | env / `appsettings.json` | Allowed UI origins array |
 | `NUXT_API_BASE_URL` | env | API base URL for Nuxt server-side requests |
 
+## Security and Performance Notes
+
+- The Nuxt API proxy forwards only the request headers needed by this app: `Authorization`, `X-Player-Token`, `Accept`, and `Content-Type`.
+- Production API startup rejects known placeholder JWT keys and weak/default seeded admin passwords.
+- Player tokens are currently stored in `localStorage`; moving DM auth and player tokens to HttpOnly cookies would reduce XSS exposure in a future auth pass.
+- Public invite/session codes should receive rate limiting before internet-facing deployment.
+- Live sessions currently use polling. The polling implementation pauses when hidden and throttles participant presence writes, but SSE or WebSockets would scale better for high-traffic live play.
+
 ## Password Rules
 
 - Valid email address
@@ -130,7 +139,8 @@ SQLite is single-file — the deployment uses **1 replica** intentionally.
 ## Tests
 
 ```powershell
-dotnet test notes-api.Tests\NotesApi.Tests.csproj
+dotnet test api\tests\NotesApi.Tests\NotesApi.Tests.csproj
+npm --prefix ui\src test
 ```
 
-Tests cover: DM-owned game scoping, participant token scoping, combat initiative tracking, game name uniqueness constraint, and cascade delete behavior.
+Tests cover: DM-owned game scoping, participant token scoping, combat initiative tracking, game name uniqueness constraint, cascade delete behavior, and frontend ruleset/action chooser helpers.

@@ -23,7 +23,26 @@ $uiHostPort = 3000
 $apiContainerPort = 8080
 $uiContainerPort = 3000
 $sqliteConnection = 'Data Source=/data/ttrpg.db'
-$jwtKey = 'ChangeThisDockerJwtSigningKeyToARealLongRandomValue123!'
+$jwtKey = if ($env:TTRPG_JWT_KEY) {
+    $env:TTRPG_JWT_KEY
+}
+else {
+    $bytes = New-Object byte[] 48
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+        [Convert]::ToBase64String($bytes)
+    }
+    finally {
+        $rng.Dispose()
+    }
+}
+$seedAdminPassword = if ($env:TTRPG_SEED_ADMIN_PASSWORD) {
+    $env:TTRPG_SEED_ADMIN_PASSWORD
+}
+else {
+    'LocalAdminPassword1!'
+}
 
 function Invoke-Native {
     param(
@@ -80,9 +99,9 @@ function Assert-Command {
 function Assert-RequiredFiles {
     $requiredPaths = @(
         'Dockerfile',
-        'notes-api\NotesApi.csproj',
-        'notes-ui\Dockerfile',
-        'notes-ui\package.json'
+        'api\src\NotesApi\NotesApi.csproj',
+        'ui\src\Dockerfile',
+        'ui\src\package.json'
     )
 
     foreach ($path in $requiredPaths) {
@@ -282,7 +301,7 @@ function Build-ApiImage {
 
 function Build-UiImage {
     Write-Host "Building Docker image $uiImageName..."
-    Invoke-Native docker @('build', '-t', $uiImageName, 'notes-ui')
+    Invoke-Native docker @('build', '-t', $uiImageName, 'ui\src')
 }
 
 function Run-ApiContainer {
@@ -302,6 +321,7 @@ function Run-ApiContainer {
         '-e', 'ASPNETCORE_ENVIRONMENT=Production',
         '-e', "ConnectionStrings__DefaultConnection=$sqliteConnection",
         '-e', "Jwt__Key=$jwtKey",
+        '-e', "Seed__AdminPassword=$seedAdminPassword",
         '-e', "Cors__AllowedOrigins__0=http://localhost:$uiHostPort",
         $apiImageName
     ) | Out-Null
@@ -385,8 +405,8 @@ $apiHashPath = Join-Path $stateDirectory 'api.sha256'
 $uiHashPath = Join-Path $stateDirectory 'ui.sha256'
 
 Write-Host 'Checking source changes...'
-$apiHash = Get-SourceHash @('Dockerfile', 'notes-api')
-$uiHash = Get-SourceHash @('notes-ui')
+$apiHash = Get-SourceHash @('Dockerfile', 'api\src\NotesApi')
+$uiHash = Get-SourceHash @('ui\src')
 
 Apply-ServiceChanges `
     -ServiceName 'API' `

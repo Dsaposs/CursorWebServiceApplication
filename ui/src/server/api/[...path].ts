@@ -9,17 +9,11 @@ import {
   setResponseStatus,
 } from 'h3';
 
-const hopByHopHeaders = new Set([
-  'connection',
-  'content-length',
-  'host',
-  'keep-alive',
-  'proxy-authenticate',
-  'proxy-authorization',
-  'te',
-  'trailer',
-  'transfer-encoding',
-  'upgrade',
+const forwardedRequestHeaders = new Set([
+  'accept',
+  'authorization',
+  'content-type',
+  'x-player-token',
 ]);
 
 export default defineEventHandler(async (event) => {
@@ -34,7 +28,7 @@ export default defineEventHandler(async (event) => {
   const requestHeaders = getRequestHeaders(event);
 
   for (const [key, value] of Object.entries(requestHeaders)) {
-    if (!value || hopByHopHeaders.has(key.toLowerCase())) {
+    if (!value || !forwardedRequestHeaders.has(key.toLowerCase())) {
       continue;
     }
 

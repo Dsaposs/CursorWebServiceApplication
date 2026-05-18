@@ -10,3 +10,11 @@ obj/
 .vs/
 appsettings.*.local.json
 secrets.json
+
+## Nuxt / Node
+node_modules/
+.nuxt/
+.output/
+dist/
+coverage/
+*.log
