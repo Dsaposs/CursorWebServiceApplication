@@ -33,7 +33,7 @@ public class GamesController : ControllerBase
             .OrderByDescending(g => g.UpdatedAt)
             .ToListAsync();
 
-        return Ok(games.Select(this.ToGameResponse));
+        return Ok(games.Select(g => this.ToGameResponse(g)));
     }
 
     [HttpGet("{id:guid}")]

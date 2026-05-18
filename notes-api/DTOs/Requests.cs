@@ -45,7 +45,9 @@ public class UpdateGameRequest
 
 public class JoinGameRequest
 {
-    [Required, MaxLength(160)]
+    public Guid? CharacterId { get; set; }
+
+    [MaxLength(160)]
     public string CharacterName { get; set; } = string.Empty;
 
     [MaxLength(160)]
@@ -142,4 +144,13 @@ public class CombatantRequest
     public Guid Id { get; set; }
 
     public int Initiative { get; set; }
+}
+
+public class SetNpcVisibilityRequest
+{
+    [Required]
+    public Guid NpcId { get; set; }
+
+    [Required]
+    public string Visibility { get; set; } = "Visible";
 }

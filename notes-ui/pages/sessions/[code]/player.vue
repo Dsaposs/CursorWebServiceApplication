@@ -10,6 +10,7 @@ const actionText = ref('');
 const targetName = ref('');
 const description = ref('');
 const isSubmitting = ref(false);
+const showActionForm = ref(false);
 
 async function loadState() {
   if (!playerToken.value) return null;
@@ -32,6 +33,11 @@ const isMyTurn = computed(() => {
 });
 
 const isCombat = computed(() => state.value?.state === 'Combat');
+const pendingPlayerActions = computed(() =>
+  state.value?.actions.filter(action =>
+    action.status === 'Pending' && action.actorName === state.value?.character?.name,
+  ) ?? [],
+);
 
 onMounted(async () => {
   playerToken.value = localStorage.getItem(`ttrpg_player_${route.params.code}`);
@@ -59,6 +65,7 @@ async function submitAction() {
     targetName.value = '';
     description.value = '';
     await refresh();
+    showActionForm.value = false;
     toastSuccess('Action sent to DM!');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -81,7 +88,6 @@ async function submitAction() {
       </div>
       <div class="topbar-actions">
         <span v-if="state" class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
-        <NuxtLink class="btn ghost sm" :to="`/join/${route.params.code}`">Switch Character</NuxtLink>
       </div>
     </header>
 
@@ -105,23 +111,7 @@ async function submitAction() {
           </div>
         </div>
 
-        <div class="grid-2" style="margin-bottom: 1rem;">
-          <HealthBar :current="state.character?.health ?? 0" :max="state.character?.maxHealth ?? 1" />
-          <div class="stat-grid" style="grid-template-columns: 1fr;">
-            <div class="stat-cell">
-              <dt>Armor</dt>
-              <dd>{{ state.character?.armor }}</dd>
-            </div>
-          </div>
-        </div>
-
-        <details>
-          <summary style="cursor: pointer; font-size: 0.8rem; color: var(--muted-light);">Character sheet & inventory</summary>
-          <div style="margin-top: 0.6rem; display: grid; gap: 0.5rem;">
-            <pre style="font-size: 0.72rem;">{{ state.character?.rulesetDataJson }}</pre>
-            <pre style="font-size: 0.72rem;">{{ state.character?.inventoryJson }}</pre>
-          </div>
-        </details>
+        <CharacterSheet v-if="state.character" :character="state.character" />
       </div>
 
       <!-- Initiative tracker (combat only) -->
@@ -143,11 +133,27 @@ async function submitAction() {
 
       <!-- Submit action -->
       <div class="panel">
-        <h2>Submit Action</h2>
+        <div class="panel-title">
+          <div>
+            <h2>Actions</h2>
+            <p v-if="pendingPlayerActions.length" class="text-sm">
+              {{ pendingPlayerActions.length }} action{{ pendingPlayerActions.length === 1 ? '' : 's' }} pending DM review.
+            </p>
+            <p v-else class="text-sm">Ready when you are. Actions stay hidden until you choose to take one.</p>
+          </div>
+          <button
+            v-if="!showActionForm"
+            class="btn"
+            type="button"
+            @click="showActionForm = true"
+          >
+            Take Action
+          </button>
+        </div>
         <p v-if="isCombat && currentTurn && !isMyTurn" style="font-size: 0.85rem;">
           Waiting for <strong>{{ currentTurn.combatantName }}</strong> — you can queue an action now.
         </p>
-        <form @submit.prevent="submitAction">
+        <form v-if="showActionForm" @submit.prevent="submitAction">
           <label>
             Action <span style="color: var(--danger);">*</span>
             <input v-model.trim="actionText" placeholder="Swing sword, use medkit, lockpick door…" required />
@@ -160,9 +166,14 @@ async function submitAction() {
             Description
             <textarea v-model="description" placeholder="What are you trying to accomplish?" style="min-height: 3rem;" />
           </label>
-          <button class="btn w-full" type="submit" :disabled="isSubmitting">
-            {{ isSubmitting ? 'Sending…' : '→ Send to DM' }}
-          </button>
+          <div class="btn-row">
+            <button class="btn" type="submit" :disabled="isSubmitting">
+              {{ isSubmitting ? 'Sending…' : 'Send to DM' }}
+            </button>
+            <button class="btn ghost" type="button" :disabled="isSubmitting" @click="showActionForm = false">
+              Cancel
+            </button>
+          </div>
         </form>
       </div>
 

@@ -72,6 +72,39 @@ public class SessionsController : ControllerBase
         return Ok(this.ToSessionSummaryResponse(session));
     }
 
+    [HttpPost("sessions/{sessionId:guid}/npc-visibility")]
+    public async Task<ActionResult> SetNpcVisibility(Guid sessionId, SetNpcVisibilityRequest request)
+    {
+        var userId = this.UserId();
+        var session = await _db.GameSessions
+            .Include(s => s.Game)
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.Game.DmUserId == userId);
+
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        if (!new[] { "Visible", "Obscured", "Hidden" }.Contains(request.Visibility))
+        {
+            return BadRequest(new { errors = new[] { "Visibility must be Visible, Obscured, or Hidden." } });
+        }
+
+        var visibilities = ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson);
+        var key = request.NpcId.ToString();
+
+        if (request.Visibility == "Visible")
+            visibilities.Remove(key);
+        else
+            visibilities[key] = request.Visibility;
+
+        session.NpcVisibilitiesJson = System.Text.Json.JsonSerializer.Serialize(visibilities);
+        Touch(session);
+        await _db.SaveChangesAsync();
+
+        return NoContent();
+    }
+
     [HttpPost("sessions/{sessionId:guid}/state")]
     public async Task<ActionResult<SessionSummaryResponse>> ChangeState(Guid sessionId, ChangeSessionStateRequest request)
     {
@@ -120,7 +153,7 @@ public class SessionsController : ControllerBase
             StartedAt = summary.StartedAt,
             EndedAt = summary.EndedAt,
             UpdatedAt = summary.UpdatedAt,
-            Game = this.ToGameResponse(session.Game),
+            Game = this.ToGameResponse(session.Game, ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson)),
             Character = character is null ? null : ControllerHelpers.ToCharacterResponse(character),
             Actions = session.Actions
                 .Where(a => a.Sequence > sinceSequence)

@@ -167,7 +167,7 @@ function formatTime(iso: string) {
                   </div>
                   <span class="text-xs muted" style="font-family: monospace;">AC {{ ch.armor }}</span>
                 </div>
-                <HealthBar :current="ch.health" :max="ch.maxHealth" />
+                <CharacterSheet :character="ch" />
               </div>
             </div>
           </div>

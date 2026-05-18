@@ -18,10 +18,32 @@ public class SessionJoinController : ControllerBase
     }
 
     [HttpGet("{joinCode}")]
-    public async Task<ActionResult<SessionSummaryResponse>> GetSession(string joinCode)
+    public async Task<ActionResult<SessionJoinOptionsResponse>> GetSession(string joinCode)
     {
-        var session = await _db.GameSessions.AsNoTracking().FirstOrDefaultAsync(s => s.JoinCode == joinCode && s.IsActive);
-        return session is null ? NotFound() : Ok(this.ToSessionSummaryResponse(session));
+        var session = await _db.GameSessions
+            .AsNoTracking()
+            .Include(s => s.Game).ThenInclude(g => g.Characters)
+            .FirstOrDefaultAsync(s => s.JoinCode == joinCode && s.IsActive);
+
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        var claimedCharacterIds = await _db.GameParticipants
+            .AsNoTracking()
+            .Where(p => p.GameId == session.GameId && p.LastSeenAt >= session.StartedAt)
+            .Select(p => p.CharacterId)
+            .ToListAsync();
+
+        return Ok(new SessionJoinOptionsResponse
+        {
+            Session = this.ToSessionSummaryResponse(session),
+            AvailableCharacters = session.Game.Characters
+                .Where(c => !claimedCharacterIds.Contains(c.Id))
+                .OrderBy(c => c.Name)
+                .Select(ControllerHelpers.ToCharacterResponse),
+        });
     }
 
     [HttpPost("{joinCode}")]
@@ -40,11 +62,39 @@ public class SessionJoinController : ControllerBase
         }
 
         var now = DateTime.UtcNow;
-        var normalizedName = request.CharacterName.Trim();
-        var character = await _db.Characters.FirstOrDefaultAsync(c => c.GameId == session.GameId && c.Name == normalizedName);
+        Character? character;
 
-        if (character is null)
+        if (request.CharacterId.HasValue)
         {
+            character = await _db.Characters.FirstOrDefaultAsync(c => c.GameId == session.GameId && c.Id == request.CharacterId.Value);
+            if (character is null)
+            {
+                return BadRequest(new { errors = new[] { "Character was not found in this game." } });
+            }
+
+            var isInSession = await _db.GameParticipants.AnyAsync(p =>
+                p.GameId == session.GameId
+                && p.CharacterId == character.Id
+                && p.LastSeenAt >= session.StartedAt);
+            if (isInSession)
+            {
+                return BadRequest(new { errors = new[] { "That character is already in the session." } });
+            }
+        }
+        else
+        {
+            var normalizedName = request.CharacterName.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedName))
+            {
+                return BadRequest(new { errors = new[] { "Choose an existing character or enter a new character name." } });
+            }
+
+            character = await _db.Characters.FirstOrDefaultAsync(c => c.GameId == session.GameId && c.Name == normalizedName);
+            if (character is not null)
+            {
+                return BadRequest(new { errors = new[] { "That character already exists. Select it from the character list if it is available." } });
+            }
+
             character = new Character
             {
                 Id = Guid.NewGuid(),
@@ -65,8 +115,8 @@ public class SessionJoinController : ControllerBase
             await _db.SaveChangesAsync();
         }
 
-        // Reuse the most-recent participant token for this character so the
-        // same player can rejoin a session without losing their token.
+        // Reuse an older game participant when the same character enters this
+        // live session, but prevent another joiner from claiming active ones.
         var participant = await _db.GameParticipants
             .OrderByDescending(p => p.CreatedAt)
             .FirstOrDefaultAsync(p => p.GameId == session.GameId && p.CharacterId == character.Id);
@@ -136,7 +186,10 @@ public class SessionJoinController : ControllerBase
             StartedAt = summary.StartedAt,
             EndedAt = summary.EndedAt,
             UpdatedAt = summary.UpdatedAt,
-            Game = this.ToGameResponse(session.Game),
+            Game = this.ToGameResponse(
+                session.Game,
+                ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson),
+                playerView: true),
             Character = ControllerHelpers.ToCharacterResponse(participant.Character),
             Actions = session.Actions
                 .Where(a => a.Sequence > sinceSequence)

@@ -18,9 +18,18 @@ const statChangeSetArmor = ref<Record<string, string>>({});
 const npcAction = ref('');
 const selectedNpcId = ref('');
 const npcTarget = ref('');
+const showNpcActionForm = ref(false);
 
 // Combat setup
-const combatantInitiative = ref<Record<string, number>>({});
+const localInitiativeOrder = ref<InitiativeEntryResponse[] | null>(null);
+const draggedInitiativeId = ref<string | null>(null);
+const dragOverId = ref<string | null>(null);
+const dragPosition = ref<{ x: number; y: number } | null>(null);
+const activePointerId = ref<number | null>(null);
+
+const draggedEntry = computed(() =>
+  displayedInitiative.value.find(e => e.id === draggedInitiativeId.value) ?? null
+);
 
 // Resolved action expand state
 const expandedActions = ref<Set<string>>(new Set());
@@ -39,12 +48,32 @@ const game = computed<GameResponse | null>(() => state.value?.game ?? null);
 const currentTurn = computed<InitiativeEntryResponse | null>(() => state.value?.initiative.find(e => e.isCurrentTurn) ?? null);
 const isCombat = computed(() => state.value?.state === 'Combat');
 const sessionEnded = computed(() => state.value && !state.value.isActive);
+const displayedInitiative = computed(() => localInitiativeOrder.value ?? state.value?.initiative ?? []);
+const combatSetupEntries = computed(() => {
+  if (!state.value) return [];
+
+  return [
+    ...state.value.game.characters.map(character => ({
+      type: 'Character',
+      id: character.id,
+      name: character.name,
+      detail: character.playerName || 'Character',
+    })),
+    ...state.value.game.npcsAndMonsters.map(npc => ({
+      type: 'NpcOrMonster',
+      id: npc.id,
+      name: npc.name,
+      detail: npc.kind,
+    })),
+  ];
+});
 
 onMounted(async () => {
   loadSession();
   if (!token.value) { await navigateTo('/login'); return; }
   start();
 });
+
 
 async function setState(nextState: 'Exploration' | 'Combat') {
   isSaving.value = true;
@@ -69,6 +98,7 @@ async function submitNpcAction() {
     });
     npcAction.value = '';
     npcTarget.value = '';
+    showNpcActionForm.value = false;
     await refresh();
     toastSuccess('NPC action submitted.');
   } catch (err) {
@@ -129,20 +159,117 @@ function optNum(v?: string | number) {
 async function setupCombat() {
   if (!state.value) return;
   isSaving.value = true;
-  const combatants = [
-    ...state.value.game.characters.map(c => ({ type: 'Character', id: c.id, initiative: combatantInitiative.value[c.id] || 0 })),
-    ...state.value.game.npcsAndMonsters.map(n => ({ type: 'NpcOrMonster', id: n.id, initiative: combatantInitiative.value[n.id] || 0 })),
-  ].filter(c => c.initiative > 0);
+  const sourceEntries = displayedInitiative.value.length
+    ? displayedInitiative.value.map(entry => ({ type: entry.combatantType, id: entry.combatantId }))
+    : combatSetupEntries.value.map(entry => ({ type: entry.type, id: entry.id }));
+  const combatants = sourceEntries.map((entry, index) => ({
+    ...entry,
+    initiative: sourceEntries.length - index,
+  }));
 
   try {
     await api(`/api/sessions/${route.params.id}/combat`, { method: 'POST', body: { combatants } });
     await refresh();
-    toastSuccess('Initiative order set.');
+    toastSuccess('Combat started.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
     isSaving.value = false;
   }
+}
+
+async function reorderInitiative(fromId: string, toId: string) {
+  if (!state.value || fromId === toId) return;
+
+  const entries = [...displayedInitiative.value].sort((a, b) => a.sortOrder - b.sortOrder);
+  const fromIndex = entries.findIndex(entry => entry.id === fromId);
+  const toIndex = entries.findIndex(entry => entry.id === toId);
+
+  if (fromIndex < 0 || toIndex < 0) return;
+
+  const [moved] = entries.splice(fromIndex, 1);
+  entries.splice(toIndex, 0, moved);
+  const reordered = entries.map((entry, index) => ({ ...entry, sortOrder: index + 1 }));
+  localInitiativeOrder.value = reordered;
+  await saveInitiativeOrder(reordered);
+}
+
+async function saveInitiativeOrder(entries: InitiativeEntryResponse[]) {
+  if (!state.value) return;
+
+  isSaving.value = true;
+  try {
+    const combatants = entries.map((entry, index) => ({
+      type: entry.combatantType,
+      id: entry.combatantId,
+      initiative: entries.length - index,
+    }));
+
+    await api(`/api/sessions/${route.params.id}/combat`, { method: 'POST', body: { combatants } });
+    await refresh();
+    localInitiativeOrder.value = null;
+    toastSuccess('Initiative order updated.');
+  } catch (err) {
+    localInitiativeOrder.value = null;
+    toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSaving.value = false;
+  }
+}
+
+function startInitiativeDrag(entryId: string, event: PointerEvent) {
+  if (!isCombat.value || isSaving.value || (event.pointerType === 'mouse' && event.button !== 0)) return;
+  event.preventDefault();
+  draggedInitiativeId.value = entryId;
+  dragOverId.value = entryId;
+  activePointerId.value = event.pointerId;
+  window.addEventListener('pointermove', onInitiativeDragMove);
+  window.addEventListener('pointerup', onInitiativeDragEnd);
+  window.addEventListener('pointercancel', onInitiativeDragEnd);
+}
+
+function onInitiativeDragMove(event: PointerEvent) {
+  if (activePointerId.value !== event.pointerId) return;
+  dragPosition.value = { x: event.clientX, y: event.clientY };
+  const hit = document
+    .elementFromPoint(event.clientX, event.clientY)
+    ?.closest<HTMLElement>('[data-initiative-id]')
+    ?.dataset.initiativeId;
+  if (hit) dragOverId.value = hit;
+}
+
+async function onInitiativeDragEnd(event: PointerEvent) {
+  if (activePointerId.value !== event.pointerId) return;
+  removeInitiativeDragListeners();
+
+  const fromId = draggedInitiativeId.value;
+  const toId = dragOverId.value;
+  clearInitiativeDrag();
+
+  if (fromId && toId && fromId !== toId) {
+    await reorderInitiative(fromId, toId);
+  }
+}
+
+function removeInitiativeDragListeners() {
+  window.removeEventListener('pointermove', onInitiativeDragMove);
+  window.removeEventListener('pointerup', onInitiativeDragEnd);
+  window.removeEventListener('pointercancel', onInitiativeDragEnd);
+}
+
+function clearInitiativeDrag() {
+  draggedInitiativeId.value = null;
+  dragOverId.value = null;
+  dragPosition.value = null;
+  activePointerId.value = null;
+}
+
+onBeforeUnmount(() => {
+  removeInitiativeDragListeners();
+});
+
+async function endCombat() {
+  await setState('Exploration');
 }
 
 async function advanceTurn() {
@@ -171,6 +298,20 @@ async function stopSession() {
   }
 }
 
+async function cycleNpcVisibility(npcId: string, current: string) {
+  const cycle: Record<string, string> = { Visible: 'Obscured', Obscured: 'Hidden', Hidden: 'Visible' };
+  const next = cycle[current] ?? 'Obscured';
+  try {
+    await api(`/api/sessions/${route.params.id}/npc-visibility`, {
+      method: 'POST',
+      body: { npcId, visibility: next },
+    });
+    await refresh();
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : String(err));
+  }
+}
+
 async function copyJoinLink() {
   if (!state.value) return;
   const url = import.meta.client ? `${window.location.origin}${state.value.joinUrl}` : state.value.joinUrl;
@@ -187,7 +328,7 @@ function toggleAction(id: string) {
 </script>
 
 <template>
-  <section class="app-shell">
+  <section class="app-shell dm-app-shell">
     <!-- Topbar -->
     <header class="topbar">
       <div class="topbar-brand">
@@ -214,9 +355,9 @@ function toggleAction(id: string) {
       <p class="muted">Loading session…</p>
     </div>
 
-    <main v-else class="stack">
+    <main v-else class="stack dm-screen-main">
       <!-- Session info bar -->
-      <div class="panel">
+      <div class="panel dm-session-info">
         <div class="flex items-center justify-between gap-3" style="flex-wrap: wrap; gap: 1rem;">
           <div>
             <div class="flex items-center gap-2 mb-1">
@@ -233,30 +374,33 @@ function toggleAction(id: string) {
             />
             <button class="btn ghost sm" type="button" @click="copyJoinLink">Copy</button>
           </div>
-          <div class="btn-row" v-if="state.isActive">
-            <button class="btn ghost sm" :class="{ active: !isCombat }" type="button" :disabled="isSaving" @click="setState('Exploration')">Exploration</button>
-            <button class="btn ghost sm" :class="{ active: isCombat }" type="button" :disabled="isSaving" @click="setState('Combat')">Combat</button>
+          <div v-if="state.isActive" class="flex items-center gap-2">
+            <span class="text-xs muted">Mode</span>
+            <span class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
           </div>
         </div>
       </div>
 
-      <div class="grid-2">
+      <div class="session-dashboard-grid">
         <!-- Left: Action queue -->
-        <div>
+        <div class="session-action-column">
           <!-- Pending actions -->
-          <div class="panel mb-2" style="margin-bottom: 1rem;">
+          <div class="panel dashboard-primary-panel pending-actions-panel mb-2" style="margin-bottom: 1rem;">
             <div class="panel-title">
-              <h2>
-                Pending Actions
-                <span v-if="pendingActions.length" class="badge pending" style="margin-left: 0.4rem;">{{ pendingActions.length }}</span>
-              </h2>
+              <div>
+                <h2>
+                  Pending Actions
+                  <span v-if="pendingActions.length" class="badge pending" style="margin-left: 0.4rem;">{{ pendingActions.length }}</span>
+                </h2>
+                <p class="text-sm">Review player and NPC actions here first.</p>
+              </div>
             </div>
 
             <div v-if="pendingActions.length === 0" class="empty-state" style="padding: 1.5rem 0;">
               <p class="text-sm">No actions waiting. Players can submit actions via their session link.</p>
             </div>
 
-            <div style="display: grid; gap: 0.75rem;">
+            <div class="pending-actions-list">
               <div v-for="action in pendingActions" :key="action.id" class="action-card pending-card">
                 <div class="action-card-header">
                   <div>
@@ -320,14 +464,18 @@ function toggleAction(id: string) {
           </div>
 
           <!-- Published action log -->
-          <div class="panel">
+          <div class="panel dashboard-primary-panel action-log-panel">
             <div class="panel-title">
-              <h2>Action Log</h2>
+              <div>
+                <h2>Action Log</h2>
+                <p class="text-sm">Most recent resolved actions appear first.</p>
+              </div>
+              <span v-if="publishedActions.length" class="badge published">{{ publishedActions.length }} resolved</span>
             </div>
-            <div v-if="publishedActions.length === 0" class="empty-state" style="padding: 1rem 0;">
-              <p class="text-sm">No resolved actions yet.</p>
-            </div>
-            <div style="display: grid; gap: 0.5rem;">
+            <div class="action-log-scroll">
+              <div v-if="publishedActions.length === 0" class="empty-state" style="padding: 1rem 0;">
+                <p class="text-sm">No resolved actions yet.</p>
+              </div>
               <div
                 v-for="action in publishedActions"
                 :key="action.id"
@@ -356,13 +504,19 @@ function toggleAction(id: string) {
         </div>
 
         <!-- Right: Combat + NPC -->
-        <div style="display: grid; gap: 1rem; align-content: start;">
+        <div class="session-support-column">
           <!-- Combat tracker -->
           <div class="panel">
             <div class="panel-title">
-              <h2>Combat</h2>
-              <div class="btn-row" v-if="state.initiative.length && isCombat">
-                <button class="btn sm" type="button" :disabled="isSaving" @click="advanceTurn">Next Turn →</button>
+              <div>
+                <h2>Combat</h2>
+                <p class="text-sm">{{ isCombat ? 'Drag to change turn order.' : 'All characters and NPCs will be included.' }}</p>
+              </div>
+              <div class="btn-row">
+                <button v-if="isCombat && state.initiative.length" class="btn sm" type="button" :disabled="isSaving" @click="advanceTurn">Next Turn →</button>
+                <button v-if="!isCombat" class="btn ghost sm" type="button" :disabled="isSaving" @click="setupCombat">
+                  {{ isSaving ? 'Starting…' : 'Set Initiative' }}
+                </button>
               </div>
             </div>
 
@@ -371,51 +525,52 @@ function toggleAction(id: string) {
               ⚔️ <strong>{{ currentTurn.combatantName }}'s turn</strong>
             </div>
 
-            <!-- Initiative order -->
-            <ul v-if="state.initiative.length" class="initiative-list" style="margin-bottom: 1rem;">
+            <!-- Draggable initiative list -->
+            <ul v-if="isCombat && displayedInitiative.length" class="initiative-list" style="margin-bottom: 1rem;">
               <li
-                v-for="(entry, idx) in state.initiative"
+                v-for="(entry, idx) in displayedInitiative"
                 :key="entry.id"
                 class="initiative-item"
-                :class="{ 'current-turn': entry.isCurrentTurn }"
+                :class="{
+                  'current-turn': entry.isCurrentTurn,
+                  'dragging': draggedInitiativeId === entry.id,
+                  'draggable': isCombat && !isSaving,
+                  'drag-over': dragOverId === entry.id && draggedInitiativeId !== null && draggedInitiativeId !== entry.id,
+                }"
+                :data-initiative-id="entry.id"
+                @pointerdown="startInitiativeDrag(entry.id, $event)"
               >
                 <span class="initiative-order">{{ idx + 1 }}</span>
-                <span class="initiative-name">{{ entry.combatantName }}</span>
-                <span class="initiative-type">{{ entry.combatantType }}</span>
+                <span class="initiative-card-body">
+                  <span class="initiative-name">{{ entry.combatantName }}</span>
+                  <span class="initiative-type">{{ entry.combatantType }}</span>
+                </span>
+                <span v-if="entry.isCurrentTurn" class="badge active">Turn</span>
               </li>
             </ul>
 
-            <!-- Set initiative form -->
-            <details>
-              <summary style="cursor: pointer; font-size: 0.82rem; color: var(--muted-light); padding: 0.25rem 0; margin-bottom: 0.5rem;">
-                {{ state.initiative.length ? 'Update Initiative' : 'Set Initiative' }}
-              </summary>
-              <form @submit.prevent="setupCombat">
-                <div style="display: grid; gap: 0.4rem; margin-bottom: 0.75rem;">
-                  <div
-                    v-for="entity in [...state.game.characters, ...state.game.npcsAndMonsters]"
-                    :key="entity.id"
-                    class="flex items-center gap-2"
-                  >
-                    <span class="flex-1 text-sm">{{ entity.name }}</span>
-                    <input
-                      v-model.number="combatantInitiative[entity.id]"
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      style="width: 4rem; text-align: center;"
-                    />
-                  </div>
-                </div>
-                <button class="btn ghost sm w-full" type="submit" :disabled="isSaving">Set Order</button>
-              </form>
-            </details>
+            <button v-if="isCombat" class="btn danger w-full" type="button" :disabled="isSaving" @click="endCombat">
+              End Combat
+            </button>
           </div>
 
           <!-- NPC quick action -->
           <div v-if="game?.npcsAndMonsters.length" class="panel">
-            <h2>NPC Action</h2>
-            <form @submit.prevent="submitNpcAction">
+            <div class="panel-title">
+              <div>
+                <h2>NPC Actions</h2>
+                <p class="text-sm">Queue an NPC or monster action for DM resolution.</p>
+              </div>
+              <button
+                v-if="!showNpcActionForm"
+                class="btn"
+                type="button"
+                @click="showNpcActionForm = true"
+              >
+                Take NPC Action
+              </button>
+            </div>
+            <form v-if="showNpcActionForm" @submit.prevent="submitNpcAction">
               <label>
                 NPC
                 <select v-model="selectedNpcId" required>
@@ -425,26 +580,81 @@ function toggleAction(id: string) {
               </label>
               <label>Action<input v-model.trim="npcAction" placeholder="Attacks, casts, hides…" required /></label>
               <label>Target<input v-model.trim="npcTarget" placeholder="Optional" /></label>
-              <button class="btn ghost sm" type="submit" :disabled="isSaving">Submit NPC Action</button>
+              <div class="btn-row">
+                <button class="btn" type="submit" :disabled="isSaving">
+                  {{ isSaving ? 'Sending…' : 'Send to Queue' }}
+                </button>
+                <button class="btn ghost" type="button" :disabled="isSaving" @click="showNpcActionForm = false">
+                  Cancel
+                </button>
+              </div>
             </form>
           </div>
 
-          <!-- Active combatant health -->
-          <div v-if="state.game.characters.length || state.game.npcsAndMonsters.length" class="panel">
-            <h2>Combatant Health</h2>
-            <div style="display: grid; gap: 0.75rem;">
-              <div v-for="ch in state.game.characters" :key="ch.id">
-                <div class="flex justify-between text-xs muted" style="margin-bottom: 0.2rem;">
-                  <span>{{ ch.name }}</span><span>AC {{ ch.armor }}</span>
-                </div>
-                <HealthBar :current="ch.health" :max="ch.maxHealth" />
+          <!-- Character stats -->
+          <div class="panel">
+            <div class="panel-title">
+              <div>
+                <h2>Characters</h2>
+                <p class="text-sm">Open a character to review health, armor, and sheet stats.</p>
               </div>
-              <div v-for="npc in state.game.npcsAndMonsters" :key="npc.id">
-                <div class="flex justify-between text-xs muted" style="margin-bottom: 0.2rem;">
-                  <span>{{ npc.name }}</span><span class="muted text-xs">{{ npc.kind }}</span>
-                </div>
-                <HealthBar :current="npc.health" :max="npc.maxHealth" />
+              <span v-if="state.game.characters.length" class="badge active">{{ state.game.characters.length }}</span>
+            </div>
+
+            <div v-if="state.game.characters.length === 0" class="empty-state" style="padding: 1rem 0;">
+              <p class="text-sm">No characters have joined this game yet.</p>
+            </div>
+
+            <div v-else class="entity-stat-list">
+              <details v-for="ch in state.game.characters" :key="ch.id" class="entity-stat-details">
+                <summary>
+                  <span>
+                    <strong>{{ ch.name }}</strong>
+                    <small>{{ ch.playerName || 'No player name' }}</small>
+                  </span>
+                  <span class="entity-stat-summary">HP {{ ch.health }}/{{ ch.maxHealth }} · AC {{ ch.armor }}</span>
+                </summary>
+                <CharacterSheet :character="ch" />
+              </details>
+            </div>
+          </div>
+
+          <!-- NPC stats -->
+          <div class="panel">
+            <div class="panel-title">
+              <div>
+                <h2>NPCs / Monsters</h2>
+                <p class="text-sm">Open an NPC to review health, armor, and stat block details.</p>
               </div>
+              <span v-if="state.game.npcsAndMonsters.length" class="badge active">{{ state.game.npcsAndMonsters.length }}</span>
+            </div>
+
+            <div v-if="state.game.npcsAndMonsters.length === 0" class="empty-state" style="padding: 1rem 0;">
+              <p class="text-sm">No NPCs or monsters have been added.</p>
+            </div>
+
+            <div v-else class="entity-stat-list">
+              <details v-for="npc in state.game.npcsAndMonsters" :key="npc.id" class="entity-stat-details">
+                <summary>
+                  <span>
+                    <strong>{{ npc.name }}</strong>
+                    <small>{{ npc.kind }}</small>
+                  </span>
+                  <span class="entity-stat-actions">
+                    <button
+                      class="npc-visibility-btn"
+                      :class="`visibility-${(npc.visibility ?? 'Visible').toLowerCase()}`"
+                      type="button"
+                      :title="`Click to cycle: Visible → Obscured → Hidden (currently ${npc.visibility ?? 'Visible'})`"
+                      @click.stop="cycleNpcVisibility(npc.id, npc.visibility ?? 'Visible')"
+                    >
+                      {{ npc.visibility === 'Hidden' ? 'Hidden' : npc.visibility === 'Obscured' ? 'Obscured' : 'Visible' }}
+                    </button>
+                    <span class="entity-stat-summary">HP {{ npc.health }}/{{ npc.maxHealth }} · AC {{ npc.armor }}</span>
+                  </span>
+                </summary>
+                <NpcSheet :npc="npc" />
+              </details>
             </div>
           </div>
         </div>
@@ -453,4 +663,18 @@ function toggleAction(id: string) {
       <div v-if="pollingError" class="alert error">{{ pollingError }}</div>
     </main>
   </section>
+
+  <!-- Drag ghost: follows the cursor while dragging an initiative item -->
+  <Teleport to="body">
+    <div
+      v-if="draggedEntry && dragPosition"
+      class="initiative-drag-ghost"
+      :style="{ transform: `translate(${dragPosition.x + 14}px, ${dragPosition.y - 24}px)` }"
+    >
+      <span class="initiative-card-body">
+        <span class="initiative-name">{{ draggedEntry.combatantName }}</span>
+        <span class="initiative-type">{{ draggedEntry.combatantType }}</span>
+      </span>
+    </div>
+  </Teleport>
 </template>

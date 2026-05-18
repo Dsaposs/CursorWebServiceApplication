@@ -101,6 +101,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     db.Database.EnsureCreated();
+    await ApplySchemaUpdatesAsync(db);
     await SeedRulesetsAsync(db);
 
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
@@ -149,6 +150,40 @@ app.MapControllers();
 app.MapHealthChecks("/health");
 
 app.Run();
+
+static async Task ApplySchemaUpdatesAsync(ApplicationDbContext db)
+{
+    // Adds columns introduced after the initial EnsureCreated; safe to run on every startup.
+    var connection = db.Database.GetDbConnection();
+    var wasOpen = connection.State == System.Data.ConnectionState.Open;
+    if (!wasOpen)
+        await connection.OpenAsync();
+
+    var hasNpcVisibilitiesJson = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('GameSessions')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "NpcVisibilitiesJson")
+            {
+                hasNpcVisibilitiesJson = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasNpcVisibilitiesJson)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"GameSessions\" ADD COLUMN \"NpcVisibilitiesJson\" TEXT DEFAULT '{}'";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    if (!wasOpen)
+        await connection.CloseAsync();
+}
 
 static async Task SeedDefaultUsersAsync(RoleManager<IdentityRole> roleManager, UserManager<ApplicationUser> userManager, string adminPassword)
 {

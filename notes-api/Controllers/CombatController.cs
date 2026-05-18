@@ -28,7 +28,20 @@ public class CombatController : ControllerBase
             return NotFound();
         }
 
-        session.InitiativeEntries.Clear();
+        var currentCombatantId = session.InitiativeEntries.FirstOrDefault(i => i.IsCurrentTurn)?.CombatantId;
+
+        // Delete all existing entries for this session with a direct SQL statement.
+        // Using the navigation collection risks EF Core relationship fixup re-attaching
+        // stale tracked entities as "Modified" instead of inserting new ones as "Added",
+        // which causes DbUpdateConcurrencyException when SaveChangesAsync runs.
+        await _db.InitiativeEntries
+            .Where(i => i.SessionId == sessionId)
+            .ExecuteDeleteAsync();
+
+        // Detach stale tracker entries so EF Core doesn't attempt a second DELETE.
+        foreach (var e in _db.ChangeTracker.Entries<InitiativeEntry>().ToList())
+            e.State = EntityState.Detached;
+
         var characters = await _db.Characters.Where(c => c.GameId == session.GameId).ToListAsync();
         var npcs = await _db.NpcsAndMonsters.Where(n => n.GameId == session.GameId).ToListAsync();
         var now = DateTime.UtcNow;
@@ -36,7 +49,10 @@ public class CombatController : ControllerBase
             .OrderByDescending(c => c.Initiative)
             .ThenBy(c => c.Type)
             .ToList();
+        var hasCurrentCombatant = currentCombatantId.HasValue && ordered.Any(c => c.Id == currentCombatantId.Value);
+        var currentId = currentCombatantId.GetValueOrDefault();
 
+        var newEntries = new List<InitiativeEntry>();
         for (var index = 0; index < ordered.Count; index++)
         {
             var combatant = ordered[index];
@@ -45,7 +61,7 @@ public class CombatController : ControllerBase
                 return BadRequest(new { errors = new[] { $"Combatant {combatant.Id} was not found in this game." } });
             }
 
-            session.InitiativeEntries.Add(new InitiativeEntry
+            newEntries.Add(new InitiativeEntry
             {
                 Id = Guid.NewGuid(),
                 SessionId = session.Id,
@@ -53,16 +69,20 @@ public class CombatController : ControllerBase
                 CombatantId = combatant.Id,
                 CombatantName = name,
                 SortOrder = index + 1,
-                IsCurrentTurn = index == 0,
+                IsCurrentTurn = hasCurrentCombatant ? combatant.Id == currentId : index == 0,
                 CreatedAt = now,
             });
         }
 
+        // Add directly to the DbSet — NOT to session.InitiativeEntries — so EF Core
+        // tracks these as "Added" (INSERT) rather than triggering relationship fixup
+        // that would re-attach stale entities and generate UPDATE statements instead.
+        _db.InitiativeEntries.AddRange(newEntries);
         session.State = SessionMode.Combat;
         Touch(session);
         await _db.SaveChangesAsync();
 
-        return Ok(session.InitiativeEntries.OrderBy(i => i.SortOrder).Select(ControllerHelpers.ToInitiativeResponse));
+        return Ok(newEntries.OrderBy(i => i.SortOrder).Select(ControllerHelpers.ToInitiativeResponse));
     }
 
     [HttpPost("advance")]

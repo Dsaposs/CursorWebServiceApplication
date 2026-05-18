@@ -34,6 +34,11 @@ public class GameParticipantsController : ControllerBase
 
         var now = DateTime.UtcNow;
         var normalizedName = request.CharacterName.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            return BadRequest(new { errors = new[] { "Character name is required." } });
+        }
+
         var character = await _db.Characters.FirstOrDefaultAsync(c => c.GameId == game.Id && c.Name == normalizedName);
 
         if (character is null)

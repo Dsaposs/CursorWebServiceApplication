@@ -61,6 +61,7 @@ public class NpcResponse
     public int Health { get; set; }
     public int Armor { get; set; }
     public string StatBlockJson { get; set; } = "{}";
+    public string Visibility { get; set; } = "Visible";
 }
 
 public class JoinGameResponse
@@ -68,6 +69,12 @@ public class JoinGameResponse
     public string ParticipantToken { get; set; } = string.Empty;
     public CharacterResponse Character { get; set; } = new();
     public GameResponse Game { get; set; } = new();
+}
+
+public class SessionJoinOptionsResponse
+{
+    public SessionSummaryResponse Session { get; set; } = new();
+    public IEnumerable<CharacterResponse> AvailableCharacters { get; set; } = Array.Empty<CharacterResponse>();
 }
 
 public class SessionSummaryResponse

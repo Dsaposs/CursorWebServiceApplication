@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import type { JoinGameResponse, SessionSummaryResponse } from '~/types/api';
+import type { JoinGameResponse, SessionJoinOptionsResponse, SessionSummaryResponse } from '~/types/api';
 
 const route = useRoute();
 const { api } = useApi();
 const { error: toastError } = useToast();
 
 const session = ref<SessionSummaryResponse | null>(null);
+const availableCharacters = ref<SessionJoinOptionsResponse['availableCharacters']>([]);
+const joinMode = ref<'existing' | 'new'>('existing');
+const selectedCharacterId = ref('');
 const characterName = ref('');
 const playerName = ref('');
 const fieldError = ref('');
@@ -20,7 +23,11 @@ onMounted(async () => {
     existingToken.value = localStorage.getItem(`ttrpg_player_${route.params.code}`);
   }
   try {
-    session.value = await api<SessionSummaryResponse>(`/api/session-join/${route.params.code}`);
+    const options = await api<SessionJoinOptionsResponse>(`/api/session-join/${route.params.code}`);
+    session.value = options.session;
+    availableCharacters.value = options.availableCharacters;
+    selectedCharacterId.value = options.availableCharacters[0]?.id ?? '';
+    joinMode.value = options.availableCharacters.length ? 'existing' : 'new';
   } catch (err) {
     fieldError.value = 'Session not found or no longer active.';
   } finally {
@@ -34,7 +41,9 @@ async function joinSession() {
   try {
     const joined = await api<JoinGameResponse>(`/api/session-join/${route.params.code}`, {
       method: 'POST',
-      body: { characterName: characterName.value, playerName: playerName.value },
+      body: joinMode.value === 'existing'
+        ? { characterId: selectedCharacterId.value, playerName: playerName.value }
+        : { characterName: characterName.value, playerName: playerName.value },
     });
     localStorage.setItem(`ttrpg_player_${route.params.code}`, joined.participantToken);
     await navigateTo(`/sessions/${route.params.code}/player`);
@@ -82,10 +91,44 @@ async function rejoin() {
         </div>
 
         <form @submit.prevent="joinSession">
-          <label>
-            Character name
+          <div class="join-choice-grid">
+            <button
+              v-if="availableCharacters.length"
+              class="join-choice"
+              :class="{ active: joinMode === 'existing' }"
+              type="button"
+              @click="joinMode = 'existing'"
+            >
+              Pick Existing
+            </button>
+            <button
+              class="join-choice"
+              :class="{ active: joinMode === 'new' }"
+              type="button"
+              @click="joinMode = 'new'"
+            >
+              Create New
+            </button>
+          </div>
+
+          <label v-if="joinMode === 'existing' && availableCharacters.length">
+            Existing character
+            <select v-model="selectedCharacterId" required>
+              <option v-for="character in availableCharacters" :key="character.id" :value="character.id">
+                {{ character.name }}{{ character.playerName ? ` (${character.playerName})` : '' }}
+              </option>
+            </select>
+          </label>
+
+          <div v-else-if="joinMode === 'existing'" class="alert info">
+            No existing characters are available for this session. Create a new character to join.
+          </div>
+
+          <label v-if="joinMode === 'new'">
+            New character name
             <input v-model.trim="characterName" placeholder="Your character's name" required />
           </label>
+
           <label>
             Your name <span class="muted text-xs">(optional)</span>
             <input v-model.trim="playerName" placeholder="Real name or nickname" />
@@ -99,7 +142,7 @@ async function rejoin() {
         </form>
 
         <p class="text-xs muted text-center" style="margin-top: 1rem; margin-bottom: 0;">
-          If your character already exists it will be reopened.
+          Existing characters already claimed for this game are hidden from the list.
         </p>
       </template>
     </div>

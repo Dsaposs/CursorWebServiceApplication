@@ -183,6 +183,8 @@ public class GameSession
 
     public DateTime UpdatedAt { get; set; }
 
+    public string NpcVisibilitiesJson { get; set; } = "{}";
+
     public ICollection<ActionRequest> Actions { get; set; } = new List<ActionRequest>();
 
     public ICollection<InitiativeEntry> InitiativeEntries { get; set; } = new List<InitiativeEntry>();

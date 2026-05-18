@@ -398,11 +398,7 @@ function sessionRoute(session: SessionSummaryResponse) {
                 </div>
                 <span style="font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;">AC {{ ch.armor }}</span>
               </div>
-              <HealthBar :current="ch.health" :max="ch.maxHealth" />
-              <details style="margin-top: 0.75rem;">
-                <summary style="cursor: pointer; font-size: 0.8rem; color: var(--muted-light);">Character data</summary>
-                <pre style="margin-top: 0.5rem; font-size: 0.72rem;">{{ ch.rulesetDataJson }}</pre>
-              </details>
+              <CharacterSheet :character="ch" />
             </article>
           </div>
         </div>

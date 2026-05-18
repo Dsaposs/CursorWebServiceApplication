@@ -48,12 +48,18 @@ export interface NpcResponse {
   health: number;
   armor: number;
   statBlockJson: string;
+  visibility: 'Visible' | 'Obscured' | 'Hidden';
 }
 
 export interface JoinGameResponse {
   participantToken: string;
   character: CharacterResponse;
   game: GameResponse;
+}
+
+export interface SessionJoinOptionsResponse {
+  session: SessionSummaryResponse;
+  availableCharacters: CharacterResponse[];
 }
 
 export interface SessionSummaryResponse {

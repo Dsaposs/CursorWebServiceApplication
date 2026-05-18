@@ -19,7 +19,34 @@ public static class ControllerHelpers
 
     public static string JoinUrl(this ControllerBase controller, string path) => path;
 
-    public static GameResponse ToGameResponse(this ControllerBase controller, Game game) => new()
+    /// <summary>
+    /// Parses the session's NPC visibility JSON into a dictionary keyed by NPC ID string.
+    /// Missing keys default to "Visible".
+    /// </summary>
+    public static Dictionary<string, string> ParseNpcVisibilities(string json)
+    {
+        if (string.IsNullOrEmpty(json) || json == "{}")
+            return new Dictionary<string, string>();
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json)
+                   ?? new Dictionary<string, string>();
+        }
+        catch
+        {
+            return new Dictionary<string, string>();
+        }
+    }
+
+    /// <summary>
+    /// Builds a GameResponse. When playerView is true, Hidden NPCs are excluded
+    /// and Obscured NPCs appear anonymised (no name, no stats).
+    /// </summary>
+    public static GameResponse ToGameResponse(
+        this ControllerBase controller,
+        Game game,
+        Dictionary<string, string>? npcVisibilities = null,
+        bool playerView = false) => new()
     {
         Id = game.Id,
         Name = game.Name,
@@ -31,7 +58,13 @@ public static class ControllerHelpers
         CreatedAt = game.CreatedAt,
         UpdatedAt = game.UpdatedAt,
         Characters = game.Characters.OrderBy(c => c.Name).Select(ToCharacterResponse),
-        NpcsAndMonsters = game.NpcsAndMonsters.OrderBy(n => n.Name).Select(ToNpcResponse),
+        NpcsAndMonsters = game.NpcsAndMonsters
+            .OrderBy(n => n.Name)
+            .Select(n => (npc: n, vis: npcVisibilities?.GetValueOrDefault(n.Id.ToString(), "Visible") ?? "Visible"))
+            .Where(x => !playerView || x.vis != "Hidden")
+            .Select(x => playerView && x.vis == "Obscured"
+                ? new NpcResponse { Id = x.npc.Id, Name = "Unknown", Kind = "???", Visibility = "Obscured" }
+                : ToNpcResponse(x.npc, x.vis)),
         Sessions = game.Sessions.OrderByDescending(s => s.StartedAt).Select(s => controller.ToSessionSummaryResponse(s)),
     };
 
@@ -59,7 +92,7 @@ public static class ControllerHelpers
         RulesetDataJson = character.RulesetDataJson,
     };
 
-    public static NpcResponse ToNpcResponse(NpcOrMonster npc) => new()
+    public static NpcResponse ToNpcResponse(NpcOrMonster npc, string visibility = "Visible") => new()
     {
         Id = npc.Id,
         Name = npc.Name,
@@ -68,6 +101,7 @@ public static class ControllerHelpers
         Health = npc.Health,
         Armor = npc.Armor,
         StatBlockJson = npc.StatBlockJson,
+        Visibility = visibility,
     };
 
     public static SessionSummaryResponse ToSessionSummaryResponse(this ControllerBase controller, GameSession session) => new()
