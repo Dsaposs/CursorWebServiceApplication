@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Models;
+using NotesApi.Rulesets;
 
 namespace NotesApi.Controllers;
 
@@ -22,6 +23,7 @@ public class SessionJoinController : ControllerBase
     {
         var session = await _db.GameSessions
             .AsNoTracking()
+            .Include(s => s.Game).ThenInclude(g => g.Ruleset)
             .Include(s => s.Game).ThenInclude(g => g.Characters)
             .FirstOrDefaultAsync(s => s.JoinCode == joinCode && s.IsActive);
 
@@ -39,6 +41,7 @@ public class SessionJoinController : ControllerBase
         return Ok(new SessionJoinOptionsResponse
         {
             Session = this.ToSessionSummaryResponse(session),
+            Ruleset = ControllerHelpers.ToRulesetDetailResponse(session.Game.Ruleset),
             AvailableCharacters = session.Game.Characters
                 .Where(c => !claimedCharacterIds.Contains(c.Id))
                 .OrderBy(c => c.Name)
@@ -95,6 +98,12 @@ public class SessionJoinController : ControllerBase
                 return BadRequest(new { errors = new[] { "That character already exists. Select it from the character list if it is available." } });
             }
 
+            var classKey = request.ClassKey.Trim();
+            if (!RulesetCharacterBuilder.ClassExists(session.Game.Ruleset.DefinitionJson, classKey))
+            {
+                return BadRequest(new { errors = new[] { "Selected class is not available for this ruleset." } });
+            }
+
             character = new Character
             {
                 Id = Guid.NewGuid(),
@@ -107,7 +116,8 @@ public class SessionJoinController : ControllerBase
                 AttributesJson = "{}",
                 SkillsJson = "{}",
                 InventoryJson = "[]",
-                RulesetDataJson = session.Game.Ruleset.CharacterTemplateJson,
+                RulesetDataJson = RulesetCharacterBuilder.BuildRulesetDataJson(session.Game.Ruleset.CharacterTemplateJson, classKey),
+                ClassKey = classKey,
                 CreatedAt = now,
                 UpdatedAt = now,
             };

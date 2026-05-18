@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import type { InitiativeEntryResponse, SessionStateResponse } from '~/types/api';
+import type { InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
+import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
+import { parseRulesetDefinition } from '~/utils/rulesets';
 
 const route = useRoute();
 const { api } = useApi();
+const { getSessionPlayerToken, getGamePlayerToken, setSessionPlayerToken } = usePlayerTokens();
 const { error: toastError, success: toastSuccess } = useToast();
 
 const playerToken = ref<string | null>(null);
-const actionText = ref('');
+const ruleset = ref<RulesetResponse | null>(null);
+const showCharacterSheet = ref(true);
 const targetName = ref('');
 const description = ref('');
 const isSubmitting = ref(false);
@@ -14,12 +18,16 @@ const showActionForm = ref(false);
 
 async function loadState() {
   if (!playerToken.value) return null;
-  return await api<SessionStateResponse>(`/api/session-join/${route.params.code}/state`, {
+  const nextState = await api<SessionStateResponse>(`/api/session-join/${route.params.code}/state`, {
     playerToken: playerToken.value,
   });
+  if (!ruleset.value) {
+    ruleset.value = await api<RulesetResponse>(`/api/rulesets/${nextState.game.rulesetCode}`);
+  }
+  return nextState;
 }
 
-const { state, pollingError, refresh, start } = useSessionPolling(loadState, 3000);
+const { state, pollingError, connectionStatus, refresh, start } = useSessionPolling(loadState, 3000);
 
 const currentTurn = computed<InitiativeEntryResponse | null>(
   () => state.value?.initiative.find(e => e.isCurrentTurn) ?? null,
@@ -33,6 +41,23 @@ const isMyTurn = computed(() => {
 });
 
 const isCombat = computed(() => state.value?.state === 'Combat');
+const rulesetDefinition = computed(() => parseRulesetDefinition(ruleset.value));
+const actingClassKey = computed(() => state.value?.character?.classKey ?? '');
+const {
+  actionMode,
+  selectedActionKey,
+  selectedSkillKey,
+  selectedAttributeKey,
+  customActionText: actionText,
+  availableActions,
+  availableSkills,
+  availableAttributes,
+  selectedActionDetail,
+  selectedSkillDetail,
+  selectedAttributeDetail,
+  resetSelection: resetActionSelection,
+  buildSubmitPayload,
+} = useRulesetActionChooser(rulesetDefinition, actingClassKey);
 const pendingPlayerActions = computed(() =>
   state.value?.actions.filter(action =>
     action.status === 'Pending' && action.actorName === state.value?.character?.name,
@@ -40,7 +65,19 @@ const pendingPlayerActions = computed(() =>
 );
 
 onMounted(async () => {
-  playerToken.value = localStorage.getItem(`ttrpg_player_${route.params.code}`);
+  playerToken.value = getSessionPlayerToken(route.params.code);
+  if (!playerToken.value) {
+    try {
+      const options = await api<{ session: { gameId: string } }>(`/api/session-join/${route.params.code}`);
+      const gameToken = getGamePlayerToken(options.session.gameId);
+      if (gameToken) {
+        playerToken.value = gameToken;
+        setSessionPlayerToken(route.params.code, gameToken);
+      }
+    } catch {
+      // The join page will surface a helpful message if the session lookup fails.
+    }
+  }
   if (!playerToken.value) {
     await navigateTo(`/join/${route.params.code}`);
     return;
@@ -50,18 +87,25 @@ onMounted(async () => {
 
 async function submitAction() {
   if (!playerToken.value || !state.value) return;
+  const payload = buildSubmitPayload(description.value);
+  if (!payload) {
+    toastError('Choose or describe an action first.');
+    return;
+  }
+
   isSubmitting.value = true;
   try {
     await api(`/api/sessions/${state.value.joinCode}/actions`, {
       method: 'POST',
       playerToken: playerToken.value,
       body: {
-        actionText: actionText.value,
+        actionKey: payload.actionKey,
+        actionText: payload.actionText,
         targetName: targetName.value || undefined,
-        description: description.value || undefined,
+        description: payload.description,
       },
     });
-    actionText.value = '';
+    resetActionSelection();
     targetName.value = '';
     description.value = '';
     await refresh();
@@ -80,19 +124,29 @@ async function submitAction() {
     <!-- Topbar -->
     <header class="topbar">
       <div class="topbar-brand">
-        <span>🧙</span>
+        <span aria-hidden="true">🧙</span>
         <div>
           <strong>{{ state?.character?.name || 'Player' }}</strong>
           <div class="topbar-sub">{{ state?.game.name }}</div>
         </div>
       </div>
       <div class="topbar-actions">
+        <SessionConnectionStatus
+          v-if="state"
+          :status="connectionStatus"
+          :error="pollingError"
+          :started-at="state.startedAt"
+          :ended-at="state.endedAt"
+          :is-active="state.isActive"
+        />
         <span v-if="state" class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
       </div>
     </header>
 
-    <div v-if="!state" class="stack" style="padding-top: 4rem; text-align: center;">
-      <p class="muted">Connecting to session…</p>
+    <div v-if="!state" class="stack">
+      <SkeletonBlock :lines="4" />
+      <SkeletonBlock :lines="6" />
+      <SkeletonBlock :lines="5" />
     </div>
 
     <main v-else class="stack">
@@ -103,15 +157,27 @@ async function submitAction() {
             <h1 style="margin-bottom: 0.15rem;">{{ state.character?.name }}</h1>
             <p style="margin: 0; font-size: 0.85rem;">{{ state.game.rulesetName }}</p>
           </div>
-          <div v-if="isCombat && currentTurn">
-            <span v-if="isMyTurn" class="badge active" style="font-size: 0.85rem; padding: 0.35rem 0.8rem;">⚔️ Your Turn!</span>
-            <span v-else class="badge" style="background: var(--panel-alt); color: var(--muted-light); border: 1px solid var(--border);">
-              {{ currentTurn.combatantName }}'s turn
-            </span>
+          <div class="btn-row">
+            <div v-if="isCombat && currentTurn">
+              <span v-if="isMyTurn" class="badge active" style="font-size: 0.85rem; padding: 0.35rem 0.8rem;">
+                <span aria-hidden="true">⚔️</span> Your Turn!
+              </span>
+              <span v-else class="badge" style="background: var(--panel-alt); color: var(--muted-light); border: 1px solid var(--border);">
+                {{ currentTurn.combatantName }}'s turn
+              </span>
+            </div>
+            <button
+              class="btn ghost sm"
+              type="button"
+              :aria-expanded="showCharacterSheet"
+              @click="showCharacterSheet = !showCharacterSheet"
+            >
+              {{ showCharacterSheet ? 'Hide Sheet' : 'Show Sheet' }}
+            </button>
           </div>
         </div>
 
-        <CharacterSheet v-if="state.character" :character="state.character" />
+        <CharacterSheet v-if="state.character && showCharacterSheet" :character="state.character" />
       </div>
 
       <!-- Initiative tracker (combat only) -->
@@ -155,9 +221,68 @@ async function submitAction() {
         </p>
         <form v-if="showActionForm" @submit.prevent="submitAction">
           <label>
-            Action <span style="color: var(--danger);">*</span>
+            Action type <span style="color: var(--danger);">*</span>
+            <select v-model="actionMode">
+              <option v-if="availableActions.length" value="action">Predefined action</option>
+              <option v-if="availableSkills.length" value="skill">Skill check</option>
+              <option v-if="availableAttributes.length" value="attribute">Attribute check</option>
+              <option value="custom">Custom action</option>
+            </select>
+          </label>
+
+          <label v-if="actionMode === 'action' && availableActions.length">
+            Predefined action <span style="color: var(--danger);">*</span>
+            <select v-model="selectedActionKey" required>
+              <option value="">Choose a predefined action</option>
+              <option v-for="action in availableActions" :key="action.key" :value="action.key">
+                {{ action.label }}
+              </option>
+            </select>
+          </label>
+
+          <label v-else-if="actionMode === 'skill' && availableSkills.length">
+            Skill <span style="color: var(--danger);">*</span>
+            <select v-model="selectedSkillKey" required>
+              <option value="">Choose a skill</option>
+              <option v-for="skill in availableSkills" :key="skill.key" :value="skill.key">
+                {{ skill.label }}
+              </option>
+            </select>
+          </label>
+
+          <label v-else-if="actionMode === 'attribute' && availableAttributes.length">
+            Attribute <span style="color: var(--danger);">*</span>
+            <select v-model="selectedAttributeKey" required>
+              <option value="">Choose an attribute</option>
+              <option v-for="attribute in availableAttributes" :key="attribute.key" :value="attribute.key">
+                {{ attribute.label }}
+              </option>
+            </select>
+          </label>
+
+          <label v-else>
+            Custom action <span style="color: var(--danger);">*</span>
             <input v-model.trim="actionText" placeholder="Swing sword, use medkit, lockpick door…" required />
           </label>
+
+          <div v-if="selectedActionDetail" class="alert info">
+            <div>
+              <strong>{{ selectedActionDetail.dice }}</strong>
+              <p class="text-sm">
+                Roll {{ selectedActionDetail.attribute }} + {{ selectedActionDetail.skill }}.
+                Modifiers: {{ selectedActionDetail.modifiers }}.
+              </p>
+              <p class="text-sm">{{ selectedActionDetail.successRule }}</p>
+            </div>
+          </div>
+          <div v-else-if="selectedSkillDetail || selectedAttributeDetail" class="alert info">
+            <div>
+              <strong>{{ selectedSkillDetail?.actionText ?? selectedAttributeDetail?.actionText }}</strong>
+              <p class="text-sm">
+                Suggested roll: {{ selectedSkillDetail?.rollSummary ?? selectedAttributeDetail?.rollSummary }}.
+              </p>
+            </div>
+          </div>
           <label>
             Target
             <input v-model.trim="targetName" placeholder="Orc, door, ally… (optional)" />
@@ -184,33 +309,12 @@ async function submitAction() {
           <p class="text-sm">No actions yet this session.</p>
         </div>
         <div style="display: grid; gap: 0.5rem;">
-          <div
+          <ActionCard
             v-for="action in [...state.actions].reverse()"
             :key="action.id"
-            class="action-card"
-            :class="action.status === 'Published' ? 'published-card' : 'pending-card'"
-          >
-            <div class="action-card-header">
-              <div>
-                <div class="action-card-actor">{{ action.actorName }}</div>
-                <div class="action-card-target">
-                  {{ action.actionText }}
-                  <span v-if="action.targetName"> → {{ action.targetName }}</span>
-                </div>
-              </div>
-              <span class="badge" :class="action.status === 'Published' ? 'published' : 'pending'">
-                {{ action.status }}
-              </span>
-            </div>
-            <template v-if="action.status === 'Published'">
-              <div class="action-resolution">
-                <div v-if="action.rollSummary" class="roll-summary">🎲 {{ action.rollSummary }}</div>
-                <p style="margin: 0; font-size: 0.875rem; color: var(--ink);">{{ action.resolutionText }}</p>
-                <p v-if="action.additionalActions" style="margin-top: 0.35rem; font-size: 0.82rem; color: var(--muted-light);">{{ action.additionalActions }}</p>
-              </div>
-            </template>
-            <p v-else class="text-xs muted">Waiting for DM to resolve…</p>
-          </div>
+            :action="action"
+            prefix=""
+          />
         </div>
       </div>
 

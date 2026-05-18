@@ -19,7 +19,7 @@ const icons: Record<string, string> = {
           class="toast"
           :class="toast.type"
         >
-          <span class="toast-icon font-bold">{{ icons[toast.type] }}</span>
+          <span class="toast-icon font-bold" aria-hidden="true">{{ icons[toast.type] }}</span>
           <span class="toast-message">{{ toast.message }}</span>
           <button class="toast-close" type="button" aria-label="Dismiss" @click="remove(toast.id)">×</button>
         </div>

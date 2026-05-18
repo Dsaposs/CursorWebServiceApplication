@@ -1,13 +1,101 @@
 namespace NotesApi.Tests;
 
 using Microsoft.Data.Sqlite;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NotesApi.Controllers;
 using NotesApi.Data;
 using NotesApi.Models;
+using NotesApi.DTOs;
+using NotesApi.Rulesets;
 
 public class TtrpgDomainTests
 {
+    private const string ValidRulesetJson = """
+        {
+          "schemaVersion": 1,
+          "code": "test-rules",
+          "displayName": "Test Rules",
+          "description": "Rules for testing.",
+          "diceNotation": "d6 pool",
+          "dice": [{ "key": "d6Pool", "label": "D6 Pool", "notation": "attribute + skill d6" }],
+          "character": {
+            "vitals": {},
+            "attributes": [{ "key": "agility", "label": "Agility", "default": 2 }],
+            "gameValues": [{ "key": "stress", "label": "Stress", "type": "number", "default": 0 }],
+            "classes": [{ "key": "marine", "label": "Marine", "availableSkills": ["rangedCombat"], "startingSkillPoints": 10 }],
+            "skills": [{ "key": "rangedCombat", "label": "Ranged Combat", "attribute": "agility", "default": 0 }]
+          },
+          "actions": [{
+            "key": "shoot",
+            "label": "Shoot",
+            "allowedClasses": ["marine"],
+            "roll": {
+              "dice": "d6Pool",
+              "attribute": "agility",
+              "skill": "rangedCombat",
+              "modifiers": [{ "source": "gameValue", "key": "stress", "dicePerPoint": 1 }],
+              "successRule": "Each 6 is a success."
+            }
+          }],
+          "npcTemplates": []
+        }
+        """;
+
+    [Fact]
+    public void RulesetValidator_AcceptsValidRulesetJson()
+    {
+        var validator = new RulesetDefinitionValidator();
+
+        var result = validator.Validate(ValidRulesetJson);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("test-rules", result.Definition?.Code);
+        Assert.Contains("rangedCombat", result.CharacterTemplateJson);
+    }
+
+    [Fact]
+    public void RulesetValidator_RejectsMissingReferences()
+    {
+        var invalidJson = ValidRulesetJson.Replace("\"skill\": \"rangedCombat\"", "\"skill\": \"missingSkill\"");
+        var validator = new RulesetDefinitionValidator();
+
+        var result = validator.Validate(invalidJson);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Contains("missing skill", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task RulesetsImport_UpsertsByCode()
+    {
+        await using var db = CreateDbContext();
+        var controller = new RulesetsController(db, new RulesetDefinitionValidator());
+
+        var first = await controller.Import(new ImportRulesetRequest { DefinitionJson = ValidRulesetJson });
+        var second = await controller.Import(new ImportRulesetRequest { DefinitionJson = ValidRulesetJson.Replace("Test Rules", "Test Rules Updated") });
+
+        var firstOk = Assert.IsType<OkObjectResult>(first.Result);
+        var firstResponse = Assert.IsType<RulesetImportResponse>(firstOk.Value);
+        var secondOk = Assert.IsType<OkObjectResult>(second.Result);
+        var secondResponse = Assert.IsType<RulesetImportResponse>(secondOk.Value);
+        var saved = await db.Rulesets.SingleAsync(r => r.Code == "test-rules");
+
+        Assert.True(firstResponse.Created);
+        Assert.False(secondResponse.Created);
+        Assert.Equal("Test Rules Updated", saved.DisplayName);
+    }
+
+    [Fact]
+    public void RulesetsImport_RequiresAdminRole()
+    {
+        var method = typeof(RulesetsController).GetMethod(nameof(RulesetsController.Import));
+        var authorize = Assert.Single(method!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: false).Cast<AuthorizeAttribute>());
+
+        Assert.Equal("Admin", authorize.Roles);
+    }
+
     [Fact]
     public async Task OwnedGameLookup_OnlyReturnsGamesForTheDm()
     {
@@ -255,6 +343,7 @@ public class TtrpgDomainTests
             Description = "Test ruleset",
             DiceNotation = "d6",
             CharacterTemplateJson = "{}",
+            DefinitionJson = ValidRulesetJson.Replace("test-rules", "alien-rpg").Replace("Test Rules", "Alien RPG"),
         });
         await db.SaveChangesAsync();
     }

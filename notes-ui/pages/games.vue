@@ -1,5 +1,11 @@
 <script setup lang="ts">
+import ConfirmModal from '~/components/ConfirmModal.vue';
+import GameNpcManager from '~/components/games/GameNpcManager.vue';
+import GameOverview from '~/components/games/GameOverview.vue';
+import GamePlayersPanel from '~/components/games/GamePlayersPanel.vue';
+import GameSidebar from '~/components/games/GameSidebar.vue';
 import type { GameResponse, NpcResponse, RulesetResponse, SessionSummaryResponse } from '~/types/api';
+import { parseRulesetDefinition } from '~/utils/rulesets';
 
 type GameTab = 'overview' | 'players' | 'npcs';
 
@@ -28,9 +34,13 @@ const editingNpcId = ref<string | null>(null);
 
 const isLoading = ref(false);
 const isSaving = ref(false);
+const showDeleteGameConfirm = ref(false);
+const npcPendingDelete = ref<NpcResponse | null>(null);
 
 const hasGames = computed(() => games.value.length > 0);
 const activeSession = computed(() => selectedGame.value?.sessions.find(s => s.isActive) ?? null);
+const selectedCreateRuleset = computed(() => rulesets.value.find(ruleset => ruleset.code === createRulesetCode.value) ?? null);
+const selectedCreateDefinition = computed(() => parseRulesetDefinition(selectedCreateRuleset.value));
 
 onMounted(async () => {
   loadSession();
@@ -106,17 +116,24 @@ async function startSession() {
   }
 }
 
+function requestDeleteGame() {
+  if (!selectedGame.value) return;
+  showDeleteGameConfirm.value = true;
+}
+
 async function deleteGame() {
   if (!selectedGame.value) return;
-  if (!confirm(`Delete "${selectedGame.value.name}" and all its sessions, characters, NPCs, and actions? This cannot be undone.`)) return;
-
+  isSaving.value = true;
   try {
     await api(`/api/games/${selectedGame.value.id}`, { method: 'DELETE' });
     toastInfo(`"${selectedGame.value.name}" deleted.`);
     selectedGame.value = null;
+    showDeleteGameConfirm.value = false;
     await loadData();
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSaving.value = false;
   }
 }
 
@@ -152,16 +169,25 @@ async function updateNpc() {
   }
 }
 
-async function deleteNpc(npc: NpcResponse) {
-  if (!selectedGame.value || !confirm(`Delete "${npc.name}"?`)) return;
+function requestDeleteNpc(npc: NpcResponse) {
+  npcPendingDelete.value = npc;
+}
+
+async function deleteNpc() {
+  if (!selectedGame.value || !npcPendingDelete.value) return;
+  const npc = npcPendingDelete.value;
+  isSaving.value = true;
   try {
     await api(`/api/games/${selectedGame.value.id}/npcs/${npc.id}`, { method: 'DELETE' });
     toastInfo(`${npc.name} removed.`);
     if (editingNpcId.value === npc.id) resetNpcForm();
+    npcPendingDelete.value = null;
     await openGame(selectedGame.value.id);
     activeTab.value = 'npcs';
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSaving.value = false;
   }
 }
 
@@ -207,20 +233,6 @@ function signOut() {
   clearSession();
   void navigateTo('/login');
 }
-
-function sessionBadge(session: SessionSummaryResponse) {
-  if (session.isActive) return session.state === 'Combat' ? 'combat' : 'exploration';
-  return 'ended';
-}
-
-function sessionBadgeText(session: SessionSummaryResponse) {
-  if (!session.isActive) return 'Ended';
-  return session.state;
-}
-
-function sessionRoute(session: SessionSummaryResponse) {
-  return session.isActive ? `/sessions/${session.id}/dm` : `/sessions/${session.id}/summary`;
-}
 </script>
 
 <template>
@@ -228,47 +240,26 @@ function sessionRoute(session: SessionSummaryResponse) {
     <!-- Topbar -->
     <header class="topbar">
       <div class="topbar-brand">
-        <span style="font-size: 1.1rem;">⚔️</span>
+        <span style="font-size: 1.1rem;" aria-hidden="true">⚔️</span>
         <div>
           <strong>TTRPG Table</strong>
           <div class="topbar-sub">{{ email }}</div>
         </div>
       </div>
       <div class="topbar-actions">
+        <NuxtLink class="btn ghost sm" to="/rulesets">Rulesets</NuxtLink>
         <button class="btn ghost sm" type="button" @click="signOut">Sign out</button>
       </div>
     </header>
 
     <main class="workspace">
-      <!-- Sidebar -->
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <h2>My Games</h2>
-          <button class="btn sm" type="button" @click="showCreateForm = true; selectedGame = null">
-            + New
-          </button>
-        </div>
-
-        <ul class="game-list">
-          <li v-if="!hasGames && !isLoading">
-            <div class="empty-state" style="padding: 1.5rem 0.5rem;">
-              <div class="empty-state-icon">🎲</div>
-              <p class="text-xs">No games yet. Create your first!</p>
-            </div>
-          </li>
-          <li v-for="game in games" :key="game.id">
-            <button
-              class="game-list-item"
-              :class="{ active: selectedGame?.id === game.id }"
-              type="button"
-              @click="openGame(game.id)"
-            >
-              <strong>{{ game.name }}</strong>
-              <span>{{ game.rulesetName }}</span>
-            </button>
-          </li>
-        </ul>
-      </aside>
+      <GameSidebar
+        :games="games"
+        :selected-game-id="selectedGame?.id"
+        :is-loading="isLoading"
+        @create="showCreateForm = true; selectedGame = null"
+        @open="openGame"
+      />
 
       <!-- Create game form -->
       <section v-if="showCreateForm" class="editor">
@@ -292,6 +283,15 @@ function sessionRoute(session: SessionSummaryResponse) {
                 </option>
               </select>
             </label>
+            <div v-if="selectedCreateRuleset && selectedCreateDefinition" class="ruleset-action-card">
+              <strong>{{ selectedCreateRuleset.displayName }}</strong>
+              <span>{{ selectedCreateRuleset.description }}</span>
+              <small>
+                {{ selectedCreateDefinition.character.classes.length }} classes ·
+                {{ selectedCreateDefinition.character.skills.length }} skills ·
+                {{ selectedCreateDefinition.actions.length }} actions
+              </small>
+            </div>
             <label>
               Description <span class="muted text-xs">(optional)</span>
               <textarea v-model="createDesc" maxlength="1000" placeholder="Campaign description…" style="min-height: 4rem;" />
@@ -307,7 +307,6 @@ function sessionRoute(session: SessionSummaryResponse) {
 
       <!-- Game dashboard -->
       <section v-else-if="selectedGame" class="editor">
-        <!-- Game header -->
         <div class="panel mb-2">
           <div class="flex items-center justify-between gap-3" style="flex-wrap: wrap;">
             <div>
@@ -319,12 +318,12 @@ function sessionRoute(session: SessionSummaryResponse) {
             </div>
             <div class="btn-row">
               <button v-if="!activeSession" class="btn" type="button" :disabled="isSaving" @click="startSession">
-                ▶ Start Session
+                <span aria-hidden="true">▶</span> Start Session
               </button>
-              <NuxtLink v-else class="btn success" :to="`/sessions/${activeSession?.id}/dm`">
+              <NuxtLink v-else class="btn success" :to="`/sessions/${activeSession.id}/dm`">
                 → Active Session
               </NuxtLink>
-              <button class="btn danger" type="button" @click="deleteGame">Delete</button>
+              <button class="btn danger" type="button" @click="requestDeleteGame">Delete</button>
             </div>
           </div>
         </div>
@@ -343,122 +342,44 @@ function sessionRoute(session: SessionSummaryResponse) {
         </div>
 
         <!-- Overview tab -->
-        <div v-if="activeTab === 'overview'" class="grid-2">
-          <div class="panel">
-            <h2>Player Invite Link</h2>
-            <p>Share this link so players can create or reopen their character before a session.</p>
-            <div class="copy-row mt-2">
-              <input :value="absoluteUrl(selectedGame.inviteUrl)" readonly />
-              <button class="btn ghost sm" type="button" @click="copyToClipboard(selectedGame.inviteUrl)">Copy</button>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="panel-title">
-              <h2>Sessions</h2>
-              <button class="btn sm" type="button" :disabled="isSaving" @click="startSession">+ Start</button>
-            </div>
-            <div v-if="selectedGame.sessions.length === 0" class="empty-state" style="padding: 1rem 0;">
-              <p class="text-sm">No sessions yet.</p>
-            </div>
-            <ul v-else style="list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem;">
-              <li v-for="session in selectedGame.sessions" :key="session.id">
-                <NuxtLink
-                  :to="sessionRoute(session)"
-                  class="flex items-center gap-2"
-                  style="padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); display: flex; text-decoration: none; background: var(--surface); transition: border-color 0.15s;"
-                >
-                  <span class="badge" :class="sessionBadge(session)">{{ sessionBadgeText(session) }}</span>
-                  <span class="flex-1 text-sm" style="color: var(--ink-bright);">
-                    {{ session.isActive ? 'Live session' : 'Session recap' }}
-                  </span>
-                  <span class="text-xs muted font-mono">{{ session.joinCode }}</span>
-                  <span class="text-xs muted">{{ session.isActive ? '→ DM Screen' : '→ Summary' }}</span>
-                </NuxtLink>
-              </li>
-            </ul>
-          </div>
-        </div>
+        <GameOverview
+          v-if="activeTab === 'overview'"
+          :game="selectedGame"
+          :is-saving="isSaving"
+          :invite-url="absoluteUrl(selectedGame.inviteUrl)"
+          @start-session="startSession"
+          @copy-invite="copyToClipboard(selectedGame.inviteUrl)"
+        />
 
         <!-- Players tab -->
-        <div v-if="activeTab === 'players'">
-          <div v-if="selectedGame.characters.length === 0" class="panel">
-            <div class="empty-state">
-              <div class="empty-state-icon">🧙</div>
-              <h3>No players yet</h3>
-              <p>Players appear here after they join the game via the invite link.</p>
-            </div>
-          </div>
-          <div v-else class="grid-2">
-            <article v-for="ch in selectedGame.characters" :key="ch.id" class="panel">
-              <div class="flex justify-between items-center mb-1" style="margin-bottom: 0.75rem;">
-                <div>
-                  <h3 style="margin: 0;">{{ ch.name }}</h3>
-                  <p class="text-xs muted" style="margin: 0;">{{ ch.playerName || 'Player name not set' }}</p>
-                </div>
-                <span style="font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;">AC {{ ch.armor }}</span>
-              </div>
-              <CharacterSheet :character="ch" />
-            </article>
-          </div>
-        </div>
+        <GamePlayersPanel
+          v-if="activeTab === 'players'"
+          :characters="selectedGame.characters"
+        />
 
         <!-- NPCs tab -->
-        <div v-if="activeTab === 'npcs'" class="grid-2">
-          <div class="panel">
-            <h2>{{ editingNpcId ? 'Edit' : 'Add' }} NPC / Monster</h2>
-            <form @submit.prevent="editingNpcId ? updateNpc() : createNpc()">
-              <label>Name<input v-model.trim="npcName" placeholder="Xenomorph, Goblin, Guard…" required /></label>
-              <label>Kind<input v-model.trim="npcKind" placeholder="NPC, Monster, Boss…" required /></label>
-              <div class="inline-fields">
-                <label>Max HP<input v-model.number="npcMaxHealth" type="number" min="1" required /></label>
-                <label>Current HP<input v-model.number="npcHealth" type="number" min="0" required /></label>
-                <label>Armor<input v-model.number="npcArmor" type="number" min="0" required /></label>
-              </div>
-              <label>
-                Stat block JSON
-                <textarea v-model="npcStatBlockJson" required />
-              </label>
-              <div class="btn-row">
-                <button class="btn" type="submit" :disabled="isSaving">
-                  {{ isSaving ? 'Saving…' : editingNpcId ? 'Save' : 'Add NPC' }}
-                </button>
-                <button v-if="editingNpcId" class="btn ghost" type="button" @click="resetNpcForm">Cancel</button>
-              </div>
-            </form>
-          </div>
-
-          <div v-if="selectedGame.npcsAndMonsters.length === 0" class="panel">
-            <div class="empty-state">
-              <div class="empty-state-icon">👾</div>
-              <p>No NPCs or monsters yet.</p>
-            </div>
-          </div>
-
-          <article v-for="npc in selectedGame.npcsAndMonsters" :key="npc.id" class="panel">
-            <div class="flex justify-between items-center mb-1" style="margin-bottom: 0.75rem;">
-              <div>
-                <h3 style="margin: 0;">{{ npc.name }}</h3>
-                <p class="text-xs muted" style="margin: 0;">{{ npc.kind }}</p>
-              </div>
-              <div class="btn-row">
-                <button class="btn ghost sm" type="button" @click="editNpc(npc)">Edit</button>
-                <button class="btn danger sm" type="button" @click="deleteNpc(npc)">✕</button>
-              </div>
-            </div>
-            <HealthBar :current="npc.health" :max="npc.maxHealth" />
-            <details style="margin-top: 0.75rem;">
-              <summary style="cursor: pointer; font-size: 0.8rem; color: var(--muted-light);">Stat block</summary>
-              <pre style="margin-top: 0.5rem; font-size: 0.72rem;">{{ npc.statBlockJson }}</pre>
-            </details>
-          </article>
-        </div>
+        <GameNpcManager
+          v-if="activeTab === 'npcs'"
+          v-model:npc-name="npcName"
+          v-model:npc-kind="npcKind"
+          v-model:npc-max-health="npcMaxHealth"
+          v-model:npc-health="npcHealth"
+          v-model:npc-armor="npcArmor"
+          v-model:npc-stat-block-json="npcStatBlockJson"
+          :npcs="selectedGame.npcsAndMonsters"
+          :is-saving="isSaving"
+          :editing-npc-id="editingNpcId"
+          @submit="editingNpcId ? updateNpc() : createNpc()"
+          @edit="editNpc"
+          @delete="requestDeleteNpc"
+          @reset="resetNpcForm"
+        />
       </section>
 
       <!-- Empty / no game selected -->
       <section v-else class="editor">
         <div class="empty-state" style="padding: 4rem 2rem;">
-          <div class="empty-state-icon" style="font-size: 3rem;">🎲</div>
+          <div class="empty-state-icon" style="font-size: 3rem;" aria-hidden="true">🎲</div>
           <h2>{{ hasGames ? 'Select a game' : 'Welcome, Dungeon Master' }}</h2>
           <p>{{ hasGames ? 'Choose a game from the sidebar to manage it.' : 'Create your first game to get started.' }}</p>
           <button v-if="!hasGames" class="btn" style="margin-top: 1rem;" type="button" @click="showCreateForm = true">
@@ -468,4 +389,23 @@ function sessionRoute(session: SessionSummaryResponse) {
       </section>
     </main>
   </section>
+
+  <ConfirmModal
+    v-model:open="showDeleteGameConfirm"
+    title="Delete game?"
+    :message="selectedGame ? `Delete ${selectedGame.name} and all its sessions, characters, NPCs, and actions? This cannot be undone.` : ''"
+    confirm-label="Delete Game"
+    :is-busy="isSaving"
+    @confirm="deleteGame"
+  />
+
+  <ConfirmModal
+    :open="Boolean(npcPendingDelete)"
+    title="Delete NPC?"
+    :message="npcPendingDelete ? `Delete ${npcPendingDelete.name}? This cannot be undone.` : ''"
+    confirm-label="Delete NPC"
+    :is-busy="isSaving"
+    @update:open="value => { if (!value) npcPendingDelete = null; }"
+    @confirm="deleteNpc"
+  />
 </template>

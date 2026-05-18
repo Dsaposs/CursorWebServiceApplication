@@ -1,9 +1,26 @@
 <script setup lang="ts">
-import type { ActionQueueItemResponse, GameResponse, InitiativeEntryResponse, SessionStateResponse } from '~/types/api';
+import ActionCard from '~/components/ActionCard.vue';
+import ConfirmModal from '~/components/ConfirmModal.vue';
+import DmActionLog from '~/components/dm/DmActionLog.vue';
+import DmCombatWorkflow from '~/components/dm/DmCombatWorkflow.vue';
+import DmParticipantPanels from '~/components/dm/DmParticipantPanels.vue';
+import DmSessionInvite from '~/components/dm/DmSessionInvite.vue';
+import SessionConnectionStatus from '~/components/SessionConnectionStatus.vue';
+import SkeletonBlock from '~/components/SkeletonBlock.vue';
+import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
+import type { ActionQueueItemResponse, GameResponse, InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
+import {
+  buildRollSummary,
+  describeRulesetAction,
+  findRulesetAction,
+  parseActorClassKey,
+  parseRulesetDefinition,
+} from '~/utils/rulesets';
 
 const route = useRoute();
 const { api, token, loadSession } = useApi();
 const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
+const ruleset = ref<RulesetResponse | null>(null);
 
 // Per-action resolve form state
 const resolutionText = ref<Record<string, string>>({});
@@ -15,40 +32,60 @@ const statChangeSetHealth = ref<Record<string, string>>({});
 const statChangeSetArmor = ref<Record<string, string>>({});
 
 // NPC action form
-const npcAction = ref('');
 const selectedNpcId = ref('');
 const npcTarget = ref('');
 const showNpcActionForm = ref(false);
 
-// Combat setup
-const localInitiativeOrder = ref<InitiativeEntryResponse[] | null>(null);
-const draggedInitiativeId = ref<string | null>(null);
-const dragOverId = ref<string | null>(null);
-const dragPosition = ref<{ x: number; y: number } | null>(null);
-const activePointerId = ref<number | null>(null);
-
-const draggedEntry = computed(() =>
-  displayedInitiative.value.find(e => e.id === draggedInitiativeId.value) ?? null
-);
-
-// Resolved action expand state
+// Action expand state
 const expandedActions = ref<Set<string>>(new Set());
+const expandedPendingActions = ref<Set<string>>(new Set());
 const isSaving = ref(false);
+const showStopSessionConfirm = ref(false);
 
 async function loadState() {
   if (!token.value) return null;
-  return await api<SessionStateResponse>(`/api/sessions/${route.params.id}/dm`);
+  const nextState = await api<SessionStateResponse>(`/api/sessions/${route.params.id}/dm`);
+  if (!ruleset.value) {
+    ruleset.value = await api<RulesetResponse>(`/api/rulesets/${nextState.game.rulesetCode}`);
+  }
+  return nextState;
 }
 
-const { state, pollingError, refresh, start } = useSessionPolling(loadState, 3000);
+const { state, pollingError, connectionStatus, refresh, start } = useSessionPolling(loadState, 3000);
 
 const pendingActions = computed(() => state.value?.actions.filter(a => a.status === 'Pending') ?? []);
 const publishedActions = computed(() => [...(state.value?.actions.filter(a => a.status === 'Published') ?? [])].reverse());
 const game = computed<GameResponse | null>(() => state.value?.game ?? null);
+const rulesetDefinition = computed(() => parseRulesetDefinition(ruleset.value));
 const currentTurn = computed<InitiativeEntryResponse | null>(() => state.value?.initiative.find(e => e.isCurrentTurn) ?? null);
 const isCombat = computed(() => state.value?.state === 'Combat');
 const sessionEnded = computed(() => state.value && !state.value.isActive);
-const displayedInitiative = computed(() => localInitiativeOrder.value ?? state.value?.initiative ?? []);
+const joinLink = computed(() => {
+  if (!state.value) return '';
+  return import.meta.client ? `${window.location.origin}${state.value.joinUrl}` : state.value.joinUrl;
+});
+const currentTurnNpc = computed(() => {
+  if (!game.value || currentTurn.value?.combatantType !== 'NpcOrMonster') return null;
+  return game.value.npcsAndMonsters.find(npc => npc.id === currentTurn.value?.combatantId) ?? null;
+});
+const selectedNpc = computed(() => game.value?.npcsAndMonsters.find(npc => npc.id === selectedNpcId.value) ?? null);
+const selectedNpcClassKey = computed(() => parseActorClassKey(selectedNpc.value?.statBlockJson));
+const isNpcActionActorSelected = computed(() => Boolean(selectedNpcId.value));
+const {
+  actionMode: npcActionMode,
+  selectedActionKey: selectedNpcActionKey,
+  selectedSkillKey: selectedNpcSkillKey,
+  selectedAttributeKey: selectedNpcAttributeKey,
+  customActionText: npcAction,
+  availableActions: availableNpcActions,
+  availableSkills: availableNpcSkills,
+  availableAttributes: availableNpcAttributes,
+  selectedActionDetail: selectedNpcActionDetail,
+  selectedSkillDetail: selectedNpcSkillDetail,
+  selectedAttributeDetail: selectedNpcAttributeDetail,
+  resetSelection: resetNpcActionSelection,
+  buildSubmitPayload: buildNpcActionSubmitPayload,
+} = useRulesetActionChooser(rulesetDefinition, selectedNpcClassKey, isNpcActionActorSelected);
 const combatSetupEntries = computed(() => {
   if (!state.value) return [];
 
@@ -66,6 +103,20 @@ const combatSetupEntries = computed(() => {
       detail: npc.kind,
     })),
   ];
+});
+
+const {
+  displayedInitiative,
+  draggedEntry,
+  draggedInitiativeId,
+  dragOverId,
+  dragPosition,
+  startDrag: startInitiativeDrag,
+  moveByKeyboard: moveInitiativeByKeyboard,
+} = useInitiativeOrder(computed(() => state.value?.initiative ?? []), {
+  canReorder: computed(() => isCombat.value && !isSaving.value),
+  saveOrder: saveInitiativeOrder,
+  onSaveError: error => toastError(error instanceof Error ? error.message : String(error)),
 });
 
 onMounted(async () => {
@@ -90,13 +141,25 @@ async function setState(nextState: 'Exploration' | 'Combat') {
 
 async function submitNpcAction() {
   if (!state.value || !selectedNpcId.value) return;
+  const payload = buildNpcActionSubmitPayload();
+  if (!payload) {
+    toastError('Choose or describe an NPC action first.');
+    return;
+  }
+
   isSaving.value = true;
   try {
     await api(`/api/sessions/${state.value.joinCode}/actions`, {
       method: 'POST',
-      body: { actorNpcId: selectedNpcId.value, actionText: npcAction.value, targetName: npcTarget.value || undefined },
+      body: {
+        actorNpcId: selectedNpcId.value,
+        actionKey: payload.actionKey,
+        actionText: payload.actionText,
+        targetName: npcTarget.value || undefined,
+        description: payload.description,
+      },
     });
-    npcAction.value = '';
+    resetNpcActionSelection();
     npcTarget.value = '';
     showNpcActionForm.value = false;
     await refresh();
@@ -178,95 +241,24 @@ async function setupCombat() {
   }
 }
 
-async function reorderInitiative(fromId: string, toId: string) {
-  if (!state.value || fromId === toId) return;
-
-  const entries = [...displayedInitiative.value].sort((a, b) => a.sortOrder - b.sortOrder);
-  const fromIndex = entries.findIndex(entry => entry.id === fromId);
-  const toIndex = entries.findIndex(entry => entry.id === toId);
-
-  if (fromIndex < 0 || toIndex < 0) return;
-
-  const [moved] = entries.splice(fromIndex, 1);
-  entries.splice(toIndex, 0, moved);
-  const reordered = entries.map((entry, index) => ({ ...entry, sortOrder: index + 1 }));
-  localInitiativeOrder.value = reordered;
-  await saveInitiativeOrder(reordered);
-}
-
 async function saveInitiativeOrder(entries: InitiativeEntryResponse[]) {
   if (!state.value) return;
 
   isSaving.value = true;
-  try {
-    const combatants = entries.map((entry, index) => ({
-      type: entry.combatantType,
-      id: entry.combatantId,
-      initiative: entries.length - index,
-    }));
+  const combatants = entries.map((entry, index) => ({
+    type: entry.combatantType,
+    id: entry.combatantId,
+    initiative: entries.length - index,
+  }));
 
+  try {
     await api(`/api/sessions/${route.params.id}/combat`, { method: 'POST', body: { combatants } });
     await refresh();
-    localInitiativeOrder.value = null;
     toastSuccess('Initiative order updated.');
-  } catch (err) {
-    localInitiativeOrder.value = null;
-    toastError(err instanceof Error ? err.message : String(err));
   } finally {
     isSaving.value = false;
   }
 }
-
-function startInitiativeDrag(entryId: string, event: PointerEvent) {
-  if (!isCombat.value || isSaving.value || (event.pointerType === 'mouse' && event.button !== 0)) return;
-  event.preventDefault();
-  draggedInitiativeId.value = entryId;
-  dragOverId.value = entryId;
-  activePointerId.value = event.pointerId;
-  window.addEventListener('pointermove', onInitiativeDragMove);
-  window.addEventListener('pointerup', onInitiativeDragEnd);
-  window.addEventListener('pointercancel', onInitiativeDragEnd);
-}
-
-function onInitiativeDragMove(event: PointerEvent) {
-  if (activePointerId.value !== event.pointerId) return;
-  dragPosition.value = { x: event.clientX, y: event.clientY };
-  const hit = document
-    .elementFromPoint(event.clientX, event.clientY)
-    ?.closest<HTMLElement>('[data-initiative-id]')
-    ?.dataset.initiativeId;
-  if (hit) dragOverId.value = hit;
-}
-
-async function onInitiativeDragEnd(event: PointerEvent) {
-  if (activePointerId.value !== event.pointerId) return;
-  removeInitiativeDragListeners();
-
-  const fromId = draggedInitiativeId.value;
-  const toId = dragOverId.value;
-  clearInitiativeDrag();
-
-  if (fromId && toId && fromId !== toId) {
-    await reorderInitiative(fromId, toId);
-  }
-}
-
-function removeInitiativeDragListeners() {
-  window.removeEventListener('pointermove', onInitiativeDragMove);
-  window.removeEventListener('pointerup', onInitiativeDragEnd);
-  window.removeEventListener('pointercancel', onInitiativeDragEnd);
-}
-
-function clearInitiativeDrag() {
-  draggedInitiativeId.value = null;
-  dragOverId.value = null;
-  dragPosition.value = null;
-  activePointerId.value = null;
-}
-
-onBeforeUnmount(() => {
-  removeInitiativeDragListeners();
-});
 
 async function endCombat() {
   await setState('Exploration');
@@ -285,12 +277,12 @@ async function advanceTurn() {
 }
 
 async function stopSession() {
-  if (!confirm('End this session? Players will be disconnected.')) return;
   isSaving.value = true;
   try {
     await api(`/api/sessions/${route.params.id}/stop`, { method: 'POST' });
     await refresh();
     toastInfo('Session ended.');
+    showStopSessionConfirm.value = false;
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
@@ -314,9 +306,8 @@ async function cycleNpcVisibility(npcId: string, current: string) {
 
 async function copyJoinLink() {
   if (!state.value) return;
-  const url = import.meta.client ? `${window.location.origin}${state.value.joinUrl}` : state.value.joinUrl;
   if (import.meta.client && navigator.clipboard) {
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(joinLink.value);
     toastSuccess('Join link copied!');
   }
 }
@@ -325,6 +316,47 @@ function toggleAction(id: string) {
   if (expandedActions.value.has(id)) expandedActions.value.delete(id);
   else expandedActions.value.add(id);
 }
+
+function togglePendingAction(id: string) {
+  if (expandedPendingActions.value.has(id)) expandedPendingActions.value.delete(id);
+  else expandedPendingActions.value.add(id);
+}
+
+function expandAllPendingActions() {
+  expandedPendingActions.value = new Set(pendingActions.value.map(action => action.id));
+}
+
+function collapseAllPendingActions() {
+  expandedPendingActions.value = new Set();
+}
+
+function expandAllActions() {
+  expandedActions.value = new Set(publishedActions.value.map(action => action.id));
+}
+
+function collapseAllActions() {
+  expandedActions.value = new Set();
+}
+
+function takeCurrentNpcAction(npcId: string) {
+  selectedNpcId.value = npcId;
+  resetNpcActionSelection();
+  npcTarget.value = '';
+  showNpcActionForm.value = true;
+}
+
+function rulesetActionDetail(action: ActionQueueItemResponse) {
+  const rulesetAction = findRulesetAction(rulesetDefinition.value, action.actionKey);
+  return rulesetAction && rulesetDefinition.value
+    ? describeRulesetAction(rulesetAction, rulesetDefinition.value)
+    : null;
+}
+
+function applyRollSuggestion(action: ActionQueueItemResponse) {
+  const rulesetAction = findRulesetAction(rulesetDefinition.value, action.actionKey);
+  if (!rulesetAction || !rulesetDefinition.value) return;
+  rollSummary.value[action.id] = buildRollSummary(rulesetAction, rulesetDefinition.value);
+}
 </script>
 
 <template>
@@ -332,54 +364,47 @@ function toggleAction(id: string) {
     <!-- Topbar -->
     <header class="topbar">
       <div class="topbar-brand">
-        <span>🎲</span>
+        <span aria-hidden="true">🎲</span>
         <div>
           <strong>DM Screen</strong>
           <div class="topbar-sub">{{ game?.name }}</div>
         </div>
       </div>
       <div class="topbar-actions" v-if="state">
+        <SessionConnectionStatus
+          :status="connectionStatus"
+          :error="pollingError"
+          :started-at="state.startedAt"
+          :ended-at="state.endedAt"
+          :is-active="state.isActive"
+        />
         <span class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
         <NuxtLink class="btn ghost sm" to="/games">← Games</NuxtLink>
         <NuxtLink v-if="!state.isActive" class="btn ghost sm" :to="`/sessions/${route.params.id}/summary`">
           View Summary
         </NuxtLink>
-        <button v-if="state.isActive" class="btn danger sm" type="button" :disabled="isSaving" @click="stopSession">
+        <button v-if="state.isActive" class="btn danger sm" type="button" :disabled="isSaving" @click="showStopSessionConfirm = true">
           Stop Session
         </button>
         <span v-else class="badge ended">Ended</span>
       </div>
     </header>
 
-    <div v-if="!state" class="stack" style="place-items: center; padding-top: 4rem;">
-      <p class="muted">Loading session…</p>
+    <div v-if="!state" class="stack">
+      <SkeletonBlock :lines="4" />
+      <div class="session-dashboard-grid">
+        <SkeletonBlock :lines="8" />
+        <SkeletonBlock :lines="6" />
+      </div>
     </div>
 
     <main v-else class="stack dm-screen-main">
-      <!-- Session info bar -->
-      <div class="panel dm-session-info">
-        <div class="flex items-center justify-between gap-3" style="flex-wrap: wrap; gap: 1rem;">
-          <div>
-            <div class="flex items-center gap-2 mb-1">
-              <h2 style="margin: 0;">Session Join Link</h2>
-            </div>
-            <p style="margin: 0; font-size: 0.82rem;">Share with players to join from any device.</p>
-          </div>
-          <div class="flex items-center gap-2" style="flex: 1; max-width: 36rem;">
-            <input
-              :value="typeof window !== 'undefined' ? `${window.location.origin}${state.joinUrl}` : state.joinUrl"
-              readonly
-              class="flex-1"
-              style="font-size: 0.8rem; font-family: monospace;"
-            />
-            <button class="btn ghost sm" type="button" @click="copyJoinLink">Copy</button>
-          </div>
-          <div v-if="state.isActive" class="flex items-center gap-2">
-            <span class="text-xs muted">Mode</span>
-            <span class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
-          </div>
-        </div>
-      </div>
+      <DmSessionInvite
+        :state="state"
+        :join-link="joinLink"
+        :is-combat="isCombat"
+        @copy="copyJoinLink"
+      />
 
       <div class="session-dashboard-grid">
         <!-- Left: Action queue -->
@@ -394,6 +419,10 @@ function toggleAction(id: string) {
                 </h2>
                 <p class="text-sm">Review player and NPC actions here first.</p>
               </div>
+              <div v-if="pendingActions.length" class="btn-row">
+                <button class="btn ghost sm" type="button" @click="expandAllPendingActions">Expand</button>
+                <button class="btn ghost sm" type="button" @click="collapseAllPendingActions">Collapse</button>
+              </div>
             </div>
 
             <div v-if="pendingActions.length === 0" class="empty-state" style="padding: 1.5rem 0;">
@@ -402,7 +431,12 @@ function toggleAction(id: string) {
 
             <div class="pending-actions-list">
               <div v-for="action in pendingActions" :key="action.id" class="action-card pending-card">
-                <div class="action-card-header">
+                <button
+                  class="action-card-header action-card-toggle"
+                  type="button"
+                  :aria-expanded="expandedPendingActions.has(action.id)"
+                  @click="togglePendingAction(action.id)"
+                >
                   <div>
                     <div class="action-card-actor">{{ action.actorName }}</div>
                     <div class="action-card-target">
@@ -411,10 +445,23 @@ function toggleAction(id: string) {
                     </div>
                     <div v-if="action.description" class="action-card-desc">{{ action.description }}</div>
                   </div>
-                  <span class="badge pending">Pending</span>
-                </div>
+                  <span class="badge pending">{{ expandedPendingActions.has(action.id) ? 'Hide' : 'Resolve' }}</span>
+                </button>
 
-                <form @submit.prevent="resolveAction(action)">
+                <form v-if="expandedPendingActions.has(action.id)" @submit.prevent="resolveAction(action)">
+                  <div v-if="rulesetActionDetail(action)" class="alert info">
+                    <div>
+                      <strong>{{ rulesetActionDetail(action)?.dice }}</strong>
+                      <p class="text-sm">
+                        Roll {{ rulesetActionDetail(action)?.attribute }} + {{ rulesetActionDetail(action)?.skill }}.
+                        Modifiers: {{ rulesetActionDetail(action)?.modifiers }}.
+                      </p>
+                      <p class="text-sm">{{ rulesetActionDetail(action)?.successRule }}</p>
+                      <button class="btn ghost sm mt-1" type="button" @click="applyRollSuggestion(action)">
+                        Use Roll Summary
+                      </button>
+                    </div>
+                  </div>
                   <label>
                     Roll result
                     <input v-model="rollSummary[action.id]" placeholder="e.g. rolled a 19 on Ranged Combat" />
@@ -456,103 +503,39 @@ function toggleAction(id: string) {
                   </details>
 
                   <button class="btn success" type="submit" :disabled="isSaving">
-                    ✓ Publish Resolution
+                    <span aria-hidden="true">✓</span> Publish Resolution
                   </button>
                 </form>
               </div>
             </div>
           </div>
 
-          <!-- Published action log -->
-          <div class="panel dashboard-primary-panel action-log-panel">
-            <div class="panel-title">
-              <div>
-                <h2>Action Log</h2>
-                <p class="text-sm">Most recent resolved actions appear first.</p>
-              </div>
-              <span v-if="publishedActions.length" class="badge published">{{ publishedActions.length }} resolved</span>
-            </div>
-            <div class="action-log-scroll">
-              <div v-if="publishedActions.length === 0" class="empty-state" style="padding: 1rem 0;">
-                <p class="text-sm">No resolved actions yet.</p>
-              </div>
-              <div
-                v-for="action in publishedActions"
-                :key="action.id"
-                class="action-card published-card"
-                style="cursor: pointer;"
-                @click="toggleAction(action.id)"
-              >
-                <div class="action-card-header">
-                  <div>
-                    <div class="action-card-actor">{{ action.actorName }}</div>
-                    <div class="action-card-target">
-                      used <strong>{{ action.actionText }}</strong>
-                      <span v-if="action.targetName"> on {{ action.targetName }}</span>
-                    </div>
-                  </div>
-                  <span class="badge published">Done</span>
-                </div>
-                <div v-if="expandedActions.has(action.id)" class="action-resolution">
-                  <div v-if="action.rollSummary" class="roll-summary">🎲 {{ action.rollSummary }}</div>
-                  <p style="margin: 0; font-size: 0.875rem; color: var(--ink);">{{ action.resolutionText }}</p>
-                  <p v-if="action.additionalActions" style="margin-top: 0.4rem; font-size: 0.82rem; color: var(--muted-light);">{{ action.additionalActions }}</p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <DmActionLog
+            :actions="publishedActions"
+            :expanded-actions="expandedActions"
+            @toggle="toggleAction"
+            @expand-all="expandAllActions"
+            @collapse-all="collapseAllActions"
+          />
         </div>
 
         <!-- Right: Combat + NPC -->
         <div class="session-support-column">
-          <!-- Combat tracker -->
-          <div class="panel">
-            <div class="panel-title">
-              <div>
-                <h2>Combat</h2>
-                <p class="text-sm">{{ isCombat ? 'Drag to change turn order.' : 'All characters and NPCs will be included.' }}</p>
-              </div>
-              <div class="btn-row">
-                <button v-if="isCombat && state.initiative.length" class="btn sm" type="button" :disabled="isSaving" @click="advanceTurn">Next Turn →</button>
-                <button v-if="!isCombat" class="btn ghost sm" type="button" :disabled="isSaving" @click="setupCombat">
-                  {{ isSaving ? 'Starting…' : 'Set Initiative' }}
-                </button>
-              </div>
-            </div>
-
-            <!-- Current turn banner -->
-            <div v-if="currentTurn && isCombat" class="alert info" style="margin-bottom: 1rem;">
-              ⚔️ <strong>{{ currentTurn.combatantName }}'s turn</strong>
-            </div>
-
-            <!-- Draggable initiative list -->
-            <ul v-if="isCombat && displayedInitiative.length" class="initiative-list" style="margin-bottom: 1rem;">
-              <li
-                v-for="(entry, idx) in displayedInitiative"
-                :key="entry.id"
-                class="initiative-item"
-                :class="{
-                  'current-turn': entry.isCurrentTurn,
-                  'dragging': draggedInitiativeId === entry.id,
-                  'draggable': isCombat && !isSaving,
-                  'drag-over': dragOverId === entry.id && draggedInitiativeId !== null && draggedInitiativeId !== entry.id,
-                }"
-                :data-initiative-id="entry.id"
-                @pointerdown="startInitiativeDrag(entry.id, $event)"
-              >
-                <span class="initiative-order">{{ idx + 1 }}</span>
-                <span class="initiative-card-body">
-                  <span class="initiative-name">{{ entry.combatantName }}</span>
-                  <span class="initiative-type">{{ entry.combatantType }}</span>
-                </span>
-                <span v-if="entry.isCurrentTurn" class="badge active">Turn</span>
-              </li>
-            </ul>
-
-            <button v-if="isCombat" class="btn danger w-full" type="button" :disabled="isSaving" @click="endCombat">
-              End Combat
-            </button>
-          </div>
+          <DmCombatWorkflow
+            :is-combat="isCombat"
+            :is-saving="isSaving"
+            :current-turn="currentTurn"
+            :displayed-initiative="displayedInitiative"
+            :dragged-initiative-id="draggedInitiativeId"
+            :drag-over-id="dragOverId"
+            :current-turn-npc="currentTurnNpc"
+            @setup-combat="setupCombat"
+            @advance-turn="advanceTurn"
+            @end-combat="endCombat"
+            @start-drag="startInitiativeDrag"
+            @move-keyboard="moveInitiativeByKeyboard"
+            @take-current-npc-action="takeCurrentNpcAction"
+          />
 
           <!-- NPC quick action -->
           <div v-if="game?.npcsAndMonsters.length" class="panel">
@@ -573,12 +556,74 @@ function toggleAction(id: string) {
             <form v-if="showNpcActionForm" @submit.prevent="submitNpcAction">
               <label>
                 NPC
-                <select v-model="selectedNpcId" required>
+                <select v-model="selectedNpcId" required @change="resetNpcActionSelection">
                   <option value="">Choose NPC / Monster</option>
                   <option v-for="npc in game.npcsAndMonsters" :key="npc.id" :value="npc.id">{{ npc.name }}</option>
                 </select>
               </label>
-              <label>Action<input v-model.trim="npcAction" placeholder="Attacks, casts, hides…" required /></label>
+              <label>
+                Action type
+                <select v-model="npcActionMode" :disabled="!selectedNpcId">
+                  <option v-if="availableNpcActions.length" value="action">Predefined action</option>
+                  <option v-if="availableNpcSkills.length" value="skill">Skill check</option>
+                  <option v-if="availableNpcAttributes.length" value="attribute">Attribute check</option>
+                  <option value="custom">Custom action</option>
+                </select>
+              </label>
+              <label v-if="npcActionMode === 'action' && availableNpcActions.length">
+                Predefined action
+                <select v-model="selectedNpcActionKey" required>
+                  <option value="">Choose a predefined action</option>
+                  <option v-for="action in availableNpcActions" :key="action.key" :value="action.key">
+                    {{ action.label }}
+                  </option>
+                </select>
+              </label>
+              <label v-else-if="npcActionMode === 'skill' && availableNpcSkills.length">
+                Skill
+                <select v-model="selectedNpcSkillKey" required>
+                  <option value="">Choose a skill</option>
+                  <option v-for="skill in availableNpcSkills" :key="skill.key" :value="skill.key">
+                    {{ skill.label }}
+                  </option>
+                </select>
+              </label>
+              <label v-else-if="npcActionMode === 'attribute' && availableNpcAttributes.length">
+                Attribute
+                <select v-model="selectedNpcAttributeKey" required>
+                  <option value="">Choose an attribute</option>
+                  <option v-for="attribute in availableNpcAttributes" :key="attribute.key" :value="attribute.key">
+                    {{ attribute.label }}
+                  </option>
+                </select>
+              </label>
+              <label v-else>
+                Custom action
+                <input
+                  v-model.trim="npcAction"
+                  :disabled="!selectedNpcId"
+                  :placeholder="selectedNpcId ? 'Describe a custom action' : 'Choose an NPC first'"
+                  required
+                />
+              </label>
+              <div v-if="selectedNpcActionDetail" class="alert info">
+                <div>
+                  <strong>{{ selectedNpcActionDetail.dice }}</strong>
+                  <p class="text-sm">
+                    Roll {{ selectedNpcActionDetail.attribute }} + {{ selectedNpcActionDetail.skill }}.
+                    Modifiers: {{ selectedNpcActionDetail.modifiers }}.
+                  </p>
+                  <p class="text-sm">{{ selectedNpcActionDetail.successRule }}</p>
+                </div>
+              </div>
+              <div v-else-if="selectedNpcSkillDetail || selectedNpcAttributeDetail" class="alert info">
+                <div>
+                  <strong>{{ selectedNpcSkillDetail?.actionText ?? selectedNpcAttributeDetail?.actionText }}</strong>
+                  <p class="text-sm">
+                    Suggested roll: {{ selectedNpcSkillDetail?.rollSummary ?? selectedNpcAttributeDetail?.rollSummary }}.
+                  </p>
+                </div>
+              </div>
               <label>Target<input v-model.trim="npcTarget" placeholder="Optional" /></label>
               <div class="btn-row">
                 <button class="btn" type="submit" :disabled="isSaving">
@@ -591,72 +636,10 @@ function toggleAction(id: string) {
             </form>
           </div>
 
-          <!-- Character stats -->
-          <div class="panel">
-            <div class="panel-title">
-              <div>
-                <h2>Characters</h2>
-                <p class="text-sm">Open a character to review health, armor, and sheet stats.</p>
-              </div>
-              <span v-if="state.game.characters.length" class="badge active">{{ state.game.characters.length }}</span>
-            </div>
-
-            <div v-if="state.game.characters.length === 0" class="empty-state" style="padding: 1rem 0;">
-              <p class="text-sm">No characters have joined this game yet.</p>
-            </div>
-
-            <div v-else class="entity-stat-list">
-              <details v-for="ch in state.game.characters" :key="ch.id" class="entity-stat-details">
-                <summary>
-                  <span>
-                    <strong>{{ ch.name }}</strong>
-                    <small>{{ ch.playerName || 'No player name' }}</small>
-                  </span>
-                  <span class="entity-stat-summary">HP {{ ch.health }}/{{ ch.maxHealth }} · AC {{ ch.armor }}</span>
-                </summary>
-                <CharacterSheet :character="ch" />
-              </details>
-            </div>
-          </div>
-
-          <!-- NPC stats -->
-          <div class="panel">
-            <div class="panel-title">
-              <div>
-                <h2>NPCs / Monsters</h2>
-                <p class="text-sm">Open an NPC to review health, armor, and stat block details.</p>
-              </div>
-              <span v-if="state.game.npcsAndMonsters.length" class="badge active">{{ state.game.npcsAndMonsters.length }}</span>
-            </div>
-
-            <div v-if="state.game.npcsAndMonsters.length === 0" class="empty-state" style="padding: 1rem 0;">
-              <p class="text-sm">No NPCs or monsters have been added.</p>
-            </div>
-
-            <div v-else class="entity-stat-list">
-              <details v-for="npc in state.game.npcsAndMonsters" :key="npc.id" class="entity-stat-details">
-                <summary>
-                  <span>
-                    <strong>{{ npc.name }}</strong>
-                    <small>{{ npc.kind }}</small>
-                  </span>
-                  <span class="entity-stat-actions">
-                    <button
-                      class="npc-visibility-btn"
-                      :class="`visibility-${(npc.visibility ?? 'Visible').toLowerCase()}`"
-                      type="button"
-                      :title="`Click to cycle: Visible → Obscured → Hidden (currently ${npc.visibility ?? 'Visible'})`"
-                      @click.stop="cycleNpcVisibility(npc.id, npc.visibility ?? 'Visible')"
-                    >
-                      {{ npc.visibility === 'Hidden' ? 'Hidden' : npc.visibility === 'Obscured' ? 'Obscured' : 'Visible' }}
-                    </button>
-                    <span class="entity-stat-summary">HP {{ npc.health }}/{{ npc.maxHealth }} · AC {{ npc.armor }}</span>
-                  </span>
-                </summary>
-                <NpcSheet :npc="npc" />
-              </details>
-            </div>
-          </div>
+          <DmParticipantPanels
+            :game="state.game"
+            @cycle-npc-visibility="cycleNpcVisibility"
+          />
         </div>
       </div>
 
@@ -677,4 +660,13 @@ function toggleAction(id: string) {
       </span>
     </div>
   </Teleport>
+
+  <ConfirmModal
+    v-model:open="showStopSessionConfirm"
+    title="Stop session?"
+    message="Players will be disconnected and this session will move to its summary state."
+    confirm-label="Stop Session"
+    :is-busy="isSaving"
+    @confirm="stopSession"
+  />
 </template>

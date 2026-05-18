@@ -20,6 +20,22 @@ public class RulesetResponse
     public string DiceNotation { get; set; } = string.Empty;
     public bool IsPlaceholder { get; set; }
     public string CharacterTemplateJson { get; set; } = "{}";
+    public string DefinitionJson { get; set; } = "{}";
+}
+
+public class RulesetDetailResponse : RulesetResponse
+{
+}
+
+public class RulesetImportResponse
+{
+    public RulesetDetailResponse Ruleset { get; set; } = new();
+    public bool Created { get; set; }
+}
+
+public class RulesetValidationErrorResponse
+{
+    public IEnumerable<string> Errors { get; set; } = Array.Empty<string>();
 }
 
 public class GameResponse
@@ -50,6 +66,7 @@ public class CharacterResponse
     public string SkillsJson { get; set; } = "{}";
     public string InventoryJson { get; set; } = "[]";
     public string RulesetDataJson { get; set; } = "{}";
+    public string ClassKey { get; set; } = string.Empty;
 }
 
 public class NpcResponse
@@ -71,9 +88,18 @@ public class JoinGameResponse
     public GameResponse Game { get; set; } = new();
 }
 
+public class GameJoinOptionsResponse
+{
+    public string InviteCode { get; set; } = string.Empty;
+    public string GameName { get; set; } = string.Empty;
+    public string RulesetCode { get; set; } = string.Empty;
+    public RulesetDetailResponse Ruleset { get; set; } = new();
+}
+
 public class SessionJoinOptionsResponse
 {
     public SessionSummaryResponse Session { get; set; } = new();
+    public RulesetDetailResponse Ruleset { get; set; } = new();
     public IEnumerable<CharacterResponse> AvailableCharacters { get; set; } = Array.Empty<CharacterResponse>();
 }
 
@@ -104,6 +130,7 @@ public class ActionQueueItemResponse
     public Guid Id { get; set; }
     public int Sequence { get; set; }
     public string ActorName { get; set; } = string.Empty;
+    public string? ActionKey { get; set; }
     public string ActionText { get; set; } = string.Empty;
     public string? TargetName { get; set; }
     public string? Description { get; set; }

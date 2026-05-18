@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import type { CharacterResponse } from '~/types/api';
-
-interface SheetSection {
-  key: string;
-  label: string;
-  value: unknown;
-  isEmpty: boolean;
-}
+import { buildSheetSection, type SheetSection } from '~/utils/jsonDisplay';
 
 interface Props {
   character: CharacterResponse;
@@ -15,39 +9,11 @@ interface Props {
 const props = defineProps<Props>();
 
 const sections = computed<SheetSection[]>(() => [
-  buildSection('attributes', 'Attributes', props.character.attributesJson),
-  buildSection('skills', 'Skills', props.character.skillsJson),
-  buildSection('inventory', 'Inventory', props.character.inventoryJson),
-  buildSection('ruleset', 'Ruleset Data', props.character.rulesetDataJson),
+  buildSheetSection('attributes', 'Attributes', props.character.attributesJson),
+  buildSheetSection('skills', 'Skills', props.character.skillsJson),
+  buildSheetSection('inventory', 'Inventory', props.character.inventoryJson),
+  buildSheetSection('ruleset', 'Ruleset Data', props.character.rulesetDataJson),
 ].filter(section => !section.isEmpty));
-
-function buildSection(key: string, label: string, json: string): SheetSection {
-  const value = parseJsonValue(json);
-  return {
-    key,
-    label,
-    value,
-    isEmpty: isEmptyValue(value),
-  };
-}
-
-function parseJsonValue(json: string) {
-  try {
-    return JSON.parse(json || '{}') as unknown;
-  } catch {
-    return json;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isEmptyValue(value: unknown): boolean {
-  if (Array.isArray(value)) return value.length === 0;
-  if (isRecord(value)) return Object.keys(value).length === 0;
-  return value === null || value === undefined || value === '';
-}
 </script>
 
 <template>

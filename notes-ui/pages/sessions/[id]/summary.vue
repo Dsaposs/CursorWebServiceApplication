@@ -78,7 +78,7 @@ function formatTime(iso: string) {
     <!-- Topbar -->
     <header class="topbar">
       <div class="topbar-brand">
-        <span>📜</span>
+        <span aria-hidden="true">📜</span>
         <div>
           <strong>Session Summary</strong>
           <div v-if="state" class="topbar-sub">{{ state.game.name }}</div>
@@ -93,8 +93,12 @@ function formatTime(iso: string) {
     </header>
 
     <!-- Loading -->
-    <div v-if="isLoading" class="stack" style="place-items: center; padding-top: 4rem;">
-      <p class="muted">Loading session data…</p>
+    <div v-if="isLoading" class="stack">
+      <SkeletonBlock :lines="4" />
+      <div class="grid-2">
+        <SkeletonBlock :lines="8" />
+        <SkeletonBlock :lines="8" />
+      </div>
     </div>
 
     <!-- Error -->
@@ -216,49 +220,28 @@ function formatTime(iso: string) {
           </div>
 
           <div v-if="allActions.length === 0" class="empty-state" style="padding: 1.5rem 0;">
-            <div class="empty-state-icon">📋</div>
+            <div class="empty-state-icon" aria-hidden="true">📋</div>
             <p class="text-sm">No actions were submitted this session.</p>
           </div>
 
           <div style="display: grid; gap: 0.6rem;">
-            <div
+            <ActionCard
               v-for="action in allActions"
               :key="action.id"
-              class="action-card"
-              :class="action.status === 'Published' ? 'published-card' : 'pending-card'"
+              :action="action"
+              :show-sequence="true"
             >
-              <!-- Action header -->
-              <div class="action-card-header">
-                <div style="flex: 1;">
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs muted font-mono">#{{ action.sequence }}</span>
-                    <span class="text-xs muted">{{ formatTime(action.submittedAt) }}</span>
-                  </div>
-                  <div class="action-card-actor" style="margin-top: 0.2rem;">{{ action.actorName }}</div>
-                  <div class="action-card-target">
-                    used <strong>{{ action.actionText }}</strong>
-                    <span v-if="action.targetName"> on {{ action.targetName }}</span>
-                  </div>
-                  <div v-if="action.description" class="action-card-desc">{{ action.description }}</div>
-                </div>
-                <span class="badge" :class="action.status === 'Published' ? 'published' : 'pending'">
-                  {{ action.status }}
-                </span>
-              </div>
-
-              <!-- Resolution -->
-              <div v-if="action.status === 'Published'" class="action-resolution">
-                <div v-if="action.rollSummary" class="roll-summary">🎲 {{ action.rollSummary }}</div>
-                <p style="margin: 0; font-size: 0.875rem; color: var(--ink);">{{ action.resolutionText }}</p>
-                <p v-if="action.additionalActions" style="margin-top: 0.4rem; font-size: 0.82rem; color: var(--muted-light);">{{ action.additionalActions }}</p>
-                <div v-if="action.statChangesJson && action.statChangesJson !== '[]'" style="margin-top: 0.5rem;">
+              <template #meta>
+                <span class="text-xs muted">{{ formatTime(action.submittedAt) }}</span>
+              </template>
+              <template #resolution-extra>
+                <div v-if="action.statChangesJson && action.statChangesJson !== '[]'" class="mt-1">
                   <span class="badge" style="background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(232,163,42,0.25); font-size: 0.7rem;">
                     stat change applied
                   </span>
                 </div>
-              </div>
-              <p v-else class="text-xs muted">No resolution recorded.</p>
-            </div>
+              </template>
+            </ActionCard>
           </div>
         </div>
       </div>

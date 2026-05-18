@@ -7,6 +7,7 @@ using Microsoft.OpenApi.Models;
 using NotesApi.Configuration;
 using NotesApi.Data;
 using NotesApi.Models;
+using NotesApi.Rulesets;
 using NotesApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -69,6 +70,7 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod());
 });
 builder.Services.AddScoped<JwtTokenService>();
+builder.Services.AddSingleton<RulesetDefinitionValidator>();
 builder.Services.AddHealthChecks();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -160,6 +162,9 @@ static async Task ApplySchemaUpdatesAsync(ApplicationDbContext db)
         await connection.OpenAsync();
 
     var hasNpcVisibilitiesJson = false;
+    var hasRulesetDefinitionJson = false;
+    var hasCharacterClassKey = false;
+    var hasActionKey = false;
     using (var pragma = connection.CreateCommand())
     {
         pragma.CommandText = "PRAGMA table_info('GameSessions')";
@@ -174,10 +179,73 @@ static async Task ApplySchemaUpdatesAsync(ApplicationDbContext db)
         }
     }
 
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('Rulesets')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "DefinitionJson")
+            {
+                hasRulesetDefinitionJson = true;
+                break;
+            }
+        }
+    }
+
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('Characters')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "ClassKey")
+            {
+                hasCharacterClassKey = true;
+                break;
+            }
+        }
+    }
+
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('ActionRequests')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "ActionKey")
+            {
+                hasActionKey = true;
+                break;
+            }
+        }
+    }
+
     if (!hasNpcVisibilitiesJson)
     {
         using var alter = connection.CreateCommand();
         alter.CommandText = "ALTER TABLE \"GameSessions\" ADD COLUMN \"NpcVisibilitiesJson\" TEXT DEFAULT '{}'";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    if (!hasRulesetDefinitionJson)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"Rulesets\" ADD COLUMN \"DefinitionJson\" TEXT DEFAULT '{}'";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    if (!hasCharacterClassKey)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"Characters\" ADD COLUMN \"ClassKey\" TEXT DEFAULT ''";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    if (!hasActionKey)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"ActionRequests\" ADD COLUMN \"ActionKey\" TEXT NULL";
         await alter.ExecuteNonQueryAsync();
     }
 
@@ -258,7 +326,94 @@ static async Task SeedRulesetsAsync(ApplicationDbContext db)
                 {
                   "attributes": { "strength": 2, "agility": 2, "wits": 2, "empathy": 2 },
                   "skills": { "closeCombat": 0, "rangedCombat": 0, "mobility": 0, "observation": 0, "survival": 0, "medicalAid": 0 },
-                  "stress": 0
+                  "gameValues": { "stress": 0 },
+                  "experience": 0
+                }
+                """,
+            DefinitionJson = """
+                {
+                  "schemaVersion": 1,
+                  "code": "alien-rpg",
+                  "displayName": "Alien RPG",
+                  "description": "A horror sci-fi ruleset using attributes, skills, stress, and d6 dice pools.",
+                  "diceNotation": "d6 dice pool",
+                  "dice": [
+                    { "key": "d6Pool", "label": "D6 Dice Pool", "notation": "attribute + skill + modifiers d6" }
+                  ],
+                  "character": {
+                    "vitals": {
+                      "health": { "label": "Health", "defaultMax": 10 },
+                      "armor": { "label": "Armor", "default": 0 },
+                      "experience": { "label": "Experience", "default": 0 }
+                    },
+                    "attributes": [
+                      { "key": "strength", "label": "Strength", "default": 2, "min": 1, "max": 5 },
+                      { "key": "agility", "label": "Agility", "default": 2, "min": 1, "max": 5 },
+                      { "key": "wits", "label": "Wits", "default": 2, "min": 1, "max": 5 },
+                      { "key": "empathy", "label": "Empathy", "default": 2, "min": 1, "max": 5 }
+                    ],
+                    "gameValues": [
+                      { "key": "stress", "label": "Stress Level", "type": "number", "default": 0, "min": 0 }
+                    ],
+                    "classes": [
+                      {
+                        "key": "colonialMarine",
+                        "label": "Colonial Marine",
+                        "description": "Combat-trained military specialist.",
+                        "availableSkills": [ "closeCombat", "rangedCombat", "mobility", "stamina" ],
+                        "startingSkillPoints": 10
+                      },
+                      {
+                        "key": "scientist",
+                        "label": "Scientist",
+                        "description": "Research and technical expert.",
+                        "availableSkills": [ "observation", "survival", "comtech", "medicalAid" ],
+                        "startingSkillPoints": 10
+                      }
+                    ],
+                    "skills": [
+                      { "key": "closeCombat", "label": "Close Combat", "attribute": "strength", "default": 0 },
+                      { "key": "rangedCombat", "label": "Ranged Combat", "attribute": "agility", "default": 0 },
+                      { "key": "mobility", "label": "Mobility", "attribute": "agility", "default": 0 },
+                      { "key": "stamina", "label": "Stamina", "attribute": "strength", "default": 0 },
+                      { "key": "observation", "label": "Observation", "attribute": "wits", "default": 0 },
+                      { "key": "survival", "label": "Survival", "attribute": "wits", "default": 0 },
+                      { "key": "comtech", "label": "Comtech", "attribute": "wits", "default": 0 },
+                      { "key": "medicalAid", "label": "Medical Aid", "attribute": "empathy", "default": 0 }
+                    ]
+                  },
+                  "actions": [
+                    {
+                      "key": "rangedAttack",
+                      "label": "Ranged Attack",
+                      "description": "Fire a ranged weapon at a target.",
+                      "allowedClasses": [ "colonialMarine" ],
+                      "roll": {
+                        "dice": "d6Pool",
+                        "attribute": "agility",
+                        "skill": "rangedCombat",
+                        "modifiers": [
+                          { "source": "gameValue", "key": "stress", "dicePerPoint": 1 },
+                          { "source": "equipment", "key": "gearBonus", "dicePerPoint": 1 }
+                        ],
+                        "successRule": "Each 6 is a success. Any 1 on stress dice may trigger panic."
+                      }
+                    },
+                    {
+                      "key": "observeThreat",
+                      "label": "Observe Threat",
+                      "description": "Spot danger, hidden motion, or environmental clues.",
+                      "allowedClasses": [],
+                      "roll": {
+                        "dice": "d6Pool",
+                        "attribute": "wits",
+                        "skill": "observation",
+                        "modifiers": [],
+                        "successRule": "Each 6 is a success. Extra successes reveal more detail."
+                      }
+                    }
+                  ],
+                  "npcTemplates": []
                 }
                 """,
         },
@@ -276,6 +431,32 @@ static async Task SeedRulesetsAsync(ApplicationDbContext db)
                   "level": 1
                 }
                 """,
+            DefinitionJson = """
+                {
+                  "schemaVersion": 1,
+                  "code": "dnd-5e",
+                  "displayName": "Dungeons & Dragons",
+                  "description": "Placeholder for a fantasy d20 ruleset.",
+                  "diceNotation": "d20",
+                  "dice": [{ "key": "d20", "label": "D20", "notation": "1d20 + modifiers" }],
+                  "character": {
+                    "vitals": {},
+                    "attributes": [
+                      { "key": "strength", "label": "Strength", "default": 10 },
+                      { "key": "dexterity", "label": "Dexterity", "default": 10 },
+                      { "key": "constitution", "label": "Constitution", "default": 10 },
+                      { "key": "intelligence", "label": "Intelligence", "default": 10 },
+                      { "key": "wisdom", "label": "Wisdom", "default": 10 },
+                      { "key": "charisma", "label": "Charisma", "default": 10 }
+                    ],
+                    "gameValues": [],
+                    "classes": [],
+                    "skills": []
+                  },
+                  "actions": [],
+                  "npcTemplates": []
+                }
+                """,
         },
         new Ruleset
         {
@@ -289,6 +470,32 @@ static async Task SeedRulesetsAsync(ApplicationDbContext db)
                   "attributes": { "strength": 10, "dexterity": 10, "constitution": 10, "intelligence": 10, "wisdom": 10, "charisma": 10 },
                   "skills": {},
                   "level": 1
+                }
+                """,
+            DefinitionJson = """
+                {
+                  "schemaVersion": 1,
+                  "code": "pathfinder-2e",
+                  "displayName": "Pathfinder",
+                  "description": "Placeholder for a tactical fantasy d20 ruleset.",
+                  "diceNotation": "d20",
+                  "dice": [{ "key": "d20", "label": "D20", "notation": "1d20 + modifiers" }],
+                  "character": {
+                    "vitals": {},
+                    "attributes": [
+                      { "key": "strength", "label": "Strength", "default": 10 },
+                      { "key": "dexterity", "label": "Dexterity", "default": 10 },
+                      { "key": "constitution", "label": "Constitution", "default": 10 },
+                      { "key": "intelligence", "label": "Intelligence", "default": 10 },
+                      { "key": "wisdom", "label": "Wisdom", "default": 10 },
+                      { "key": "charisma", "label": "Charisma", "default": 10 }
+                    ],
+                    "gameValues": [],
+                    "classes": [],
+                    "skills": []
+                  },
+                  "actions": [],
+                  "npcTemplates": []
                 }
                 """,
         },
@@ -308,6 +515,7 @@ static async Task SeedRulesetsAsync(ApplicationDbContext db)
         existing.DiceNotation = ruleset.DiceNotation;
         existing.IsPlaceholder = ruleset.IsPlaceholder;
         existing.CharacterTemplateJson = ruleset.CharacterTemplateJson;
+        existing.DefinitionJson = ruleset.DefinitionJson;
     }
 
     await db.SaveChangesAsync();

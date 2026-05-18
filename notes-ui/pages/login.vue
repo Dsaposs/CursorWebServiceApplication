@@ -59,7 +59,7 @@ async function submit() {
   <section class="page">
     <div class="card">
       <div class="text-center mb-2" style="margin-bottom: 1.5rem;">
-        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⚔️</div>
+        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;" aria-hidden="true">⚔️</div>
         <h1 style="font-size: 1.6rem; margin: 0 0 0.25rem;">TTRPG Table</h1>
         <p style="font-size: 0.875rem;">{{ isLogin ? 'Sign in to host your games.' : 'Create a Dungeon Master account.' }}</p>
       </div>

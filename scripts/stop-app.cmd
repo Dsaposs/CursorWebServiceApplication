@@ -6,6 +6,8 @@ set "API_CONTAINER_NAME=ttrpg-api"
 set "UI_CONTAINER_NAME=ttrpg-ui"
 set "NETWORK_NAME=ttrpg-network"
 set "NAMESPACE=ttrpg"
+set "API_HOST_PORT=5294"
+set "UI_HOST_PORT=3000"
 set "API_DEPLOYMENT=ttrpg-api"
 set "UI_DEPLOYMENT=ttrpg-ui"
 set "API_SERVICE=ttrpg-api"
@@ -21,6 +23,10 @@ powershell -NoProfile -Command "$processes = Get-CimInstance Win32_Process | Whe
 echo.
 echo Stopping local Nuxt app process if it is running...
 powershell -NoProfile -Command "$processes = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*notes-ui*' -and ($_.CommandLine -like '*nuxt*' -or $_.CommandLine -like '*index.mjs*') }; if (-not $processes) { Write-Output 'No local Nuxt app process found.'; exit 0 }; foreach ($process in $processes) { Write-Output ('Stopping process {0} ({1})' -f $process.ProcessId, $process.Name); Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }"
+
+echo.
+echo Stopping stale WSL port relays on app ports if they are running...
+powershell -NoProfile -Command "$ports = @(%API_HOST_PORT%, %UI_HOST_PORT%); $connections = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $ports -contains $_.LocalPort }; $ownerProcessIds = $connections | ForEach-Object { $_.OwningProcess } | Sort-Object -Unique; if (-not $ownerProcessIds) { Write-Output 'No WSL port relay process found on app ports.'; exit 0 }; foreach ($ownerProcessId in $ownerProcessIds) { $process = Get-Process -Id $ownerProcessId -ErrorAction SilentlyContinue; if ($process -and $process.ProcessName -eq 'wslrelay') { Write-Output ('Stopping WSL port relay process {0}' -f $ownerProcessId); Stop-Process -Id $ownerProcessId -Force -ErrorAction SilentlyContinue } }"
 
 echo.
 where docker >nul 2>nul

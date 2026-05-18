@@ -52,6 +52,15 @@ public class JoinGameRequest
 
     [MaxLength(160)]
     public string PlayerName { get; set; } = string.Empty;
+
+    [MaxLength(80)]
+    public string ClassKey { get; set; } = string.Empty;
+}
+
+public class ImportRulesetRequest
+{
+    [Required]
+    public string DefinitionJson { get; set; } = string.Empty;
 }
 
 public class CreateNpcRequest
@@ -90,6 +99,9 @@ public class ChangeSessionStateRequest
 public class SubmitActionRequest
 {
     public Guid? ActorNpcId { get; set; }
+
+    [MaxLength(80)]
+    public string? ActionKey { get; set; }
 
     [Required, MaxLength(240)]
     public string ActionText { get; set; } = string.Empty;

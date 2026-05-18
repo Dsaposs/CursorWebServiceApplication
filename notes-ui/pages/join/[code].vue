@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import type { JoinGameResponse, SessionJoinOptionsResponse, SessionSummaryResponse } from '~/types/api';
+import { parseRulesetDefinition } from '~/utils/rulesets';
 
 const route = useRoute();
 const { api } = useApi();
+const { getSessionPlayerToken, getGamePlayerToken, setPlayerTokenForSessionAndGame } = usePlayerTokens();
 const { error: toastError } = useToast();
 
 const session = ref<SessionSummaryResponse | null>(null);
 const availableCharacters = ref<SessionJoinOptionsResponse['availableCharacters']>([]);
+const ruleset = ref<SessionJoinOptionsResponse['ruleset'] | null>(null);
 const joinMode = ref<'existing' | 'new'>('existing');
 const selectedCharacterId = ref('');
+const selectedClassKey = ref('');
 const characterName = ref('');
 const playerName = ref('');
 const fieldError = ref('');
@@ -17,17 +21,18 @@ const isJoining = ref(false);
 
 // Try to detect an existing token for this session
 const existingToken = ref<string | null>(null);
+const rulesetDefinition = computed(() => parseRulesetDefinition(ruleset.value));
 
 onMounted(async () => {
-  if (import.meta.client) {
-    existingToken.value = localStorage.getItem(`ttrpg_player_${route.params.code}`);
-  }
   try {
     const options = await api<SessionJoinOptionsResponse>(`/api/session-join/${route.params.code}`);
     session.value = options.session;
+    ruleset.value = options.ruleset;
+    existingToken.value = getSessionPlayerToken(route.params.code) ?? getGamePlayerToken(options.session.gameId);
     availableCharacters.value = options.availableCharacters;
     selectedCharacterId.value = options.availableCharacters[0]?.id ?? '';
     joinMode.value = options.availableCharacters.length ? 'existing' : 'new';
+    selectedClassKey.value = rulesetDefinition.value?.character.classes[0]?.key ?? '';
   } catch (err) {
     fieldError.value = 'Session not found or no longer active.';
   } finally {
@@ -43,9 +48,9 @@ async function joinSession() {
       method: 'POST',
       body: joinMode.value === 'existing'
         ? { characterId: selectedCharacterId.value, playerName: playerName.value }
-        : { characterName: characterName.value, playerName: playerName.value },
+        : { characterName: characterName.value, playerName: playerName.value, classKey: selectedClassKey.value },
     });
-    localStorage.setItem(`ttrpg_player_${route.params.code}`, joined.participantToken);
+    setPlayerTokenForSessionAndGame(route.params.code, joined.game.id, joined.participantToken);
     await navigateTo(`/sessions/${route.params.code}/player`);
   } catch (err) {
     fieldError.value = err instanceof Error ? err.message : String(err);
@@ -64,7 +69,7 @@ async function rejoin() {
   <section class="page">
     <div class="card">
       <div class="text-center" style="margin-bottom: 1.5rem;">
-        <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎲</div>
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;" aria-hidden="true">🎲</div>
         <h1 style="margin: 0 0 0.25rem;">Join Session</h1>
         <p v-if="session" style="margin: 0; font-size: 0.875rem;">
           <span class="badge" :class="session.state === 'Combat' ? 'combat' : 'exploration'">{{ session.state }}</span>
@@ -127,6 +132,15 @@ async function rejoin() {
           <label v-if="joinMode === 'new'">
             New character name
             <input v-model.trim="characterName" placeholder="Your character's name" required />
+          </label>
+
+          <label v-if="joinMode === 'new' && rulesetDefinition?.character.classes.length">
+            Class / Career
+            <select v-model="selectedClassKey" required>
+              <option v-for="characterClass in rulesetDefinition.character.classes" :key="characterClass.key" :value="characterClass.key">
+                {{ characterClass.label }}
+              </option>
+            </select>
           </label>
 
           <label>

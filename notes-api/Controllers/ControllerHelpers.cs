@@ -76,7 +76,23 @@ public static class ControllerHelpers
         DiceNotation = ruleset.DiceNotation,
         IsPlaceholder = ruleset.IsPlaceholder,
         CharacterTemplateJson = ruleset.CharacterTemplateJson,
+        DefinitionJson = ruleset.DefinitionJson,
     };
+
+    public static RulesetDetailResponse ToRulesetDetailResponse(Ruleset ruleset)
+    {
+        var response = ToRulesetResponse(ruleset);
+        return new RulesetDetailResponse
+        {
+            Code = response.Code,
+            DisplayName = response.DisplayName,
+            Description = response.Description,
+            DiceNotation = response.DiceNotation,
+            IsPlaceholder = response.IsPlaceholder,
+            CharacterTemplateJson = response.CharacterTemplateJson,
+            DefinitionJson = response.DefinitionJson,
+        };
+    }
 
     public static CharacterResponse ToCharacterResponse(Character character) => new()
     {
@@ -90,6 +106,7 @@ public static class ControllerHelpers
         SkillsJson = character.SkillsJson,
         InventoryJson = character.InventoryJson,
         RulesetDataJson = character.RulesetDataJson,
+        ClassKey = character.ClassKey,
     };
 
     public static NpcResponse ToNpcResponse(NpcOrMonster npc, string visibility = "Visible") => new()
@@ -123,6 +140,7 @@ public static class ControllerHelpers
         Id = action.Id,
         Sequence = action.Sequence,
         ActorName = action.ActorName,
+        ActionKey = action.ActionKey,
         ActionText = action.ActionText,
         TargetName = action.TargetName,
         Description = action.Description,

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Models;
+using NotesApi.Rulesets;
 
 namespace NotesApi.Controllers;
 
@@ -43,6 +44,12 @@ public class GameParticipantsController : ControllerBase
 
         if (character is null)
         {
+            var classKey = request.ClassKey.Trim();
+            if (!RulesetCharacterBuilder.ClassExists(game.Ruleset.DefinitionJson, classKey))
+            {
+                return BadRequest(new { errors = new[] { "Selected class is not available for this ruleset." } });
+            }
+
             character = new Character
             {
                 Id = Guid.NewGuid(),
@@ -55,7 +62,8 @@ public class GameParticipantsController : ControllerBase
                 AttributesJson = "{}",
                 SkillsJson = "{}",
                 InventoryJson = "[]",
-                RulesetDataJson = game.Ruleset.CharacterTemplateJson,
+                RulesetDataJson = RulesetCharacterBuilder.BuildRulesetDataJson(game.Ruleset.CharacterTemplateJson, classKey),
+                ClassKey = classKey,
                 CreatedAt = now,
                 UpdatedAt = now,
             };
@@ -96,6 +104,28 @@ public class GameParticipantsController : ControllerBase
             ParticipantToken = participant.JoinToken,
             Character = ControllerHelpers.ToCharacterResponse(character),
             Game = this.ToGameResponse(game),
+        });
+    }
+
+    [HttpGet("join/{inviteCode}")]
+    public async Task<ActionResult<GameJoinOptionsResponse>> GetJoinOptions(string inviteCode)
+    {
+        var game = await _db.Games
+            .AsNoTracking()
+            .Include(g => g.Ruleset)
+            .FirstOrDefaultAsync(g => g.InviteCode == inviteCode);
+
+        if (game is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(new GameJoinOptionsResponse
+        {
+            InviteCode = game.InviteCode,
+            GameName = game.Name,
+            RulesetCode = game.RulesetCode,
+            Ruleset = ControllerHelpers.ToRulesetDetailResponse(game.Ruleset),
         });
     }
 }

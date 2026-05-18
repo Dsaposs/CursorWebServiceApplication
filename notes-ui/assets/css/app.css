@@ -535,6 +535,57 @@ select option {
   border: 1px solid rgba(77, 220, 126, 0.25);
 }
 
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-alt);
+  color: var(--muted-light);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.connection-status-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.connection-status-success {
+  border-color: rgba(77, 220, 126, 0.25);
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.connection-status-info {
+  border-color: rgba(124, 131, 240, 0.25);
+  background: var(--secondary-dim);
+  color: var(--secondary);
+}
+
+.connection-status-error {
+  border-color: rgba(244, 112, 112, 0.25);
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
+.connection-status-time {
+  color: var(--muted-light);
+  font-family: 'Menlo', 'Consolas', monospace;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 4.8rem;
+  text-align: right;
+  text-transform: none;
+}
+
 /* ─── Health bar ────────────────────────────────────────── */
 
 .health-bar-wrap {
@@ -787,6 +838,21 @@ select option {
   gap: 0.75rem;
 }
 
+.action-card-toggle {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.action-card-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0.25rem;
+  border-radius: var(--radius-sm);
+}
+
 .action-card-actor {
   font-size: 0.9rem;
   font-weight: 700;
@@ -818,6 +884,31 @@ select option {
   margin-bottom: 0.35rem;
 }
 
+.action-card-button {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-card-button:hover,
+.action-card-button:focus-visible {
+  border-color: var(--border-strong);
+  outline: none;
+}
+
+.action-resolution-text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink);
+}
+
+.action-resolution-extra {
+  margin-top: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--muted-light);
+}
+
 /* ─── Initiative tracker ────────────────────────────────── */
 
 .initiative-list {
@@ -843,10 +934,14 @@ select option {
 }
 
 .initiative-item.draggable {
+  cursor: default;
+}
+
+.initiative-item.draggable .initiative-drag-handle {
   cursor: grab;
 }
 
-.initiative-item.draggable:active {
+.initiative-item.draggable .initiative-drag-handle:active {
   cursor: grabbing;
 }
 
@@ -899,6 +994,33 @@ select option {
   color: var(--accent);
 }
 
+.initiative-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--muted-light);
+  font-weight: 800;
+  touch-action: none;
+}
+
+.initiative-drag-handle:hover,
+.initiative-drag-handle:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+
+.initiative-drag-handle:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .initiative-card-body {
   display: grid;
   flex: 1;
@@ -936,6 +1058,22 @@ select option {
   gap: 0.75rem;
 }
 
+.npc-turn-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(232, 163, 42, 0.25);
+  border-radius: var(--radius);
+  background: var(--accent-dim);
+}
+
+.npc-turn-action strong {
+  color: var(--ink-bright);
+}
+
 .combatant-setup-list {
   display: grid;
   gap: 0.55rem;
@@ -958,6 +1096,96 @@ select option {
   flex: 1;
   font-size: 0.8rem;
   font-family: 'Menlo', 'Consolas', monospace;
+}
+
+.session-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+
+.session-list-item:hover {
+  border-color: var(--border-strong);
+  text-decoration: none;
+}
+
+.ruleset-card-list,
+.ruleset-action-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.ruleset-card,
+.ruleset-action-card {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+}
+
+.ruleset-card.active,
+.ruleset-card:hover,
+.ruleset-card:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.ruleset-card strong,
+.ruleset-action-card strong {
+  color: var(--ink-bright);
+}
+
+.ruleset-card span,
+.ruleset-action-card span,
+.ruleset-card small,
+.ruleset-action-card small {
+  color: var(--muted-light);
+}
+
+.ruleset-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.75rem;
+}
+
+.ruleset-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ruleset-chip {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-alt);
+  color: var(--muted-light);
+  font-size: 0.75rem;
+}
+
+.json-import-textarea {
+  min-height: 18rem;
+  font-family: 'Menlo', 'Consolas', monospace;
+  font-size: 0.78rem;
 }
 
 /* ─── Session join code ─────────────────────────────────── */
@@ -1012,6 +1240,68 @@ select option {
   background: var(--secondary-dim);
   border: 1px solid rgba(124, 131, 240, 0.25);
   color: var(--secondary);
+}
+
+/* ─── Modal / loading states ───────────────────────────── */
+
+.confirm-modal {
+  width: min(28rem, calc(100vw - 2rem));
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.confirm-modal::backdrop {
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(2px);
+}
+
+.confirm-modal-card {
+  padding: 1.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.confirm-modal-card p {
+  margin: 0;
+}
+
+.confirm-modal-actions {
+  justify-content: flex-end;
+}
+
+.skeleton-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+
+.skeleton-panel.compact {
+  padding: 0.9rem;
+}
+
+.skeleton-line {
+  height: 0.75rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--panel-alt), var(--border), var(--panel-alt));
+  background-size: 180% 100%;
+  animation: skeleton-pulse 1.35s ease-in-out infinite;
+}
+
+.skeleton-title {
+  width: 46%;
+  height: 1.1rem;
+}
+
+@keyframes skeleton-pulse {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
 }
 
 /* ─── Toast container ───────────────────────────────────── */

@@ -38,6 +38,8 @@ public class Ruleset
 
     public string CharacterTemplateJson { get; set; } = "{}";
 
+    public string DefinitionJson { get; set; } = "{}";
+
     public ICollection<Game> Games { get; set; } = new List<Game>();
 }
 
@@ -126,6 +128,9 @@ public class Character
 
     public string RulesetDataJson { get; set; } = "{}";
 
+    [MaxLength(80)]
+    public string ClassKey { get; set; } = string.Empty;
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
@@ -207,6 +212,9 @@ public class ActionRequest
 
     [Required, MaxLength(240)]
     public string ActionText { get; set; } = string.Empty;
+
+    [MaxLength(80)]
+    public string? ActionKey { get; set; }
 
     public Guid? TargetCharacterId { get; set; }
 

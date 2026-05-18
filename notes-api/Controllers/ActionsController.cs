@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Models;
+using NotesApi.Rulesets;
 
 namespace NotesApi.Controllers;
 
@@ -42,6 +43,7 @@ public class ActionsController : ControllerBase
     public async Task<ActionResult<ActionQueueItemResponse>> SubmitAction(string joinCode, SubmitActionRequest request)
     {
         var session = await _db.GameSessions
+            .Include(s => s.Game).ThenInclude(g => g.Ruleset)
             .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
             .Include(s => s.Actions)
             .FirstOrDefaultAsync(s => s.JoinCode == joinCode && s.IsActive);
@@ -61,6 +63,7 @@ public class ActionsController : ControllerBase
         var actorName = participant?.Character.Name;
         Guid? actorCharacterId = participant?.CharacterId;
         Guid? actorNpcId = null;
+        string actorClassKey = participant?.Character.ClassKey ?? string.Empty;
 
         if (isDm && request.ActorNpcId.HasValue)
         {
@@ -73,11 +76,29 @@ public class ActionsController : ControllerBase
             actorName = npc.Name;
             actorCharacterId = null;
             actorNpcId = npc.Id;
+            actorClassKey = ReadClassKey(npc.StatBlockJson);
         }
 
         if (string.IsNullOrWhiteSpace(actorName))
         {
             return BadRequest(new { errors = new[] { "An actor is required." } });
+        }
+
+        var actionText = request.ActionText;
+        if (!string.IsNullOrWhiteSpace(request.ActionKey))
+        {
+            var rulesetAction = RulesetActionCatalog.FindAction(session.Game.Ruleset.DefinitionJson, request.ActionKey);
+            if (rulesetAction is null)
+            {
+                return BadRequest(new { errors = new[] { "Selected action is not available for this ruleset." } });
+            }
+
+            if (!RulesetActionCatalog.IsAllowedForClass(rulesetAction, actorClassKey))
+            {
+                return BadRequest(new { errors = new[] { "Selected action is not available for this actor." } });
+            }
+
+            actionText = string.IsNullOrWhiteSpace(actionText) ? rulesetAction.Label : actionText;
         }
 
         var nextSequence = session.Actions.Count == 0 ? 1 : session.Actions.Max(a => a.Sequence) + 1;
@@ -89,7 +110,8 @@ public class ActionsController : ControllerBase
             ActorCharacterId = actorCharacterId,
             ActorNpcId = actorNpcId,
             ActorName = actorName,
-            ActionText = request.ActionText,
+            ActionKey = request.ActionKey,
+            ActionText = actionText,
             TargetCharacterId = request.TargetCharacterId,
             TargetNpcId = request.TargetNpcId,
             TargetName = request.TargetName,
@@ -231,5 +253,25 @@ public class ActionsController : ControllerBase
     {
         session.Version++;
         session.UpdatedAt = DateTime.UtcNow;
+    }
+
+    private static string ReadClassKey(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.TryGetProperty("classKey", out var classKey) && classKey.ValueKind == JsonValueKind.String
+                ? classKey.GetString() ?? string.Empty
+                : string.Empty;
+        }
+        catch (JsonException)
+        {
+            return string.Empty;
+        }
     }
 }

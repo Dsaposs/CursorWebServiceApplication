@@ -32,6 +32,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(r => r.Description).HasMaxLength(500);
             entity.Property(r => r.DiceNotation).HasMaxLength(80);
             entity.Property(r => r.CharacterTemplateJson).IsRequired();
+            entity.Property(r => r.DefinitionJson).IsRequired();
         });
 
         builder.Entity<Game>(entity =>
@@ -72,6 +73,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.Property(c => c.Name).HasMaxLength(160).IsRequired();
             entity.Property(c => c.PlayerName).HasMaxLength(160);
+            entity.Property(c => c.ClassKey).HasMaxLength(80);
             entity.HasIndex(c => new { c.GameId, c.Name }).IsUnique();
             entity.HasOne(c => c.Game)
                 .WithMany(g => g.Characters)
@@ -105,6 +107,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.Property(a => a.ActorName).HasMaxLength(160).IsRequired();
             entity.Property(a => a.ActionText).HasMaxLength(240).IsRequired();
+            entity.Property(a => a.ActionKey).HasMaxLength(80);
             entity.Property(a => a.TargetName).HasMaxLength(160);
             entity.Property(a => a.Description).HasMaxLength(1000);
             entity.HasIndex(a => new { a.SessionId, a.Sequence }).IsUnique();
