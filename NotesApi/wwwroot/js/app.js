@@ -5,6 +5,8 @@ const state = {
   token: localStorage.getItem("notes_token"),
   email: localStorage.getItem("notes_email") || "",
   notes: [],
+  adminUsers: null,
+  isAdmin: false,
   selectedId: null,
   showLoginPassword: false,
   error: "",
@@ -53,6 +55,8 @@ function clearSession() {
   state.token = null;
   state.email = "";
   state.notes = [];
+  state.adminUsers = null;
+  state.isAdmin = false;
   state.selectedId = null;
   localStorage.removeItem("notes_token");
   localStorage.removeItem("notes_email");
@@ -73,8 +77,8 @@ function renderAuth() {
 
         <form id="auth-form">
           <label>
-            Email
-            <input id="email" type="email" autocomplete="email" required value="${escapeHtml(state.email)}" />
+            Email or username
+            <input id="email" type="text" autocomplete="username" required value="${escapeHtml(state.email)}" />
           </label>
 
           ${isLogin ? renderLoginPassword() : renderRegisterPasswords()}
@@ -150,16 +154,39 @@ async function handleAuthSubmit(event) {
 
     const auth = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
     setSession(auth.token, email);
-    await loadNotes();
+    await loadDashboard();
   } catch (error) {
     state.error = error.message;
     renderAuth();
   }
 }
 
+async function loadDashboard() {
+  try {
+    const adminUsers = await api("/api/admin/users");
+    state.adminUsers = adminUsers;
+    state.isAdmin = true;
+    state.notes = [];
+    state.error = "";
+    renderAdminOnly();
+    return;
+  } catch (error) {
+    if (!isAccessDenied(error)) {
+      clearSession();
+      state.error = error.message;
+      renderAuth();
+      return;
+    }
+  }
+
+  state.isAdmin = false;
+  await loadNotes();
+}
+
 async function loadNotes() {
   try {
     state.notes = await api("/api/notes");
+    state.adminUsers = null;
     state.error = "";
     renderNotes();
   } catch (error) {
@@ -167,6 +194,38 @@ async function loadNotes() {
     state.error = error.message;
     renderAuth();
   }
+}
+
+function renderAdminOnly() {
+  app.innerHTML = `
+    <section class="app-shell">
+      <header class="topbar">
+        <div>
+          <strong>Admin Dashboard</strong>
+          <span class="muted">${escapeHtml(state.email)}</span>
+        </div>
+        <button class="btn secondary" id="logout" type="button">Sign out</button>
+      </header>
+      ${renderAdminPanel()}
+    </section>
+  `;
+
+  document.getElementById("logout").onclick = () => {
+    clearSession();
+    renderAuth();
+  };
+}
+
+async function loadAdminUsersIfAllowed() {
+  try {
+    return await api("/api/admin/users");
+  } catch {
+    return null;
+  }
+}
+
+function isAccessDenied(error) {
+  return error.message.includes("403") || error.message.toLowerCase().includes("forbidden");
 }
 
 function renderNotes() {
@@ -211,6 +270,7 @@ function renderNotes() {
           </form>
         </main>
       </div>
+      ${state.adminUsers ? renderAdminPanel() : ""}
     </section>
   `;
 
@@ -234,6 +294,37 @@ function renderNotes() {
 
   const deleteButton = document.getElementById("delete-note");
   if (deleteButton) deleteButton.onclick = deleteNote;
+}
+
+function renderAdminPanel() {
+  return `
+    <section class="admin-panel">
+      <h2>Admin: users</h2>
+      <p class="muted">Password hashes are not displayed. The table only shows whether a password hash exists.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Password hash stored</th>
+            <th>Notes created</th>
+            <th>Notes deleted</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.adminUsers.map((user) => `
+            <tr>
+              <td>${escapeHtml(user.userName)}</td>
+              <td>${escapeHtml(user.email || "")}</td>
+              <td>${user.hasPasswordHash ? "Yes" : "No"}</td>
+              <td>${user.notesCreatedCount}</td>
+              <td>${user.notesDeletedCount}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </section>
+  `;
 }
 
 function renderNoteListItem(note) {
@@ -282,7 +373,7 @@ async function deleteNote() {
 }
 
 if (state.token) {
-  loadNotes();
+  loadDashboard();
 } else {
   renderAuth();
 }

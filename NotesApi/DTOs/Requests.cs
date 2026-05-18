@@ -15,7 +15,7 @@ public class RegisterRequest
 
 public class LoginRequest
 {
-    [Required, EmailAddress]
+    [Required]
     public string Email { get; set; } = string.Empty;
 
     [Required]

@@ -10,7 +10,7 @@ namespace NotesApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "User")]
 public class NotesController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
@@ -43,11 +43,12 @@ public class NotesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<NoteResponse>> Create(CreateNoteRequest request)
     {
+        var userId = GetUserId();
         var now = DateTime.UtcNow;
         var note = new Note
         {
             Id = Guid.NewGuid(),
-            UserId = GetUserId(),
+            UserId = userId,
             Title = request.Title,
             Content = request.Content,
             CreatedAt = now,
@@ -55,6 +56,8 @@ public class NotesController : ControllerBase
         };
 
         _db.Notes.Add(note);
+        var user = await _db.Users.FindAsync(userId);
+        if (user is not null) user.NotesCreatedCount++;
         await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetById), new { id = note.Id }, ToResponse(note));
     }
@@ -81,6 +84,8 @@ public class NotesController : ControllerBase
         if (note is null) return NotFound();
 
         _db.Notes.Remove(note);
+        var user = await _db.Users.FindAsync(userId);
+        if (user is not null) user.NotesDeletedCount++;
         await _db.SaveChangesAsync();
         return NoContent();
     }

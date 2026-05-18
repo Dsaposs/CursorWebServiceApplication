@@ -70,6 +70,23 @@ http://localhost:5294
 
 To stop the app, press `Ctrl+C` in the terminal running the script.
 
+### Refresh The Local Docker App
+
+Use this when you changed code and want a fresh local container:
+
+```powershell
+cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
+.\scripts\refresh-docker.cmd
+```
+
+The refresh script stops the existing `notes-api` container, keeps the `notes-data` SQLite volume, rebuilds the project and Docker image, then starts a new container.
+
+Only reset SQLite data when you intentionally want to delete local app data:
+
+```powershell
+.\scripts\refresh-docker.cmd /reset-sqlite
+```
+
 ## Kubernetes
 
 The Kubernetes manifests live in [`k8s/`](k8s/). They deploy:
@@ -87,6 +104,39 @@ Build the image and deploy:
 cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
 .\scripts\docker-build.cmd
 .\scripts\k8s-deploy.cmd
+```
+
+### Refresh The Kubernetes App
+
+Use this when Kubernetes is running the app and you want to rebuild and restart it with a new image:
+
+```powershell
+cd "C:\Users\Dan\.cursor\projects\Cursor Web Service Application"
+.\scripts\refresh-k8s.cmd
+```
+
+The script:
+
+- Stops any standalone Docker container named `notes-api`
+- Scales the Kubernetes deployment down to `0`
+- Preserves the SQLite PVC by default
+- Builds the project
+- Builds the Docker image `notes-api:local`
+- Applies the Kubernetes manifests
+- Scales the deployment back to `1`
+- Waits for rollout to complete
+
+If you need to push to a registry, set `IMAGE_REPOSITORY` before running the script:
+
+```powershell
+$env:IMAGE_REPOSITORY = "your-registry/notes-api:latest"
+.\scripts\refresh-k8s.cmd
+```
+
+Only reset the Kubernetes SQLite PVC when you intentionally want to delete persisted notes/users:
+
+```powershell
+.\scripts\refresh-k8s.cmd /reset-sqlite
 ```
 
 If you use Docker Desktop Kubernetes, make sure the image exists in Docker Desktop before deploying. For minikube, build inside minikube instead:

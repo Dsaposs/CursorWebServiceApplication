@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using NotesApi.Configuration;
@@ -11,13 +12,15 @@ namespace NotesApi.Services;
 public class JwtTokenService
 {
     private readonly JwtSettings _settings;
+    private readonly UserManager<ApplicationUser> _userManager;
 
-    public JwtTokenService(IOptions<JwtSettings> settings)
+    public JwtTokenService(IOptions<JwtSettings> settings, UserManager<ApplicationUser> userManager)
     {
         _settings = settings.Value;
+        _userManager = userManager;
     }
 
-    public (string Token, DateTime ExpiresAt) CreateToken(ApplicationUser user)
+    public async Task<(string Token, DateTime ExpiresAt)> CreateTokenAsync(ApplicationUser user)
     {
         var expiresAt = DateTime.UtcNow.AddMinutes(_settings.ExpiresMinutes);
         var claims = new List<Claim>
@@ -27,6 +30,14 @@ public class JwtTokenService
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new(ClaimTypes.NameIdentifier, user.Id),
         };
+
+        var roles = await _userManager.GetRolesAsync(user);
+        foreach (var role in roles)
+        {
+            // Include both claim names so role authorization works regardless of JWT claim mapping behavior.
+            claims.Add(new Claim(ClaimTypes.Role, role));
+            claims.Add(new Claim("role", role));
+        }
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

@@ -31,19 +31,22 @@ public class AuthController : ControllerBase
         var result = await _userManager.CreateAsync(user, request.Password);
         if (!result.Succeeded) return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
 
+        await _userManager.AddToRoleAsync(user, "User");
+
         return CreatedAtAction(nameof(Register), new RegisterResponse { UserId = user.Id, Email = user.Email! });
     }
 
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
-        var user = await _userManager.FindByEmailAsync(request.Email);
+        var user = await _userManager.FindByEmailAsync(request.Email)
+            ?? await _userManager.FindByNameAsync(request.Email);
         if (user is null) return Unauthorized(new { errors = new[] { "Invalid email or password." } });
 
         var result = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: false);
         if (!result.Succeeded) return Unauthorized(new { errors = new[] { "Invalid email or password." } });
 
-        var (token, expiresAt) = _jwtTokenService.CreateToken(user);
+        var (token, expiresAt) = await _jwtTokenService.CreateTokenAsync(user);
         return Ok(new AuthResponse { Token = token, ExpiresAt = expiresAt });
     }
 }

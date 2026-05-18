@@ -20,3 +20,13 @@ public class NoteResponse
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
+
+public class AdminUserReportResponse
+{
+    public string UserId { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public bool HasPasswordHash { get; set; }
+    public int NotesCreatedCount { get; set; }
+    public int NotesDeletedCount { get; set; }
+}
