@@ -1,0 +1,652 @@
+{
+  "schemaVersion": 1,
+  "diceRollerKey": "d-class-check",
+  "code": "die-rpg",
+  "displayName": "DIE RPG",
+  "description": "Dark fantasy roleplaying in a world you cannot escape. Six classes, each bound to their die. Roll your class die + attribute + skill vs a Difficulty. Grief Knight grief dice, Godbinder pacts, Dictator dominion, Fool fortune, Neo disbelief, Grandmaster reality.",
+  "diceNotation": "1d[class]",
+  "dice": [
+    { "key": "d4ClassDie",  "label": "D4 — Grief Knight", "notation": "1d4"  },
+    { "key": "d6ClassDie",  "label": "D6 — Godbinder",    "notation": "1d6"  },
+    { "key": "d8ClassDie",  "label": "D8 — Neo",           "notation": "1d8"  },
+    { "key": "d10ClassDie", "label": "D10 — Dictator",     "notation": "1d10" },
+    { "key": "d12ClassDie", "label": "D12 — Fool",         "notation": "1d12" },
+    { "key": "d20ClassDie", "label": "D20 — Grandmaster",  "notation": "1d20" }
+  ],
+  "character": {
+    "vitals": {
+      "health": { "label": "Health", "defaultMax": 5 },
+      "armor": { "label": "Armour", "default": 0 }
+    },
+    "attributes": [
+      { "key": "body",      "label": "Body",      "default": 2, "min": 1, "max": 5 },
+      { "key": "mind",      "label": "Mind",      "default": 2, "min": 1, "max": 5 },
+      { "key": "heart",     "label": "Heart",     "default": 2, "min": 1, "max": 5 },
+      { "key": "will",      "label": "Will",      "default": 2, "min": 1, "max": 5 },
+      { "key": "influence", "label": "Influence", "default": 2, "min": 1, "max": 5 }
+    ],
+    "gameValues": [
+      { "key": "grief",    "label": "Grief",    "type": "number", "default": 0, "min": 0 },
+      { "key": "hope",     "label": "Hope",     "type": "number", "default": 0, "min": 0 },
+      { "key": "dominion", "label": "Dominion", "type": "number", "default": 0, "min": 0 }
+    ],
+    "classes": [
+      {
+        "key": "griefKnight",
+        "label": "Grief Knight",
+        "description": "You have suffered. You carry your losses inside you, and in Die, that grief is a weapon. Your class die is the d4 — small, brutal, honest. Each point of Grief adds an extra d4 to your rolls. The world hurt you. Now you hurt back.",
+        "availableSkills": ["fight", "endure", "resist", "survive"],
+        "startingSkillPoints": 4,
+        "maxSkillRank": 3,
+        "startingItemOptions": ["griefSword", "armorOfMourning", "griefKnifeSet"]
+      },
+      {
+        "key": "godbinder",
+        "label": "Godbinder",
+        "description": "You hold the names of things that were gods before they fell. You speak those names carefully, because they remember being worshipped. Your class die is the d6. Each bargain costs something. Each invocation answers something. The Fallen Gods want things from you — and you want things from them.",
+        "availableSkills": ["commune", "lore", "empathize", "focus"],
+        "startingSkillPoints": 4,
+        "maxSkillRank": 3,
+        "startingItemOptions": ["godBindingScroll", "holyFragment", "divineLantern"]
+      },
+      {
+        "key": "neo",
+        "label": "Neo",
+        "description": "This is not real. You won't pretend it is. You are the one who refuses to believe in Die's rules, and that disbelief is a kind of power. Your class die is the d8. You can reject outcomes. You can break the logic. The world around you bends at the edges whenever you look at it too long.",
+        "availableSkills": ["resist", "focus", "lore", "move"],
+        "startingSkillPoints": 4,
+        "maxSkillRank": 3,
+        "startingItemOptions": ["theNotebook", "forbiddenDie", "disbeliefsEdge"]
+      },
+      {
+        "key": "dictator",
+        "label": "Dictator",
+        "description": "You speak, and things happen. Your words carry weight that others' do not. Your class die is the d10. You build Dominion — zones of influence where your authority is absolute. You command NPCs. You reshape situations. You are what this world was built to produce: someone who tells it what to do.",
+        "availableSkills": ["command", "deceive", "tactics", "inspire"],
+        "startingSkillPoints": 4,
+        "maxSkillRank": 3,
+        "startingItemOptions": ["crownOfDominion", "commandRod", "dominanceAmulet"]
+      },
+      {
+        "key": "fool",
+        "label": "Fool",
+        "description": "You are the wild variable. Fortune bends in your direction — most of the time. Your class die is the d12, the most unpredictable of the polyhedral dice. Hope fuels your most impossible acts. When logic fails, luck steps in. You are the reason plans fail beautifully.",
+        "availableSkills": ["deceive", "inspire", "move", "craft"],
+        "startingSkillPoints": 4,
+        "maxSkillRank": 3,
+        "startingItemOptions": ["jokersDeck", "luckCharm", "chaosToken"]
+      },
+      {
+        "key": "grandmaster",
+        "label": "Grandmaster",
+        "description": "You designed this world. Or someone like you did. You understand its rules better than it understands itself. Your class die is the d20 — the master die, the one that started everything. Reality is your board. Rules are your instruments. The question isn't whether you can change things. It's whether you should.",
+        "availableSkills": ["lore", "tactics", "command", "focus"],
+        "startingSkillPoints": 4,
+        "maxSkillRank": 3,
+        "startingItemOptions": ["masterDie", "grandmasterManual", "worldMap"]
+      }
+    ],
+    "skills": [
+      { "key": "fight",     "label": "Fight",     "attribute": "body",      "default": 0 },
+      { "key": "endure",    "label": "Endure",    "attribute": "body",      "default": 0 },
+      { "key": "move",      "label": "Move",      "attribute": "body",      "default": 0 },
+      { "key": "lore",      "label": "Lore",      "attribute": "mind",      "default": 0 },
+      { "key": "tactics",   "label": "Tactics",   "attribute": "mind",      "default": 0 },
+      { "key": "craft",     "label": "Craft",     "attribute": "mind",      "default": 0 },
+      { "key": "empathize", "label": "Empathize", "attribute": "heart",     "default": 0 },
+      { "key": "heal",      "label": "Heal",      "attribute": "heart",     "default": 0 },
+      { "key": "commune",   "label": "Commune",   "attribute": "heart",     "default": 0 },
+      { "key": "resist",    "label": "Resist",    "attribute": "will",      "default": 0 },
+      { "key": "survive",   "label": "Survive",   "attribute": "will",      "default": 0 },
+      { "key": "focus",     "label": "Focus",     "attribute": "will",      "default": 0 },
+      { "key": "command",   "label": "Command",   "attribute": "influence", "default": 0 },
+      { "key": "deceive",   "label": "Deceive",   "attribute": "influence", "default": 0 },
+      { "key": "inspire",   "label": "Inspire",   "attribute": "influence", "default": 0 }
+    ]
+  },
+  "items": [
+    {
+      "key": "griefSword",
+      "label": "Grief Sword",
+      "description": "A blade that grows sharper with sorrow. Its edge burns coldest at your worst moment. Forged from crystallised grief, it knows exactly how much you have lost — and so does anyone you cut with it.",
+      "category": "weapon",
+      "modifiers": [],
+      "attackRoll": {
+        "dice": "d4ClassDie",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "body",
+        "skill": "fight",
+        "modifiers": [
+          { "source": "gameValue", "key": "grief", "dicePerPoint": 1, "isStressDice": true }
+        ],
+        "successRule": "Roll 1d4 + Body + Fight + Grief dice (one d4 per Grief) vs DC 8. Beat the DC to hit."
+      },
+      "damageRoll": {
+        "notation": "1d6",
+        "bonusAttribute": "body",
+        "description": "Slashing damage on a hit. The grief in the blade tears deeper than steel."
+      }
+    },
+    {
+      "key": "armorOfMourning",
+      "label": "Armor of Mourning",
+      "description": "Heavy plate that converts grief into endurance. Each blow adds to your burden — and your power. When you would fall, your accumulated losses hold you up. The armour is cold to the touch, always.",
+      "category": "armor",
+      "modifiers": []
+    },
+    {
+      "key": "griefKnifeSet",
+      "label": "Grief Knife Set",
+      "description": "Three blades, each engraved with a name you will never forget. You do not need to explain which names. The blades already know. You carry them so the names aren't just inside you.",
+      "category": "weapon",
+      "modifiers": [],
+      "attackRoll": {
+        "dice": "d4ClassDie",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "body",
+        "skill": "fight",
+        "modifiers": [
+          { "source": "gameValue", "key": "grief", "dicePerPoint": 1, "isStressDice": true }
+        ],
+        "successRule": "Roll 1d4 + Body + Fight + Grief dice vs DC 8. Beat the DC to hit."
+      },
+      "damageRoll": {
+        "notation": "1d4",
+        "bonusAttribute": "body",
+        "description": "Piercing damage. Three blades means three chances to be remembered."
+      }
+    },
+    {
+      "key": "godBindingScroll",
+      "label": "God-Binding Scroll",
+      "description": "Words in a language that only existed inside someone's dying mind. The scroll burns slightly under your fingers — not enough to hurt. When you read it aloud, something older than the current age reads it back. Adds +1 to Commune rolls when invoking a Fallen God.",
+      "category": "arcane",
+      "modifiers": [{ "source": "item", "key": "godBindingScroll", "attackBonus": 1 }]
+    },
+    {
+      "key": "holyFragment",
+      "label": "Holy Fragment",
+      "description": "A shard of a Fallen God, shaped into something you can wear. It remembers what it used to be. Sometimes it pulses. Sometimes it feels warm. It has not stopped believing in itself, even though the god it came from is dead.",
+      "category": "arcane",
+      "modifiers": []
+    },
+    {
+      "key": "divineLantern",
+      "label": "Divine Lantern",
+      "description": "Burns with pale light from a dead star's dream. Gods can see it from very far away. Useful when you want to be found by something powerful; inadvisable when you don't. The light does not flicker. It has never flickered.",
+      "category": "arcane",
+      "modifiers": []
+    },
+    {
+      "key": "theNotebook",
+      "label": "The Notebook",
+      "description": "You wrote in it before you came to Die. Your notes on the game world's inconsistencies — things that didn't match the rules, gaps in the fiction. Some entries are circled in red. Some entries were not written by you. Adds +1 to Lore checks about Die's internal logic.",
+      "category": "focus",
+      "modifiers": [{ "source": "item", "key": "theNotebook", "attackBonus": 1 }]
+    },
+    {
+      "key": "forbiddenDie",
+      "label": "Forbidden Die",
+      "description": "A die from outside the system. It has faces that should not exist. When you roll it, something happens that the rules were not written to handle — and the rules were written very carefully. The GM will tell you what it does. It will not be nothing.",
+      "category": "arcane",
+      "modifiers": []
+    },
+    {
+      "key": "disbeliefsEdge",
+      "label": "Disbelief's Edge",
+      "description": "You don't believe weapons work that way here. The weapon agrees with you. The target has not been told. A blade made from the boundary between what is and what you're willing to accept — which is, currently, very little.",
+      "category": "weapon",
+      "modifiers": [],
+      "attackRoll": {
+        "dice": "d8ClassDie",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "will",
+        "skill": "resist",
+        "modifiers": [],
+        "successRule": "Roll 1d8 + Will + Resist vs DC 8. This is not a real weapon. It still hurts."
+      },
+      "damageRoll": {
+        "notation": "1d8",
+        "description": "Damage that the target cannot quite explain. Reality damage, in a sense."
+      }
+    },
+    {
+      "key": "crownOfDominion",
+      "label": "Crown of Dominion",
+      "description": "Not a physical crown, exactly. An arrangement of presence, of expectation, of weight — something that makes people look at you differently and then wonder why. When you wear it, your Command rolls gain +1. When you take it off, people are not sure you ever put it on.",
+      "category": "authority",
+      "modifiers": [{ "source": "item", "key": "crownOfDominion", "attackBonus": 1 }]
+    },
+    {
+      "key": "commandRod",
+      "label": "Command Rod",
+      "description": "A rod of carved obsidian. When you hold it, words become heavier. People who see it feel, briefly and inexplicably, that they should do what you say. Adds +1d to Command and authority rolls. The obsidian is warm. It has absorbed several conversations you'd rather forget.",
+      "category": "authority",
+      "modifiers": [{ "source": "item", "key": "commandRod", "flatDice": 1 }],
+      "attackRoll": {
+        "dice": "d10ClassDie",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "influence",
+        "skill": "command",
+        "modifiers": [],
+        "successRule": "Roll 1d10 + Influence + Command vs DC 8 to issue a command. Beat DC 12 for absolute compliance."
+      }
+    },
+    {
+      "key": "dominanceAmulet",
+      "label": "Dominance Amulet",
+      "description": "Carved from the jawbone of something that used to be in charge. When you wear it, the cost of seizing Dominion in a new location is reduced by 1. The amulet smells faintly of authority — not a pleasant smell, exactly, but a familiar one.",
+      "category": "authority",
+      "modifiers": []
+    },
+    {
+      "key": "jokersDeck",
+      "label": "Joker's Deck",
+      "description": "Fifty-two cards. Possibly more. Some appear to be the same card. The deck has never been the same twice when you've counted it, and yet it's always complete. Draw a card when logic fails you — the GM will interpret it. No two draws have ever produced the same result.",
+      "category": "arcane",
+      "modifiers": []
+    },
+    {
+      "key": "luckCharm",
+      "label": "Luck Charm",
+      "description": "Works exactly once per session. The luck it contains has been aging for a while and is very specific: you will not know what it's for until the moment arrives, and then you will know immediately. Spend it then. You won't get a better chance.",
+      "category": "consumable",
+      "modifiers": []
+    },
+    {
+      "key": "chaosToken",
+      "label": "Chaos Token",
+      "description": "A coin that lands on its edge. A die that rolls a face that shouldn't exist. An event that was statistically impossible three seconds ago and is happening right now. Spend 1 Hope to flip the narrative on any single roll — yours or an enemy's.",
+      "category": "arcane",
+      "modifiers": []
+    },
+    {
+      "key": "masterDie",
+      "label": "Master Die",
+      "description": "The d20 that started everything. Slightly warm from the last time it was rolled, which was a very long time ago. Once per session, you may roll this die freely and add the result to any check you make. The world responds to it. It has been rolled here before.",
+      "category": "arcane",
+      "modifiers": []
+    },
+    {
+      "key": "grandmasterManual",
+      "label": "Grandmaster's Manual",
+      "description": "The rulebook — annotated, crossed out, rewritten in margins, rewritten again in different handwriting. Some pages burn when other people try to read them. Some pages were blank until you opened it just now. Once per session, declare a rule about the world. It is true until the next session.",
+      "category": "knowledge",
+      "modifiers": [{ "source": "item", "key": "grandmasterManual", "attackBonus": 1 }]
+    },
+    {
+      "key": "worldMap",
+      "label": "World Map",
+      "description": "Not geographically accurate. Accurate to something else — some truer cartography of the Die world that physical distance does not capture. It shows locations that do not exist yet. Gain +1 to Tactics and Lore checks in any region you have named on the map. You have named several regions already.",
+      "category": "knowledge",
+      "modifiers": [{ "source": "item", "key": "worldMap", "attackBonus": 1 }]
+    }
+  ],
+  "actions": [
+    {
+      "key": "meleeCombat",
+      "label": "Melee Attack",
+      "description": "Strike a target in close range with weapon or fist. Die offers no rules for tactics — only for what happens when you commit to violence.",
+      "allowedClasses": [],
+      "roll": {
+        "dice": "d10ClassDie",
+        "attribute": "body",
+        "skill": "fight",
+        "modifiers": [],
+        "successRule": "Roll 1d10 + Body + Fight vs DC 8. Beat the DC to land the blow; describe what you do."
+      }
+    },
+    {
+      "key": "socialInfluence",
+      "label": "Social Influence",
+      "description": "Persuade, intimidate, seduce, or inspire an NPC or another character. Die treats social actions as real and consequential — words reshape the world here.",
+      "allowedClasses": [],
+      "roll": {
+        "dice": "d10ClassDie",
+        "attribute": "influence",
+        "skill": "inspire",
+        "modifiers": [],
+        "successRule": "Roll 1d10 + Influence + Inspire vs DC 8. High rolls change minds; low rolls change relationships."
+      }
+    },
+    {
+      "key": "investigate",
+      "label": "Investigate",
+      "description": "Search a location, puzzle through a mystery, recall lore about the Die world, or analyse what you're seeing. The world holds more than it shows.",
+      "allowedClasses": [],
+      "roll": {
+        "dice": "d10ClassDie",
+        "attribute": "mind",
+        "skill": "lore",
+        "modifiers": [],
+        "successRule": "Roll 1d10 + Mind + Lore vs DC 8. Extra successes reveal deeper layers."
+      }
+    },
+    {
+      "key": "firstAid",
+      "label": "First Aid",
+      "description": "Treat a wound, stabilise a fallen ally, or provide emotional support that manifests as physical recovery. Heart matters here as much as knowledge.",
+      "allowedClasses": [],
+      "roll": {
+        "dice": "d10ClassDie",
+        "attribute": "heart",
+        "skill": "heal",
+        "modifiers": [],
+        "successRule": "Roll 1d10 + Heart + Heal vs DC 8. Success restores 1 Health. DC 12 for critical stabilisation."
+      }
+    },
+    {
+      "key": "resistEffect",
+      "label": "Resist Effect",
+      "description": "Push back against a magical compulsion, environmental hazard, psychological attack, or any force trying to make you do something you don't choose. Will is the last defence.",
+      "allowedClasses": [],
+      "roll": {
+        "dice": "d10ClassDie",
+        "attribute": "will",
+        "skill": "resist",
+        "modifiers": [],
+        "successRule": "Roll 1d10 + Will + Resist vs DC 10. Failure means the effect proceeds; partial success means you choose how."
+      }
+    },
+    {
+      "key": "griefStrike",
+      "label": "Grief Strike",
+      "description": "Channel your accumulated grief directly into a blow. The Grief Knight's most fundamental action: hurt something as badly as you've been hurt. Each point of Grief adds one d4 to this roll.",
+      "allowedClasses": ["griefKnight"],
+      "roll": {
+        "dice": "d4ClassDie",
+        "attribute": "body",
+        "skill": "fight",
+        "modifiers": [
+          { "source": "gameValue", "key": "grief", "dicePerPoint": 1, "isStressDice": true }
+        ],
+        "successRule": "Roll 1d4 + Body + Fight + Grief dice (one d4 per Grief) vs DC 8. Your grief makes you dangerous.",
+        "difficultyClass": 8
+      }
+    },
+    {
+      "key": "channelSorrow",
+      "label": "Channel Sorrow",
+      "description": "Turn suffering into fuel. You're still hurting — but now so is everything in your path. Spend a moment to convert Grief into raw combat momentum.",
+      "allowedClasses": ["griefKnight"],
+      "roll": {
+        "dice": "d4ClassDie",
+        "attribute": "will",
+        "skill": "endure",
+        "modifiers": [
+          { "source": "gameValue", "key": "grief", "dicePerPoint": 1, "isStressDice": true }
+        ],
+        "successRule": "Roll 1d4 + Will + Endure + Grief dice vs DC 10. On success, your grief becomes power: gain advantage on your next action.",
+        "difficultyClass": 10
+      }
+    },
+    {
+      "key": "wailOfLoss",
+      "label": "Wail of Loss",
+      "description": "Let the grief out. Not as therapy — as a weapon. The emotional force of your losses, externalised, is something that other people cannot stand against.",
+      "allowedClasses": ["griefKnight"],
+      "roll": {
+        "dice": "d4ClassDie",
+        "attribute": "heart",
+        "skill": "empathize",
+        "modifiers": [
+          { "source": "gameValue", "key": "grief", "dicePerPoint": 1, "isStressDice": true }
+        ],
+        "successRule": "Roll 1d4 + Heart + Empathize + Grief dice vs DC 12. Target must overcome your expressed grief or falter — unable to act against you this round.",
+        "difficultyClass": 12
+      }
+    },
+    {
+      "key": "invokeFallenGod",
+      "label": "Invoke Fallen God",
+      "description": "Speak the name of one of the Fallen Gods of Die and call on their power. You know these names. They know yours. Each invocation is a bargain. Spend 1 Hope.",
+      "allowedClasses": ["godbinder"],
+      "roll": {
+        "dice": "d6ClassDie",
+        "attribute": "heart",
+        "skill": "commune",
+        "modifiers": [],
+        "successRule": "Roll 1d6 + Heart + Commune vs DC 10. Spend 1 Hope. On success, channel the god's domain for one scene — but they will want something in return.",
+        "difficultyClass": 10
+      }
+    },
+    {
+      "key": "bindingWords",
+      "label": "Binding Words",
+      "description": "Speak the words that bind. Forge an unbreakable oath between two entities — including yourself. The Godbinder knows these words because they come from something older than language.",
+      "allowedClasses": ["godbinder"],
+      "roll": {
+        "dice": "d6ClassDie",
+        "attribute": "mind",
+        "skill": "lore",
+        "modifiers": [],
+        "successRule": "Roll 1d6 + Mind + Lore vs DC 12. On success, the binding holds — both parties are compelled to honour it. Violation causes harm.",
+        "difficultyClass": 12
+      }
+    },
+    {
+      "key": "godlyFavour",
+      "label": "Godly Favour",
+      "description": "Ask a Fallen God for a boon directly. Not a general invocation — a specific request. The God will answer specifically. The cost will be specific. They are very interested in specifics.",
+      "allowedClasses": ["godbinder"],
+      "roll": {
+        "dice": "d6ClassDie",
+        "attribute": "heart",
+        "skill": "commune",
+        "modifiers": [],
+        "successRule": "Roll 1d6 + Heart + Commune vs DC 10. Spend 1 Hope. The god grants the boon — but names their price. You may decline; the god remembers.",
+        "difficultyClass": 10
+      }
+    },
+    {
+      "key": "rejectReality",
+      "label": "Reject Reality",
+      "description": "This is not real. You won't accept the outcome. The Neo's most powerful ability: once per scene, when something happens that you refuse to believe, roll to make it not have happened.",
+      "allowedClasses": ["neo"],
+      "roll": {
+        "dice": "d8ClassDie",
+        "attribute": "will",
+        "skill": "resist",
+        "modifiers": [],
+        "successRule": "Roll 1d8 + Will + Resist vs DC 12. On success, negate one event or outcome from this scene. The world adjusts awkwardly around the gap you've left.",
+        "difficultyClass": 12
+      }
+    },
+    {
+      "key": "codeAnalysis",
+      "label": "Code Analysis",
+      "description": "Examine the world's internal logic. Find the seams. The Die world runs on rules, and the Neo can read them. Reveal a hidden mechanic, a vulnerability, or an inconsistency you can exploit.",
+      "allowedClasses": ["neo"],
+      "roll": {
+        "dice": "d8ClassDie",
+        "attribute": "mind",
+        "skill": "lore",
+        "modifiers": [],
+        "successRule": "Roll 1d8 + Mind + Lore vs DC 10. Reveal a rule, exploit, or flaw in the current situation's logic that you can leverage.",
+        "difficultyClass": 10
+      }
+    },
+    {
+      "key": "refusal",
+      "label": "Refusal",
+      "description": "Simply refuse to be affected. Not resistance — something more absolute. You have decided this effect does not apply to you, and Die has learned to take your decisions seriously.",
+      "allowedClasses": ["neo"],
+      "roll": {
+        "dice": "d8ClassDie",
+        "attribute": "will",
+        "skill": "focus",
+        "modifiers": [],
+        "successRule": "Roll 1d8 + Will + Focus vs DC 12. On success, a magical, compulsory, or reality-bending effect simply does not apply to you. You step outside it.",
+        "difficultyClass": 12
+      }
+    },
+    {
+      "key": "issueCommand",
+      "label": "Issue Command",
+      "description": "Speak. Give an order to an NPC. The Dictator's voice carries weight that does not require a threat — although threats help. Compliance comes first; resentment comes later.",
+      "allowedClasses": ["dictator"],
+      "roll": {
+        "dice": "d10ClassDie",
+        "attribute": "influence",
+        "skill": "command",
+        "modifiers": [],
+        "successRule": "Roll 1d10 + Influence + Command vs DC 8. Success: they comply. DC 12: they comply without resenting it. Failure: they refuse — and now they're watching you.",
+        "difficultyClass": 8
+      }
+    },
+    {
+      "key": "seizeDominion",
+      "label": "Seize Dominion",
+      "description": "Claim this place, situation, or relationship as yours. In Die, Dominion is real — it is a stat, it accumulates, and it costs your enemies dearly. Gain +1 Dominion on success.",
+      "allowedClasses": ["dictator"],
+      "roll": {
+        "dice": "d10ClassDie",
+        "attribute": "influence",
+        "skill": "tactics",
+        "modifiers": [],
+        "successRule": "Roll 1d10 + Influence + Tactics vs DC 10. On success, gain +1 Dominion in this area. NPCs under your Dominion are harder to turn against you.",
+        "difficultyClass": 10
+      }
+    },
+    {
+      "key": "absoluteCommand",
+      "label": "Absolute Command",
+      "description": "Push past persuasion into something that doesn't quite have a word. An instruction so absolute that refusal feels impossible. The Dictator's most extreme authority.",
+      "allowedClasses": ["dictator"],
+      "roll": {
+        "dice": "d10ClassDie",
+        "attribute": "influence",
+        "skill": "command",
+        "modifiers": [],
+        "successRule": "Roll 1d10 + Influence + Command vs DC 15. On success, the target cannot refuse — regardless of their motivation or allegiances. They will remember.",
+        "difficultyClass": 15
+      }
+    },
+    {
+      "key": "wildFortune",
+      "label": "Wild Fortune",
+      "description": "Roll and see what luck decides. The Fool does not guide fortune — the Fool stands in its path and lets it happen. The higher the roll, the more spectacular. The lower the roll, the more interesting.",
+      "allowedClasses": ["fool"],
+      "roll": {
+        "dice": "d12ClassDie",
+        "attribute": "influence",
+        "skill": "inspire",
+        "modifiers": [],
+        "successRule": "Roll 1d12 vs DC 8. The DM describes what fortune brings. A high roll is magnificent. A low roll is chaos. Either way, something unexpected happens.",
+        "difficultyClass": 8
+      }
+    },
+    {
+      "key": "luckGambit",
+      "label": "Luck Gambit",
+      "description": "Spend 1 Hope and intervene in the flow of probability. Take any single die result — yours or an enemy's — and roll it again. The Fool's luck does not guarantee improvement. It guarantees change.",
+      "allowedClasses": ["fool"],
+      "roll": {
+        "dice": "d12ClassDie",
+        "attribute": "body",
+        "skill": "move",
+        "modifiers": [],
+        "successRule": "Spend 1 Hope. Re-roll any single die result in the current scene. The new result stands, whatever it is. The Fool accepts all outcomes.",
+        "difficultyClass": 8
+      }
+    },
+    {
+      "key": "impossiblySurvive",
+      "label": "Impossibly Survive",
+      "description": "This should not work. You should not be alive. Spend 1 Hope and make the attempt anyway. The Fool has a relationship with impossibility that is more personal than statistical.",
+      "allowedClasses": ["fool"],
+      "roll": {
+        "dice": "d12ClassDie",
+        "attribute": "will",
+        "skill": "survive",
+        "modifiers": [],
+        "successRule": "Roll 1d12 + Will + Survive vs DC 12. Spend 1 Hope. On success, survive something that should have ended you — and describe how. The explanation should be implausible.",
+        "difficultyClass": 12
+      }
+    },
+    {
+      "key": "reshapeNarrative",
+      "label": "Reshape Narrative",
+      "description": "Declare a change to a fact about the world. Not a lie — a revision. The Grandmaster does not deceive; they edit. On success, the thing you said becomes true.",
+      "allowedClasses": ["grandmaster"],
+      "roll": {
+        "dice": "d20ClassDie",
+        "attribute": "mind",
+        "skill": "lore",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Mind + Lore vs DC 12. Declare a change to a current fact about the world. On success, Die accommodates your revision — often awkwardly.",
+        "difficultyClass": 12
+      }
+    },
+    {
+      "key": "ruleOfDie",
+      "label": "Rule of Die",
+      "description": "Declare a rule for this scene. All entities — including enemies, including yourself — must abide by it until the scene ends. The Grandmaster's words have force of law here.",
+      "allowedClasses": ["grandmaster"],
+      "roll": {
+        "dice": "d20ClassDie",
+        "attribute": "influence",
+        "skill": "command",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Influence + Command vs DC 15. Declare a rule. It applies to all entities in the scene. It cannot be immediately contradicted by another Rule of Die.",
+        "difficultyClass": 15
+      }
+    },
+    {
+      "key": "masterStroke",
+      "label": "Master Stroke",
+      "description": "You've been paying attention. You understand the structure of this situation better than the situation does. Describe the tactical shape of your masterstroke — then roll to enact it.",
+      "allowedClasses": ["grandmaster"],
+      "roll": {
+        "dice": "d20ClassDie",
+        "attribute": "mind",
+        "skill": "tactics",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Mind + Tactics vs DC 10. Describe a tactical plan that reshapes the encounter. On success, the plan unfolds as described. On failure, it unfolds — just not quite as planned.",
+        "difficultyClass": 10
+      }
+    }
+  ],
+  "npcTemplates": [],
+  "rollMechanics": {
+    "skillCheck": {
+      "diceKey": "d10ClassDie",
+      "poolMode": "attribute+skill",
+      "modifiers": [],
+      "successRule": "Roll 1d10 + attribute + skill vs Difficulty. DC 8 = easy, DC 10 = standard, DC 12 = hard, DC 15 = very hard.",
+      "difficultyClass": 10
+    },
+    "attributeCheck": {
+      "diceKey": "d10ClassDie",
+      "poolMode": "attribute",
+      "modifiers": [],
+      "successRule": "Roll 1d10 + attribute vs Difficulty. Used when no skill applies.",
+      "difficultyClass": 10
+    }
+  },
+  "theme": {
+    "bg": "#0d0011",
+    "surface": "#130019",
+    "panel": "#1a0020",
+    "panelAlt": "#200028",
+    "panelHover": "#290035",
+    "border": "#420058",
+    "borderStrong": "#780098",
+    "ink": "#ead0ff",
+    "inkBright": "#f6e8ff",
+    "muted": "#7840a0",
+    "mutedLight": "#a868cc",
+    "accent": "#dc28cc",
+    "accentDark": "#b800a8",
+    "accentDim": "rgba(220, 40, 204, 0.14)",
+    "secondary": "#8844e0",
+    "secondaryDim": "rgba(136, 68, 224, 0.14)",
+    "danger": "#d01860",
+    "dangerDim": "rgba(208, 24, 96, 0.14)",
+    "success": "#18cc80",
+    "successDim": "rgba(24, 204, 128, 0.14)",
+    "warn": "#d88020",
+    "warnDim": "rgba(216, 128, 32, 0.14)",
+    "fontFamily": "'Palatino Linotype', 'Palatino', 'Book Antiqua', Georgia, serif"
+  }
+}

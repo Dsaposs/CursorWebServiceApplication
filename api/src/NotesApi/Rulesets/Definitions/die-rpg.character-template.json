@@ -1,0 +1,32 @@
+{
+  "attributes": {
+    "body": 2,
+    "mind": 2,
+    "heart": 2,
+    "will": 2,
+    "influence": 2
+  },
+  "skills": {
+    "fight": 0,
+    "endure": 0,
+    "move": 0,
+    "lore": 0,
+    "tactics": 0,
+    "craft": 0,
+    "empathize": 0,
+    "heal": 0,
+    "commune": 0,
+    "resist": 0,
+    "survive": 0,
+    "focus": 0,
+    "command": 0,
+    "deceive": 0,
+    "inspire": 0
+  },
+  "gameValues": {
+    "grief": 0,
+    "hope": 1,
+    "dominion": 0
+  },
+  "experience": 0
+}

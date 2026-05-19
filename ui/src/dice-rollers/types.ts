@@ -33,7 +33,22 @@ export interface D20CheckRollConfig {
   attackBonus?: number;
 }
 
-export type DiceRollConfig = D6PoolRollConfig | D20CheckRollConfig;
+/** Single class die + flat stat modifier + optional bonus d4s (e.g. grief dice). Used by DIE RPG. */
+export interface DClassCheckRollConfig {
+  kind: 'd-class-check';
+  /** Sides of the class die (4, 6, 8, 10, 12, or 20). */
+  sides: number;
+  /** Combined attribute + skill value added flat to the roll. */
+  modifier: number;
+  /** Extra d4s rolled and summed on top (e.g. Grief Knight's grief dice). */
+  bonusDiceCount: number;
+  /** Display label for the bonus dice (e.g. "Grief"). */
+  bonusDiceLabel: string;
+  /** Target number to meet or beat (0 = no fixed DC, DM decides). */
+  difficultyClass: number;
+}
+
+export type DiceRollConfig = D6PoolRollConfig | D20CheckRollConfig | DClassCheckRollConfig;
 
 export interface DiceRollContext {
   rollerKey: string;

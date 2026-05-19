@@ -8,6 +8,7 @@ public class RulesetDefinitionValidator
     {
         "d6-pool",
         "d20-check",
+        "d-class-check",
     };
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)

@@ -7,6 +7,7 @@ public static class RulesetSeedCatalog
     [
         "alien-rpg",
         "dnd-5e",
+        "die-rpg",
         "pathfinder-2e",
     ];
 

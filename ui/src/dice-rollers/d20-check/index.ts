@@ -1,86 +1,32 @@
 import type { BuildRollContextParams, DiceRollerDefinition, ParsedPlayerRoll } from '~/dice-rollers/types';
 import {
-  describeRulesetAction,
-  findRulesetAction,
-  findRulesetAttribute,
-  findRulesetSkill,
-} from '~/utils/rulesets';
-import { resolveEffectiveActionRoll } from '~/utils/items';
+  buildActionSingleDie,
+  buildAttributeSingleDie,
+  buildSkillSingleDie,
+} from '~/dice-rollers/shared/singleDieBuilder';
 import D20CheckRoller from '~/dice-rollers/d20-check/D20CheckRoller.vue';
 
-function parseSides(notation: string): number {
-  const match = notation.trim().match(/(\d+)d(\d+)/i);
-  return match ? parseInt(match[2], 10) : 20;
-}
-
-function resolveDiceSides(definition: BuildRollContextParams['definition'], diceKey: string): number {
-  const entry = definition.dice.find(d => d.key === diceKey);
-  return entry ? parseSides(entry.notation) : 20;
-}
-
 function buildContext(params: BuildRollContextParams) {
-  const { definition, mode, actionKey, skillKey, attributeKey } = params;
+  const { mode } = params;
 
-  if (mode === 'action' && actionKey) {
-    const action = findRulesetAction(definition, actionKey);
-    const effective = resolveEffectiveActionRoll(definition, action);
-    if (!action || !effective) return null;
-    const detail = describeRulesetAction(action, definition);
-    return {
-      rollerKey: 'd20-check',
-      label: action.label,
-      poolBreakdown: [
-        `${detail.attribute} + ${detail.skill}`,
-        detail.dice,
-        ...(detail.itemLabel ? [`Item: ${detail.itemLabel}`] : []),
-        ...(effective.itemAttackBonus ? [`Item bonus +${effective.itemAttackBonus}`] : []),
-      ],
-      successRule: effective.roll.successRule,
-      config: {
-        kind: 'd20-check' as const,
-        sides: resolveDiceSides(definition, effective.roll.dice),
-        successRule: effective.roll.successRule,
-        attackBonus: effective.itemAttackBonus,
-      },
-    };
-  }
+  let parts = null;
+  if (mode === 'action') parts = buildActionSingleDie(params);
+  else if (mode === 'skill') parts = buildSkillSingleDie(params);
+  else if (mode === 'attribute') parts = buildAttributeSingleDie(params);
+  if (!parts) return null;
 
-  if (mode === 'skill' && skillKey) {
-    const skill = findRulesetSkill(definition, skillKey);
-    if (!skill) return null;
-    const attr = findRulesetAttribute(definition, skill.attribute);
-    const diceKey = definition.rollMechanics?.skillCheck?.diceKey ?? definition.dice[0]?.key ?? 'd20';
-    return {
-      rollerKey: 'd20-check',
-      label: `${skill.label} Check`,
-      poolBreakdown: [`${attr?.label ?? skill.attribute} + ${skill.label}`],
-      successRule: definition.rollMechanics?.skillCheck?.successRule,
-      config: {
-        kind: 'd20-check' as const,
-        sides: resolveDiceSides(definition, diceKey),
-        successRule: definition.rollMechanics?.skillCheck?.successRule,
-      },
-    };
-  }
-
-  if (mode === 'attribute' && attributeKey) {
-    const attr = findRulesetAttribute(definition, attributeKey);
-    if (!attr) return null;
-    const diceKey = definition.rollMechanics?.attributeCheck?.diceKey ?? definition.dice[0]?.key ?? 'd20';
-    return {
-      rollerKey: 'd20-check',
-      label: `${attr.label} Check`,
-      poolBreakdown: [attr.label],
-      successRule: definition.rollMechanics?.attributeCheck?.successRule,
-      config: {
-        kind: 'd20-check' as const,
-        sides: resolveDiceSides(definition, diceKey),
-        successRule: definition.rollMechanics?.attributeCheck?.successRule,
-      },
-    };
-  }
-
-  return null;
+  return {
+    rollerKey: 'd20-check',
+    label: parts.label,
+    poolBreakdown: parts.poolBreakdown,
+    successRule: parts.successRule,
+    config: {
+      kind: 'd20-check' as const,
+      sides: parts.sides,
+      successRule: parts.successRule,
+      attackBonus: parts.itemAttackBonus,
+    },
+  };
 }
 
 function parsePlayerRoll(rollLine: string): ParsedPlayerRoll {

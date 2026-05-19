@@ -8,5 +8,10 @@
     "key": "d20-check",
     "label": "D20 Check",
     "description": "Roll a single die (typically d20) and compare the total to a DC or AC."
+  },
+  {
+    "key": "d-class-check",
+    "label": "Class Die Check",
+    "description": "Roll one class die (d4–d20 depending on the character's class), add a flat attribute+skill modifier, and optionally roll bonus d4s (e.g. grief dice). Compare the total to a difficulty class."
   }
 ]
