@@ -219,11 +219,8 @@ function signOut() {
     <!-- Topbar -->
     <header class="topbar">
       <div class="topbar-brand">
-        <span style="font-size: 1.1rem;" aria-hidden="true">⚔️</span>
-        <div>
-          <strong>TTRPG Table</strong>
-          <div class="topbar-sub">{{ email }}</div>
-        </div>
+        <span class="topbar-wordmark">TTRPG TABLE</span>
+        <div class="topbar-sub">{{ email }}</div>
       </div>
       <div class="topbar-actions">
         <NuxtLink class="btn ghost sm" to="/rulesets">Rulesets</NuxtLink>
@@ -307,18 +304,34 @@ function signOut() {
           </div>
         </div>
 
+        <!-- Stats strip -->
+        <div class="stats-strip">
+          <div class="stats-strip-item">
+            <span class="stats-strip-value">{{ selectedGame.characters.length }}</span>
+            <span class="stats-strip-label">Players</span>
+          </div>
+          <div class="stats-strip-item">
+            <span class="stats-strip-value">{{ selectedGame.sessions.length }}</span>
+            <span class="stats-strip-label">Sessions</span>
+          </div>
+          <div class="stats-strip-item">
+            <span class="stats-strip-value">{{ selectedGame.npcsAndMonsters.length }}</span>
+            <span class="stats-strip-label">NPCs</span>
+          </div>
+        </div>
+
         <!-- Tabs -->
-        <div class="tabs mb-2" style="margin-bottom: 1rem;">
-          <button class="btn ghost" :class="{ active: activeTab === 'overview' }" type="button" @click="activeTab = 'overview'">Overview</button>
-          <button class="btn ghost" :class="{ active: activeTab === 'players' }" type="button" @click="activeTab = 'players'">
+        <div class="pill-tabs">
+          <button class="pill-tab" :class="{ active: activeTab === 'overview' }" type="button" @click="activeTab = 'overview'">Overview</button>
+          <button class="pill-tab" :class="{ active: activeTab === 'players' }" type="button" @click="activeTab = 'players'">
             Players
             <span v-if="selectedGame.characters.length" class="badge active" style="font-size: 0.65rem; padding: 0.1rem 0.4rem;">{{ selectedGame.characters.length }}</span>
           </button>
-          <button class="btn ghost" :class="{ active: activeTab === 'npcs' }" type="button" @click="activeTab = 'npcs'">
+          <button class="pill-tab" :class="{ active: activeTab === 'npcs' }" type="button" @click="activeTab = 'npcs'">
             NPCs / Monsters
             <span v-if="selectedGame.npcsAndMonsters.length" class="badge active" style="font-size: 0.65rem; padding: 0.1rem 0.4rem;">{{ selectedGame.npcsAndMonsters.length }}</span>
           </button>
-          <button class="btn ghost" :class="{ active: activeTab === 'notes' }" type="button" @click="activeTab = 'notes'">
+          <button class="pill-tab" :class="{ active: activeTab === 'notes' }" type="button" @click="activeTab = 'notes'">
             Session Notes
           </button>
         </div>

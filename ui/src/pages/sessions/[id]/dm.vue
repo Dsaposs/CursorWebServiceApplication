@@ -23,6 +23,8 @@ import {
   parseActorClassKey,
   parseRulesetDefinition,
 } from '~/utils/rulesets';
+import { useRulesetTheme } from '~/composables/useRulesetTheme';
+import { useThemePreference } from '~/composables/useThemePreference';
 
 const route = useRoute();
 const { api, token, loadSession, clearSession } = useApi();
@@ -67,6 +69,9 @@ async function loadState() {
 }
 
 const { state, pollingError, fatalError, connectionStatus, refresh, start } = useSessionPolling(loadState, 3000);
+const { enabled: rulesetThemeEnabled, toggle: toggleRulesetTheme } = useThemePreference();
+const _rulesetThemeStyle = useRulesetTheme(ruleset);
+const rulesetThemeStyle = computed(() => rulesetThemeEnabled.value ? _rulesetThemeStyle.value : {});
 
 watch(
   () => state.value?.isActive,
@@ -625,11 +630,11 @@ const npcRollContext = computed(() => {
 </script>
 
 <template>
-  <section class="app-shell dm-app-shell">
+  <section class="app-shell dm-app-shell" :style="rulesetThemeStyle">
     <!-- Topbar -->
-    <header class="topbar">
+    <header class="topbar" :class="{ 'combat-mode': isCombat }">
       <div class="topbar-brand">
-        <span aria-hidden="true">🎲</span>
+        <span class="topbar-wordmark">TTRPG TABLE</span>
         <div>
           <strong>DM Screen</strong>
           <div class="topbar-sub">{{ game?.name }}</div>
@@ -644,6 +649,17 @@ const npcRollContext = computed(() => {
           :is-active="state.isActive"
         />
         <span class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
+        <button
+          class="theme-toggle"
+          :class="{ on: rulesetThemeEnabled }"
+          type="button"
+          :aria-pressed="rulesetThemeEnabled"
+          :title="rulesetThemeEnabled ? 'Ruleset theme: on' : 'Ruleset theme: off'"
+          @click="toggleRulesetTheme"
+        >
+          <span class="theme-toggle-track"><span class="theme-toggle-thumb" /></span>
+          <span class="theme-toggle-label">Theme</span>
+        </button>
       </div>
       <div class="topbar-actions" v-if="state">
         <NuxtLink class="btn ghost sm" to="/games">← Games</NuxtLink>

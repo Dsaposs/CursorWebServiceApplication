@@ -343,5 +343,30 @@
       "successRule": "Roll 1d20 + modifiers vs DC. Default DC 15 if not specified.",
       "difficultyClass": 15
     }
+  },
+  "theme": {
+    "bg": "#110f09",
+    "surface": "#1b1810",
+    "panel": "#231f15",
+    "panelAlt": "#29241b",
+    "panelHover": "#302a21",
+    "border": "#3e3424",
+    "borderStrong": "#5e4e30",
+    "ink": "#e8dcbc",
+    "inkBright": "#f6ecd0",
+    "muted": "#7a6840",
+    "mutedLight": "#a08c58",
+    "accent": "#d4a020",
+    "accentDark": "#b88018",
+    "accentDim": "rgba(212, 160, 32, 0.12)",
+    "secondary": "#7060b8",
+    "secondaryDim": "rgba(112, 96, 184, 0.12)",
+    "danger": "#c01e1e",
+    "dangerDim": "rgba(192, 30, 30, 0.12)",
+    "success": "#3e7834",
+    "successDim": "rgba(62, 120, 52, 0.12)",
+    "warn": "#bf6e18",
+    "warnDim": "rgba(191, 110, 24, 0.12)",
+    "fontFamily": "'Palatino Linotype', 'Palatino', 'Book Antiqua', Georgia, serif"
   }
 }

@@ -11,6 +11,19 @@ const props = defineProps<{
 const { api } = useApi();
 const { error: toastError } = useToast();
 
+const storageKey = computed(() => `session-notes-open-${props.mode}`);
+const isOpen = ref(false);
+
+onMounted(() => {
+  const stored = localStorage.getItem(storageKey.value);
+  isOpen.value = stored === 'true';
+});
+
+function onToggle(event: Event) {
+  isOpen.value = (event.target as HTMLDetailsElement).open;
+  localStorage.setItem(storageKey.value, String(isOpen.value));
+}
+
 const context = ref<SessionNotesContextResponse | null>(null);
 const draftContent = ref('');
 const isLoading = ref(false);
@@ -111,7 +124,7 @@ watch(
 </script>
 
 <template>
-  <details class="panel session-notes-panel session-notes-collapsible" open>
+  <details class="panel session-notes-panel session-notes-collapsible" :open="isOpen" @toggle="onToggle">
     <summary class="session-notes-summary">
       <div class="session-notes-summary-text">
         <h2>Session Notes</h2>

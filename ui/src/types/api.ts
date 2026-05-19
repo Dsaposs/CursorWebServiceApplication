@@ -27,6 +27,32 @@ export interface GameJoinOptionsResponse {
   ruleset: RulesetDetailResponse;
 }
 
+export interface RulesetTheme {
+  bg?: string;
+  surface?: string;
+  panel?: string;
+  panelAlt?: string;
+  panelHover?: string;
+  border?: string;
+  borderStrong?: string;
+  ink?: string;
+  inkBright?: string;
+  muted?: string;
+  mutedLight?: string;
+  accent?: string;
+  accentDark?: string;
+  accentDim?: string;
+  secondary?: string;
+  secondaryDim?: string;
+  danger?: string;
+  dangerDim?: string;
+  success?: string;
+  successDim?: string;
+  warn?: string;
+  warnDim?: string;
+  fontFamily?: string;
+}
+
 export interface RulesetDefinition {
   schemaVersion: number;
   code: string;
@@ -42,6 +68,8 @@ export interface RulesetDefinition {
   npcTemplates: Array<Record<string, unknown>>;
   /** Ruleset-specific mechanics for skill and attribute checks. */
   rollMechanics?: RulesetRollMechanics;
+  /** Visual theme tokens applied to session screens for this ruleset. */
+  theme?: RulesetTheme;
 }
 
 export interface RulesetRollMechanics {

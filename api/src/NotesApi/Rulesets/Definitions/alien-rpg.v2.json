@@ -403,5 +403,30 @@
       ],
       "successRule": "Each 6 is a success. Used when no skill applies directly."
     }
+  },
+  "theme": {
+    "bg": "#020a02",
+    "surface": "#051005",
+    "panel": "#081508",
+    "panelAlt": "#0c1c0c",
+    "panelHover": "#112211",
+    "border": "#1c3c1c",
+    "borderStrong": "#306030",
+    "ink": "#6ecc6e",
+    "inkBright": "#9be89b",
+    "muted": "#386438",
+    "mutedLight": "#508050",
+    "accent": "#00de46",
+    "accentDark": "#00b838",
+    "accentDim": "rgba(0, 222, 70, 0.12)",
+    "secondary": "#00b09a",
+    "secondaryDim": "rgba(0, 176, 154, 0.12)",
+    "danger": "#d61800",
+    "dangerDim": "rgba(214, 24, 0, 0.12)",
+    "success": "#00de46",
+    "successDim": "rgba(0, 222, 70, 0.12)",
+    "warn": "#c8a000",
+    "warnDim": "rgba(200, 160, 0, 0.12)",
+    "fontFamily": "'Courier New', 'Courier', 'Lucida Console', monospace"
   }
 }

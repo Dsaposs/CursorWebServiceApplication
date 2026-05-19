@@ -29,7 +29,6 @@ const hasGames = computed(() => props.games.length > 0);
     <ul class="game-list">
       <li v-if="!hasGames && !isLoading">
         <div class="empty-state" style="padding: 1.5rem 0.5rem;">
-          <div class="empty-state-icon" aria-hidden="true">🎲</div>
           <p class="text-xs">No games yet. Create your first!</p>
         </div>
       </li>
@@ -41,9 +40,22 @@ const hasGames = computed(() => props.games.length > 0);
           @click="emit('open', game.id)"
         >
           <strong>{{ game.name }}</strong>
-          <span>{{ game.rulesetName }}</span>
+          <div class="game-list-item-meta">
+            <span class="badge" style="font-size: 0.65rem; padding: 0.1rem 0.5rem;">{{ game.rulesetName }}</span>
+            <span v-if="game.sessions.some(s => s.isActive)" class="badge exploration" style="font-size: 0.65rem; padding: 0.1rem 0.5rem;">Live</span>
+          </div>
         </button>
       </li>
     </ul>
   </aside>
 </template>
+
+<style scoped>
+.game-list-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+  flex-wrap: wrap;
+}
+</style>

@@ -7,6 +7,8 @@ import { parseInventory } from '~/utils/inventory';
 import { resolveEffectiveActionRoll } from '~/utils/items';
 import { findRulesetAction, parseRulesetDefinition } from '~/utils/rulesets';
 import { useDiceRollContext } from '~/composables/useDiceRollContext';
+import { useRulesetTheme } from '~/composables/useRulesetTheme';
+import { useThemePreference } from '~/composables/useThemePreference';
 import PlayerRollPromptOverlay from '~/components/PlayerRollPromptOverlay.vue';
 
 const route = useRoute();
@@ -16,7 +18,7 @@ const { error: toastError, success: toastSuccess } = useToast();
 
 const playerToken = ref<string | null>(null);
 const ruleset = ref<RulesetResponse | null>(null);
-const showCharacterSheet = ref(true);
+const showCharacterSheet = ref(false);
 const actionTargetPickerRef = ref<{ isValid: () => boolean; reset: () => void; toSubmitFields: () => { targetCharacterId?: string; targetNpcId?: string; targetName?: string } } | null>(null);
 const description = ref('');
 const rollResult = ref('');
@@ -37,6 +39,9 @@ async function loadState() {
 }
 
 const { state, pollingError, fatalError, connectionStatus, refresh, start } = useSessionPolling(loadState, 3000);
+const { enabled: rulesetThemeEnabled, toggle: toggleRulesetTheme } = useThemePreference();
+const _rulesetThemeStyle = useRulesetTheme(ruleset);
+const rulesetThemeStyle = computed(() => rulesetThemeEnabled.value ? _rulesetThemeStyle.value : {});
 
 function playerSummaryLocation(session: SessionStateResponse) {
   return {
@@ -298,11 +303,11 @@ async function submitAction() {
     @submit="submitRollPrompt"
   />
 
-  <section class="app-shell">
+  <section class="app-shell" :style="rulesetThemeStyle">
     <!-- Topbar -->
-    <header class="topbar">
+    <header class="topbar" :class="{ 'combat-mode': isCombat }">
       <div class="topbar-brand">
-        <span aria-hidden="true">🧙</span>
+        <span class="topbar-wordmark">TTRPG TABLE</span>
         <div>
           <strong>{{ state?.character?.name || 'Player' }}</strong>
           <div class="topbar-sub">{{ state?.game.name }}</div>
@@ -317,6 +322,17 @@ async function submitAction() {
           :is-active="state.isActive"
         />
         <span class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
+        <button
+          class="theme-toggle"
+          :class="{ on: rulesetThemeEnabled }"
+          type="button"
+          :aria-pressed="rulesetThemeEnabled"
+          :title="rulesetThemeEnabled ? 'Ruleset theme: on' : 'Ruleset theme: off'"
+          @click="toggleRulesetTheme"
+        >
+          <span class="theme-toggle-track"><span class="theme-toggle-thumb" /></span>
+          <span class="theme-toggle-label">Theme</span>
+        </button>
       </div>
     </header>
 
@@ -335,58 +351,12 @@ async function submitAction() {
 
       <div class="session-dashboard-grid">
         <div class="session-primary-column">
-      <!-- Character card -->
-      <div class="panel">
-        <div class="flex justify-between items-center" style="margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-          <div>
-            <h1 style="margin-bottom: 0.15rem;">{{ state.character?.name }}</h1>
-            <p style="margin: 0; font-size: 0.85rem;">{{ state.game.rulesetName }}</p>
-          </div>
-          <div class="btn-row">
-            <div v-if="isCombat && currentTurn">
-              <span v-if="isMyTurn" class="badge active" style="font-size: 0.85rem; padding: 0.35rem 0.8rem;">
-                <span aria-hidden="true">⚔️</span> Your Turn!
-              </span>
-              <span v-else class="badge" style="background: var(--panel-alt); color: var(--muted-light); border: 1px solid var(--border);">
-                {{ currentTurn.combatantName }}'s turn
-              </span>
-            </div>
-            <button
-              class="btn ghost sm"
-              type="button"
-              :aria-expanded="showCharacterSheet"
-              @click="showCharacterSheet = !showCharacterSheet"
-            >
-              {{ showCharacterSheet ? 'Hide Sheet' : 'Show Sheet' }}
-            </button>
-          </div>
-        </div>
-
-        <CharacterSheet
-          v-if="state.character && showCharacterSheet"
-          :character="state.character"
-          :ruleset-definition="rulesetDefinition"
-        />
+      <!-- Your turn banner (combat only, shown when it is this player's turn) -->
+      <div v-if="isCombat && isMyTurn" class="alert info" role="status" style="margin: 0;">
+        <strong>Your Turn</strong> — submit your action before the DM advances the round.
       </div>
 
-      <!-- Initiative tracker (combat only) -->
-      <div v-if="isCombat && state.initiative.length" class="panel">
-        <h2>Initiative Order</h2>
-        <ul class="initiative-list">
-          <li
-            v-for="(entry, idx) in state.initiative"
-            :key="entry.id"
-            class="initiative-item"
-            :class="{ 'current-turn': entry.isCurrentTurn }"
-          >
-            <span class="initiative-order">{{ idx + 1 }}</span>
-            <span class="initiative-name">{{ entry.combatantName }}</span>
-            <span v-if="entry.combatantId === state.character?.id" class="badge active" style="font-size: 0.65rem; padding: 0.1rem 0.4rem;">You</span>
-          </li>
-        </ul>
-      </div>
-
-      <!-- Submit action -->
+      <!-- Submit action — shown first so it is always accessible -->
       <div class="panel">
         <div class="panel-title">
           <div>
@@ -557,6 +527,54 @@ async function submitAction() {
             </div>
           </article>
         </div>
+      </div>
+
+      <!-- Initiative tracker (combat only) -->
+      <div v-if="isCombat && state.initiative.length" class="panel">
+        <h2>Initiative Order</h2>
+        <ul class="initiative-list">
+          <li
+            v-for="(entry, idx) in state.initiative"
+            :key="entry.id"
+            class="initiative-item"
+            :class="{ 'current-turn': entry.isCurrentTurn }"
+          >
+            <span class="initiative-order">{{ idx + 1 }}</span>
+            <span class="initiative-name">{{ entry.combatantName }}</span>
+            <span v-if="entry.combatantId === state.character?.id" class="badge active" style="font-size: 0.65rem; padding: 0.1rem 0.4rem;">You</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Character sheet — collapsed by default; expand during session for reference -->
+      <div class="panel">
+        <div class="flex justify-between items-center" style="margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h2 style="margin: 0;">{{ state.character?.name }}</h2>
+            <p style="margin: 0; font-size: 0.82rem;">{{ state.game.rulesetName }}</p>
+          </div>
+          <div class="btn-row">
+            <div v-if="isCombat && currentTurn && !isMyTurn">
+              <span class="badge" style="background: var(--panel-alt); color: var(--muted-light); border: 1px solid var(--border);">
+                {{ currentTurn.combatantName }}'s turn
+              </span>
+            </div>
+            <button
+              class="btn ghost sm"
+              type="button"
+              :aria-expanded="showCharacterSheet"
+              @click="showCharacterSheet = !showCharacterSheet"
+            >
+              {{ showCharacterSheet ? 'Hide Sheet' : 'Show Sheet' }}
+            </button>
+          </div>
+        </div>
+
+        <CharacterSheet
+          v-if="state.character && showCharacterSheet"
+          :character="state.character"
+          :ruleset-definition="rulesetDefinition"
+        />
       </div>
 
         </div>
