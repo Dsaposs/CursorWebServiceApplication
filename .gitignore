@@ -18,3 +18,6 @@ node_modules/
 dist/
 coverage/
 *.log
+
+## Local secrets — never commit real values
+.env

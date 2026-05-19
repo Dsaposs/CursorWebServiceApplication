@@ -1,0 +1,38 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ttrpg-api
+    ports:
+      - "5294:8080"
+    volumes:
+      - ttrpg-data:/data
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ConnectionStrings__DefaultConnection: "Data Source=/data/ttrpg.db"
+      Jwt__Issuer: "TtrpgApi"
+      Jwt__Audience: "TtrpgApi"
+      Jwt__Key: "${TTRPG_JWT_KEY}"
+      Seed__AdminPassword: "${TTRPG_SEED_ADMIN_PASSWORD}"
+      Cors__AllowedOrigins__0: "http://localhost:3000"
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ./ui/src
+      dockerfile: Dockerfile
+    container_name: ttrpg-ui
+    ports:
+      - "3000:3000"
+    environment:
+      NUXT_API_BASE_URL: "http://ttrpg-api:8080"
+      HOST: "0.0.0.0"
+      PORT: "3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  ttrpg-data:

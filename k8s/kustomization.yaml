@@ -2,7 +2,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
-  - secret.yaml
+  # Production: sealed-secret.yaml (encrypted, safe to commit).
+  # Generate it with: .\scripts\seal-secrets.ps1
+  # Requires the Sealed Secrets controller in the cluster — see sealed-secret.yaml header.
+  - sealed-secret.yaml
+  # Local dev only: kubectl apply -f k8s/secret.yaml (do not use in production).
   - pvc.yaml
   - deployment.yaml
   - service.yaml
