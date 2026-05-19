@@ -35,21 +35,27 @@
         "label": "Fighter",
         "description": "A master of martial combat, skilled with a variety of weapons and armor.",
         "availableSkills": ["athletics", "acrobatics", "perception"],
-        "startingSkillPoints": 2
+        "startingSkillPoints": 2,
+        "maxSkillRank": 1,
+        "startingItemOptions": ["longsword", "shortsword"]
       },
       {
         "key": "rogue",
         "label": "Rogue",
         "description": "A scoundrel who uses stealth and trickery to overcome obstacles and enemies.",
         "availableSkills": ["acrobatics", "stealth", "deception", "perception"],
-        "startingSkillPoints": 2
+        "startingSkillPoints": 2,
+        "maxSkillRank": 1,
+        "startingItemOptions": ["shortsword", "dagger", "lightCrossbow"]
       },
       {
         "key": "wizard",
         "label": "Wizard",
         "description": "A scholarly magic-user capable of manipulating the structures of reality.",
         "availableSkills": ["arcana", "investigation", "insight"],
-        "startingSkillPoints": 2
+        "startingSkillPoints": 2,
+        "maxSkillRank": 1,
+        "startingItemOptions": ["arcaneFocus", "dagger"]
       }
     ],
     "skills": [
@@ -63,7 +69,146 @@
       { "key": "deception", "label": "Deception", "attribute": "charisma", "default": 0 }
     ]
   },
+  "items": [
+    {
+      "key": "longsword",
+      "label": "Longsword",
+      "description": "Versatile martial melee weapon.",
+      "category": "weapon",
+      "modifiers": [],
+      "attackRoll": {
+        "dice": "d20",
+        "attribute": "strength",
+        "skill": "athletics",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Strength modifier + proficiency vs target AC. Meet or beat AC to hit."
+      },
+      "damageRoll": {
+        "notation": "1d8",
+        "bonusAttribute": "strength",
+        "description": "Slashing damage on a hit."
+      }
+    },
+    {
+      "key": "shortsword",
+      "label": "Shortsword",
+      "description": "Light finesse weapon.",
+      "category": "weapon",
+      "modifiers": [],
+      "attackRoll": {
+        "dice": "d20",
+        "attribute": "dexterity",
+        "skill": "acrobatics",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Dexterity modifier + proficiency vs target AC."
+      },
+      "damageRoll": {
+        "notation": "1d6",
+        "bonusAttribute": "dexterity",
+        "description": "Piercing damage on a hit."
+      }
+    },
+    {
+      "key": "dagger",
+      "label": "Dagger",
+      "description": "Simple thrown or melee weapon.",
+      "category": "weapon",
+      "modifiers": [],
+      "attackRoll": {
+        "dice": "d20",
+        "attribute": "dexterity",
+        "skill": "acrobatics",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Dexterity modifier + proficiency vs target AC."
+      },
+      "damageRoll": {
+        "notation": "1d4",
+        "bonusAttribute": "dexterity",
+        "description": "Piercing damage on a hit."
+      }
+    },
+    {
+      "key": "lightCrossbow",
+      "label": "Light Crossbow",
+      "description": "Ranged weapon loaded with a bolt.",
+      "category": "weapon",
+      "modifiers": [],
+      "attackRoll": {
+        "dice": "d20",
+        "attribute": "dexterity",
+        "skill": "acrobatics",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Dexterity modifier + proficiency vs target AC."
+      },
+      "damageRoll": {
+        "notation": "1d8",
+        "bonusAttribute": "dexterity",
+        "description": "Piercing damage on a hit."
+      }
+    },
+    {
+      "key": "healingPotion",
+      "label": "Potion of Healing",
+      "description": "Magical red liquid that restores vitality.",
+      "category": "consumable",
+      "modifiers": [],
+      "damageRoll": {
+        "notation": "2d4",
+        "flatBonus": 2,
+        "description": "Restore hit points when consumed (not an attack)."
+      }
+    },
+    {
+      "key": "arcaneFocus",
+      "label": "Arcane Focus",
+      "description": "Crystal orb used to channel arcane spells.",
+      "category": "gear",
+      "modifiers": [{ "source": "item", "key": "arcaneFocus", "attackBonus": 0 }]
+    }
+  ],
   "actions": [
+    {
+      "key": "longswordAttack",
+      "label": "Longsword Attack",
+      "description": "Attack with a longsword.",
+      "allowedClasses": [],
+      "requiredItemKey": "longsword",
+      "roll": {
+        "dice": "d20",
+        "attribute": "strength",
+        "skill": "athletics",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Strength modifier + proficiency vs target AC. Meet or beat AC to hit."
+      }
+    },
+    {
+      "key": "crossbowAttack",
+      "label": "Light Crossbow Attack",
+      "description": "Fire the light crossbow at a target.",
+      "allowedClasses": [],
+      "requiredItemKey": "lightCrossbow",
+      "roll": {
+        "dice": "d20",
+        "attribute": "dexterity",
+        "skill": "acrobatics",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Dexterity modifier + proficiency vs target AC."
+      }
+    },
+    {
+      "key": "drinkHealingPotion",
+      "label": "Drink Healing Potion",
+      "description": "Consume a potion of healing.",
+      "allowedClasses": [],
+      "requiredItemKey": "healingPotion",
+      "roll": {
+        "dice": "d20",
+        "attribute": "constitution",
+        "skill": "athletics",
+        "modifiers": [],
+        "successRule": "Restore 2d4 + 2 hit points."
+      }
+    },
     {
       "key": "greatWeaponAttack",
       "label": "Great Weapon Attack",

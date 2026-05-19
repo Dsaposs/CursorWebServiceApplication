@@ -104,6 +104,21 @@ public class SessionJoinController : ControllerBase
                 return BadRequest(new { errors = new[] { "Selected class is not available for this ruleset." } });
             }
 
+            CharacterCreation.BuildResult buildResult;
+            try
+            {
+                buildResult = CharacterCreation.Build(
+                    session.Game.Ruleset.DefinitionJson,
+                    session.Game.Ruleset.CharacterTemplateJson,
+                    classKey,
+                    request.SkillAllocations,
+                    request.StartingItemKey);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { errors = new[] { ex.Message } });
+            }
+
             character = new Character
             {
                 Id = Guid.NewGuid(),
@@ -113,10 +128,8 @@ public class SessionJoinController : ControllerBase
                 Health = 10,
                 MaxHealth = 10,
                 Armor = 0,
-                AttributesJson = "{}",
-                SkillsJson = "{}",
-                InventoryJson = "[]",
-                RulesetDataJson = RulesetCharacterBuilder.BuildRulesetDataJson(session.Game.Ruleset.CharacterTemplateJson, classKey),
+                InventoryJson = buildResult.InventoryJson,
+                RulesetDataJson = buildResult.RulesetDataJson,
                 ClassKey = classKey,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -156,26 +169,17 @@ public class SessionJoinController : ControllerBase
         {
             ParticipantToken = participant.JoinToken,
             Character = ControllerHelpers.ToCharacterResponse(character),
-            Game = this.ToGameResponse(session.Game),
+            Game = this.ToGameResponse(
+                session.Game,
+                ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson),
+                playerView: true),
         });
     }
 
     [HttpGet("{joinCode}/state")]
     public async Task<ActionResult<SessionStateResponse>> GetState(string joinCode, int sinceSequence = 0)
     {
-        var session = await _db.GameSessions
-            .Include(s => s.Game).ThenInclude(g => g.Ruleset)
-            .Include(s => s.Game).ThenInclude(g => g.Characters)
-            .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
-            .Include(s => s.Game).ThenInclude(g => g.Sessions)
-            .Include(s => s.Actions).ThenInclude(a => a.Resolution)
-            .Include(s => s.Actions).ThenInclude(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
-            .Include(s => s.Actions).ThenInclude(a => a.CombatEncounter)
-            .Include(s => s.CombatEncounters)
-            .Include(s => s.InitiativeEntries)
-            .Include(s => s.SessionRollPrompts).ThenInclude(p => p.TargetCharacter)
-            .FirstOrDefaultAsync(s => s.JoinCode == joinCode && s.IsActive);
-
+        var session = await LoadSessionForPlayerAsync(joinCode, activeOnly: true);
         if (session is null)
         {
             return NotFound();
@@ -187,13 +191,74 @@ public class SessionJoinController : ControllerBase
             return Unauthorized(new { errors = new[] { "Join the session before reading player state." } });
         }
 
+        return Ok(ToPlayerSessionState(session, participant, sinceSequence));
+    }
+
+    [HttpGet("sessions/{sessionId:guid}/summary")]
+    public async Task<ActionResult<SessionStateResponse>> GetSessionSummary(Guid sessionId, int sinceSequence = 0)
+    {
+        var session = await LoadSessionForPlayerByIdAsync(sessionId);
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        var participant = await GetParticipantAsync(session.GameId);
+        if (participant is null)
+        {
+            return Unauthorized(new { errors = new[] { "Join the session before viewing the summary." } });
+        }
+
+        return Ok(ToPlayerSessionState(session, participant, sinceSequence));
+    }
+
+    private async Task<GameSession?> LoadSessionForPlayerAsync(string joinCode, bool activeOnly)
+    {
+        var query = _db.GameSessions
+            .Include(s => s.Game).ThenInclude(g => g.Ruleset)
+            .Include(s => s.Game).ThenInclude(g => g.Characters)
+            .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
+            .Include(s => s.Game).ThenInclude(g => g.Sessions)
+            .Include(s => s.Actions).ThenInclude(a => a.Resolution)
+            .Include(s => s.Actions).ThenInclude(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .Include(s => s.Actions).ThenInclude(a => a.CombatEncounter)
+            .Include(s => s.CombatEncounters)
+            .Include(s => s.InitiativeEntries)
+            .Include(s => s.SessionRollPrompts).ThenInclude(p => p.TargetCharacter)
+            .Where(s => s.JoinCode == joinCode);
+
+        if (activeOnly)
+        {
+            query = query.Where(s => s.IsActive);
+        }
+
+        return await query.FirstOrDefaultAsync();
+    }
+
+    private Task<GameSession?> LoadSessionForPlayerByIdAsync(Guid sessionId) =>
+        _db.GameSessions
+            .Include(s => s.Game).ThenInclude(g => g.Ruleset)
+            .Include(s => s.Game).ThenInclude(g => g.Characters)
+            .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
+            .Include(s => s.Game).ThenInclude(g => g.Sessions)
+            .Include(s => s.Actions).ThenInclude(a => a.Resolution)
+            .Include(s => s.Actions).ThenInclude(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .Include(s => s.Actions).ThenInclude(a => a.CombatEncounter)
+            .Include(s => s.CombatEncounters)
+            .Include(s => s.InitiativeEntries)
+            .Include(s => s.SessionRollPrompts).ThenInclude(p => p.TargetCharacter)
+            .FirstOrDefaultAsync(s => s.Id == sessionId);
+
+    private SessionStateResponse ToPlayerSessionState(GameSession session, GameParticipant participant, int sinceSequence)
+    {
         var summary = this.ToSessionSummaryResponse(session);
+        var npcVisibilities = ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson);
         var skillCheckActionIds = session.SessionRollPrompts
             .Where(p => p.ActionRequestId.HasValue)
             .Select(p => p.ActionRequestId!.Value)
             .ToHashSet();
 
-        return Ok(new SessionStateResponse
+        return new SessionStateResponse
         {
             Id = summary.Id,
             GameId = summary.GameId,
@@ -205,19 +270,20 @@ public class SessionJoinController : ControllerBase
             StartedAt = summary.StartedAt,
             EndedAt = summary.EndedAt,
             UpdatedAt = summary.UpdatedAt,
-            Game = this.ToGameResponse(
-                session.Game,
-                ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson),
-                playerView: true),
+            Game = this.ToGameResponse(session.Game, npcVisibilities, playerView: true),
             Character = ControllerHelpers.ToCharacterResponse(participant.Character),
             Actions = session.Actions
                 .Where(a => a.Sequence > sinceSequence)
                 .OrderBy(a => a.Sequence)
-                .Select(a => ControllerHelpers.ToActionResponse(a, skillCheckActionIds.Contains(a.Id))),
-            Initiative = session.InitiativeEntries.OrderBy(i => i.SortOrder).Select(ControllerHelpers.ToInitiativeResponse),
+                .Select(a => ControllerHelpers.ToActionResponse(
+                    a,
+                    skillCheckActionIds.Contains(a.Id),
+                    npcVisibilities,
+                    playerView: true)),
+            Initiative = ControllerHelpers.SelectInitiativeEntries(session, npcVisibilities, playerView: true),
             RollPrompts = ControllerHelpers.SelectRollPrompts(session, participant.CharacterId),
             CombatEncounters = ControllerHelpers.SelectCombatEncounters(session),
-        });
+        };
     }
 
     private async Task<GameParticipant?> GetParticipantAsync(Guid gameId)

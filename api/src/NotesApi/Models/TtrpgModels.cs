@@ -135,10 +135,6 @@ public class Character
 
     public int Armor { get; set; }
 
-    public string AttributesJson { get; set; } = "{}";
-
-    public string SkillsJson { get; set; } = "{}";
-
     public string InventoryJson { get; set; } = "[]";
 
     public string RulesetDataJson { get; set; } = "{}";
@@ -216,6 +212,37 @@ public class GameSession
     public ICollection<InitiativeEntry> InitiativeEntries { get; set; } = new List<InitiativeEntry>();
 
     public ICollection<SessionRollPrompt> SessionRollPrompts { get; set; } = new List<SessionRollPrompt>();
+
+    public ICollection<SessionNote> SessionNotes { get; set; } = new List<SessionNote>();
+}
+
+public class SessionNote
+{
+    public Guid Id { get; set; }
+
+    public Guid SessionId { get; set; }
+
+    public GameSession Session { get; set; } = null!;
+
+    /// <summary>Dm or Player — identifies which owner id field applies.</summary>
+    [Required, MaxLength(16)]
+    public string OwnerKind { get; set; } = SessionNoteOwnerKinds.Dm;
+
+    /// <summary>DM identity user id, or GameParticipant id for a player.</summary>
+    [Required, MaxLength(128)]
+    public string OwnerId { get; set; } = string.Empty;
+
+    public string Content { get; set; } = string.Empty;
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
+}
+
+public static class SessionNoteOwnerKinds
+{
+    public const string Dm = "Dm";
+    public const string Player = "Player";
 }
 
 public class SessionRollPrompt
@@ -236,6 +263,10 @@ public class SessionRollPrompt
     /// <summary>Action, Skill, Attribute, or Custom.</summary>
     [Required, MaxLength(20)]
     public string CheckMode { get; set; } = "Skill";
+
+    /// <summary>PassFail (successes / vs DC) or Total (sum dice values).</summary>
+    [Required, MaxLength(20)]
+    public string ResultKind { get; set; } = RollPromptResultKind.PassFail;
 
     [MaxLength(80)]
     public string? ActionKey { get; set; }
@@ -355,6 +386,10 @@ public class ActionRollPrompt
     /// <summary>Action, Skill, Attribute, or Custom.</summary>
     [Required, MaxLength(20)]
     public string CheckMode { get; set; } = "Custom";
+
+    /// <summary>PassFail (successes / vs DC) or Total (sum dice values).</summary>
+    [Required, MaxLength(20)]
+    public string ResultKind { get; set; } = RollPromptResultKind.PassFail;
 
     [MaxLength(80)]
     public string? ActionKey { get; set; }

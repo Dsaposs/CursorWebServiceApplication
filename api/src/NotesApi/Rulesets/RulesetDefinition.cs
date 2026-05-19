@@ -32,6 +32,9 @@ public class RulesetDefinition
     [JsonPropertyName("actions")]
     public IEnumerable<RulesetActionDefinition> Actions { get; set; } = Array.Empty<RulesetActionDefinition>();
 
+    [JsonPropertyName("items")]
+    public IEnumerable<RulesetItemDefinition> Items { get; set; } = Array.Empty<RulesetItemDefinition>();
+
     [JsonPropertyName("npcTemplates")]
     public IEnumerable<RulesetNpcTemplateDefinition> NpcTemplates { get; set; } = Array.Empty<RulesetNpcTemplateDefinition>();
 
@@ -132,6 +135,14 @@ public class RulesetClassDefinition
 
     [JsonPropertyName("startingSkillPoints")]
     public int StartingSkillPoints { get; set; }
+
+    /// <summary>Maximum rank per skill during character creation (e.g. 1 for D&amp;D proficiency, 3 for Alien RPG).</summary>
+    [JsonPropertyName("maxSkillRank")]
+    public int? MaxSkillRank { get; set; }
+
+    /// <summary>Item keys the player may choose one of when creating this class.</summary>
+    [JsonPropertyName("startingItemOptions")]
+    public IEnumerable<string> StartingItemOptions { get; set; } = Array.Empty<string>();
 }
 
 public class RulesetSkillDefinition
@@ -163,8 +174,52 @@ public class RulesetActionDefinition
     [JsonPropertyName("allowedClasses")]
     public IEnumerable<string> AllowedClasses { get; set; } = Array.Empty<string>();
 
+    /// <summary>Actor must have this item in inventory to use the action.</summary>
+    [JsonPropertyName("requiredItemKey")]
+    public string? RequiredItemKey { get; set; }
+
     [JsonPropertyName("roll")]
     public RulesetRollDefinition Roll { get; set; } = new();
+}
+
+public class RulesetItemDefinition
+{
+    [JsonPropertyName("key")]
+    public string Key { get; set; } = string.Empty;
+
+    [JsonPropertyName("label")]
+    public string Label { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [JsonPropertyName("category")]
+    public string Category { get; set; } = "gear";
+
+    [JsonPropertyName("modifiers")]
+    public IEnumerable<RulesetModifierDefinition> Modifiers { get; set; } = Array.Empty<RulesetModifierDefinition>();
+
+    /// <summary>When set, overrides the action roll for attacks made with this item.</summary>
+    [JsonPropertyName("attackRoll")]
+    public RulesetRollDefinition? AttackRoll { get; set; }
+
+    [JsonPropertyName("damageRoll")]
+    public RulesetDamageRollDefinition? DamageRoll { get; set; }
+}
+
+public class RulesetDamageRollDefinition
+{
+    [JsonPropertyName("notation")]
+    public string Notation { get; set; } = string.Empty;
+
+    [JsonPropertyName("bonusAttribute")]
+    public string? BonusAttribute { get; set; }
+
+    [JsonPropertyName("flatBonus")]
+    public int? FlatBonus { get; set; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
 }
 
 public class RulesetRollDefinition
@@ -214,6 +269,14 @@ public class RulesetModifierDefinition
     /// </summary>
     [JsonPropertyName("isStressDice")]
     public bool IsStressDice { get; set; }
+
+    /// <summary>Adds this many dice to a pool roll (not scaled by stat value).</summary>
+    [JsonPropertyName("flatDice")]
+    public int? FlatDice { get; set; }
+
+    /// <summary>Flat bonus added to a d20 attack total.</summary>
+    [JsonPropertyName("attackBonus")]
+    public int? AttackBonus { get; set; }
 }
 
 /// <summary>Defines how free-form skill and attribute checks are resolved for this ruleset.</summary>

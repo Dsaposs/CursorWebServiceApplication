@@ -3,6 +3,9 @@ import type { RulesetDefinition } from '~/types/api';
 
 export type DiceRollMode = 'action' | 'skill' | 'attribute';
 
+/** How the DM wants the roll result interpreted. */
+export type RollResultKind = 'PassFail' | 'Total';
+
 export interface BuildRollContextParams {
   definition: RulesetDefinition;
   mode: DiceRollMode;
@@ -27,6 +30,7 @@ export interface D20CheckRollConfig {
   kind: 'd20-check';
   sides: number;
   successRule?: string;
+  attackBonus?: number;
 }
 
 export type DiceRollConfig = D6PoolRollConfig | D20CheckRollConfig;
@@ -36,6 +40,7 @@ export interface DiceRollContext {
   label: string;
   poolBreakdown: string[];
   successRule?: string;
+  resultKind?: RollResultKind;
   config: DiceRollConfig;
 }
 

@@ -35,10 +35,19 @@ public static class ActionOutcomeResolver
         @"\+\s*(\d+)",
         RegexOptions.CultureInvariant);
 
+    private static readonly Regex TotalResultRegex = new(
+        @"→\s*total\s+\d+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     public static ActionOutcome? Resolve(string definitionJson, string? actionKey, string? description)
     {
         var rollLine = ExtractRollLine(description);
         if (string.IsNullOrWhiteSpace(rollLine))
+        {
+            return null;
+        }
+
+        if (TotalResultRegex.IsMatch(rollLine))
         {
             return null;
         }
@@ -51,12 +60,18 @@ public static class ActionOutcomeResolver
 
         var rollerKey = ResolveRollerKey(definition);
         var rulesetAction = RulesetActionCatalog.FindAction(definitionJson, actionKey);
-        var successRule = rulesetAction?.Roll.SuccessRule;
+        var item = !string.IsNullOrWhiteSpace(rulesetAction?.RequiredItemKey)
+            ? RulesetActionCatalog.FindItem(definitionJson, rulesetAction.RequiredItemKey)
+            : null;
+        var effectiveRoll = rulesetAction is not null
+            ? RulesetActionCatalog.ResolveActionRoll(rulesetAction, item)
+            : null;
+        var successRule = effectiveRoll?.SuccessRule;
 
         return rollerKey switch
         {
             "d6-pool" => ResolveD6Pool(rollLine, successRule ?? string.Empty),
-            "d20-check" => ResolveD20Check(rollLine, rulesetAction?.Roll, definition.RollMechanics),
+            "d20-check" => ResolveD20Check(rollLine, effectiveRoll, definition.RollMechanics),
             _ => null,
         };
     }

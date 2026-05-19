@@ -45,4 +45,46 @@ public static class RulesetActionCatalog
         var definition = JsonSerializer.Deserialize<RulesetDefinition>(definitionJson, JsonOptions);
         return definition?.Character.Attributes.FirstOrDefault(attr => attr.Key.Equals(attributeKey, StringComparison.OrdinalIgnoreCase));
     }
+
+    public static RulesetItemDefinition? FindItem(string definitionJson, string? itemKey)
+    {
+        if (string.IsNullOrWhiteSpace(itemKey))
+        {
+            return null;
+        }
+
+        var definition = JsonSerializer.Deserialize<RulesetDefinition>(definitionJson, JsonOptions);
+        return definition?.Items.FirstOrDefault(item => item.Key.Equals(itemKey, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static RulesetRollDefinition ResolveActionRoll(RulesetActionDefinition action, RulesetItemDefinition? item)
+    {
+        if (item?.AttackRoll is not null)
+        {
+            return MergeRoll(item.AttackRoll, item.Modifiers);
+        }
+
+        if (item is null)
+        {
+            return action.Roll;
+        }
+
+        return MergeRoll(action.Roll, item.Modifiers);
+    }
+
+    private static RulesetRollDefinition MergeRoll(RulesetRollDefinition roll, IEnumerable<RulesetModifierDefinition> extraModifiers)
+    {
+        var merged = new RulesetRollDefinition
+        {
+            Dice = roll.Dice,
+            DicePoolMode = roll.DicePoolMode,
+            Attribute = roll.Attribute,
+            Skill = roll.Skill,
+            SuccessRule = roll.SuccessRule,
+            DifficultyClass = roll.DifficultyClass,
+            Modifiers = roll.Modifiers.Concat(extraModifiers).ToList(),
+        };
+
+        return merged;
+    }
 }

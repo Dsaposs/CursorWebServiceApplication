@@ -11,6 +11,8 @@ const options = ref<GameJoinOptionsResponse | null>(null);
 const characterName = ref('');
 const playerName = ref('');
 const selectedClassKey = ref('');
+const skillAllocations = ref<Record<string, number>>({});
+const startingItemKey = ref('');
 const joined = ref<JoinGameResponse | null>(null);
 const fieldError = ref('');
 const isLoading = ref(true);
@@ -21,7 +23,7 @@ onMounted(async () => {
   try {
     options.value = await api<GameJoinOptionsResponse>(`/api/game-participants/join/${route.params.inviteCode}`);
     selectedClassKey.value = rulesetDefinition.value?.character.classes[0]?.key ?? '';
-  } catch (err) {
+  } catch {
     fieldError.value = 'Game invite not found.';
   } finally {
     isLoading.value = false;
@@ -34,7 +36,13 @@ async function joinGame() {
   try {
     joined.value = await api<JoinGameResponse>(`/api/game-participants/join/${route.params.inviteCode}`, {
       method: 'POST',
-      body: { characterName: characterName.value, playerName: playerName.value, classKey: selectedClassKey.value },
+      body: {
+        characterName: characterName.value,
+        playerName: playerName.value,
+        classKey: selectedClassKey.value,
+        skillAllocations: skillAllocations.value,
+        startingItemKey: startingItemKey.value || undefined,
+      },
     });
     setGamePlayerToken(joined.value.game.id, joined.value.participantToken);
     toastSuccess(`Welcome, ${joined.value.character.name}!`);
@@ -53,10 +61,9 @@ async function joinGame() {
       <div class="text-center" style="margin-bottom: 1.5rem;">
         <div style="font-size: 2rem; margin-bottom: 0.5rem;" aria-hidden="true">⚔️</div>
         <h1 style="margin: 0 0 0.25rem;">Join a Game</h1>
-        <p style="margin: 0; font-size: 0.875rem;">Enter your character name to join the campaign.</p>
+        <p style="margin: 0; font-size: 0.875rem;">Create your character for this campaign.</p>
       </div>
 
-      <!-- Success state -->
       <div v-if="isLoading" class="text-center muted">
         <p>Looking up game invite…</p>
       </div>
@@ -74,6 +81,10 @@ async function joinGame() {
         <div class="panel" style="margin-bottom: 1rem;">
           <h2 style="margin-bottom: 0.75rem;">{{ joined.character.name }}</h2>
           <HealthBar :current="joined.character.health" :max="joined.character.maxHealth" />
+          <CharacterSheet
+            :character="joined.character"
+            :ruleset-definition="rulesetDefinition"
+          />
           <p class="text-sm muted" style="margin-top: 0.75rem;">
             Your DM will share a session join link when the game begins. Keep this page bookmarked!
           </p>
@@ -84,7 +95,6 @@ async function joinGame() {
         </button>
       </template>
 
-      <!-- Join form -->
       <form v-else @submit.prevent="joinGame">
         <div v-if="options" class="alert info">
           Joining <strong>{{ options.gameName }}</strong> using {{ options.ruleset.displayName }}.
@@ -93,18 +103,21 @@ async function joinGame() {
           Character name
           <input v-model.trim="characterName" placeholder="Your character's name" required />
         </label>
-        <label v-if="rulesetDefinition?.character.classes.length">
-          Class / Career
-          <select v-model="selectedClassKey" required>
-            <option v-for="characterClass in rulesetDefinition.character.classes" :key="characterClass.key" :value="characterClass.key">
-              {{ characterClass.label }}
-            </option>
-          </select>
-        </label>
         <label>
           Your name <span class="muted text-xs">(optional)</span>
           <input v-model.trim="playerName" placeholder="Real name or nickname" />
         </label>
+
+        <CharacterCreationSetup
+          v-if="rulesetDefinition"
+          :definition="rulesetDefinition"
+          :class-key="selectedClassKey"
+          :skill-allocations="skillAllocations"
+          :starting-item-key="startingItemKey"
+          @update:class-key="selectedClassKey = $event"
+          @update:skill-allocations="skillAllocations = $event"
+          @update:starting-item-key="startingItemKey = $event"
+        />
 
         <div v-if="fieldError" class="alert error">{{ fieldError }}</div>
 

@@ -1,4 +1,5 @@
 using NotesApi.DTOs;
+using NotesApi.Models;
 using NotesApi.Rulesets;
 
 namespace NotesApi.Services;
@@ -32,6 +33,25 @@ public static class RollPromptValidator
         }
 
         checkMode = string.Empty;
+        return false;
+    }
+
+    public static bool TryNormalizeResultKind(string? raw, out string resultKind)
+    {
+        if (string.IsNullOrWhiteSpace(raw)
+            || string.Equals(raw, RollPromptResultKind.PassFail, StringComparison.OrdinalIgnoreCase))
+        {
+            resultKind = RollPromptResultKind.PassFail;
+            return true;
+        }
+
+        if (string.Equals(raw, RollPromptResultKind.Total, StringComparison.OrdinalIgnoreCase))
+        {
+            resultKind = RollPromptResultKind.Total;
+            return true;
+        }
+
+        resultKind = string.Empty;
         return false;
     }
 

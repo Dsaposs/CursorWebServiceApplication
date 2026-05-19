@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import ConfirmModal from '~/components/ConfirmModal.vue';
 import GameNpcManager from '~/components/games/GameNpcManager.vue';
+import GameSessionNotesPanel from '~/components/games/GameSessionNotesPanel.vue';
 import type { NpcFormPayload } from '~/components/games/GameNpcManager.vue';
 import GameOverview from '~/components/games/GameOverview.vue';
 import GamePlayersPanel from '~/components/games/GamePlayersPanel.vue';
 import GameSidebar from '~/components/games/GameSidebar.vue';
-import type { GameResponse, NpcResponse, RulesetResponse, SessionSummaryResponse } from '~/types/api';
+import type { CharacterResponse, GameResponse, NpcResponse, RulesetResponse, SessionSummaryResponse } from '~/types/api';
 import { parseRulesetDefinition } from '~/utils/rulesets';
 
-type GameTab = 'overview' | 'players' | 'npcs';
+type GameTab = 'overview' | 'players' | 'npcs' | 'notes';
 
 const { api, email, token, loadSession, clearSession } = useApi();
 const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
@@ -131,6 +132,14 @@ async function deleteGame() {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
     isSaving.value = false;
+  }
+}
+
+function onCharacterInventorySaved(characterId: string, character: CharacterResponse) {
+  if (!selectedGame.value) return;
+  const index = selectedGame.value.characters.findIndex(ch => ch.id === characterId);
+  if (index >= 0) {
+    selectedGame.value.characters[index] = character;
   }
 }
 
@@ -309,6 +318,9 @@ function signOut() {
             NPCs / Monsters
             <span v-if="selectedGame.npcsAndMonsters.length" class="badge active" style="font-size: 0.65rem; padding: 0.1rem 0.4rem;">{{ selectedGame.npcsAndMonsters.length }}</span>
           </button>
+          <button class="btn ghost" :class="{ active: activeTab === 'notes' }" type="button" @click="activeTab = 'notes'">
+            Session Notes
+          </button>
         </div>
 
         <!-- Overview tab -->
@@ -323,8 +335,12 @@ function signOut() {
 
         <!-- Players tab -->
         <GamePlayersPanel
-          v-if="activeTab === 'players'"
+          v-if="activeTab === 'players' && selectedGame"
+          :game-id="selectedGame.id"
           :characters="selectedGame.characters"
+          :ruleset-definition="selectedGameDefinition"
+          :is-saving="isSaving"
+          @inventory-saved="onCharacterInventorySaved"
         />
 
         <!-- NPCs tab -->
@@ -338,6 +354,11 @@ function signOut() {
           @edit="editNpc"
           @delete="requestDeleteNpc"
           @reset="resetNpcForm"
+        />
+
+        <GameSessionNotesPanel
+          v-if="activeTab === 'notes'"
+          :game-id="selectedGame.id"
         />
       </section>
 

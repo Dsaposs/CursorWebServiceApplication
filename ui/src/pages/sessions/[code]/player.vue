@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
 import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
-import { parseStatMap } from '~/utils/dice';
-import { parseRulesetDefinition } from '~/utils/rulesets';
+import { evaluateActionOutcome } from '~/utils/actionOutcome';
+import { parseCharacterStats } from '~/utils/dice';
+import { parseInventory } from '~/utils/inventory';
+import { resolveEffectiveActionRoll } from '~/utils/items';
+import { findRulesetAction, parseRulesetDefinition } from '~/utils/rulesets';
 import { useDiceRollContext } from '~/composables/useDiceRollContext';
 import PlayerRollPromptOverlay from '~/components/PlayerRollPromptOverlay.vue';
 
@@ -14,9 +17,10 @@ const { error: toastError, success: toastSuccess } = useToast();
 const playerToken = ref<string | null>(null);
 const ruleset = ref<RulesetResponse | null>(null);
 const showCharacterSheet = ref(true);
-const targetName = ref('');
+const actionTargetPickerRef = ref<{ isValid: () => boolean; reset: () => void; toSubmitFields: () => { targetCharacterId?: string; targetNpcId?: string; targetName?: string } } | null>(null);
 const description = ref('');
 const rollResult = ref('');
+const damageRollResult = ref('');
 const isSubmitting = ref(false);
 const isSubmittingRollPrompt = ref(false);
 const showActionForm = ref(false);
@@ -34,21 +38,31 @@ async function loadState() {
 
 const { state, pollingError, fatalError, connectionStatus, refresh, start } = useSessionPolling(loadState, 3000);
 
+function playerSummaryLocation(session: SessionStateResponse) {
+  return {
+    path: `/sessions/${session.id}/summary`,
+    query: {
+      player: '1',
+      gameId: session.gameId,
+    },
+  };
+}
+
 watch(
   () => state.value?.isActive,
   (isActive) => {
-    if (isActive === false && state.value?.id) {
-      navigateTo(`/sessions/${state.value.id}/summary`);
+    if (isActive === false && state.value) {
+      navigateTo(playerSummaryLocation(state.value));
     }
   },
 );
 
 watch(fatalError, (err) => {
   if (!err) return;
-  // Session gone or forbidden — redirect to the ended page.
-  // Players don't hold a JWT so 401 here means the player token is invalid;
-  // returning to the join flow is the right recovery.
-  navigateTo('/sessions/ended');
+  const query: Record<string, string> = {};
+  if (state.value?.id) query.sessionId = state.value.id;
+  if (state.value?.gameId) query.gameId = state.value.gameId;
+  navigateTo({ path: '/sessions/ended', query });
 });
 
 const currentTurn = computed<InitiativeEntryResponse | null>(
@@ -65,6 +79,7 @@ const isMyTurn = computed(() => {
 const isCombat = computed(() => state.value?.state === 'Combat');
 const rulesetDefinition = computed(() => parseRulesetDefinition(ruleset.value));
 const actingClassKey = computed(() => state.value?.character?.classKey ?? '');
+const playerInventory = computed(() => parseInventory(state.value?.character?.inventoryJson));
 const {
   actionMode,
   selectedActionKey,
@@ -79,7 +94,7 @@ const {
   selectedAttributeDetail,
   resetSelection: resetActionSelection,
   buildSubmitPayload,
-} = useRulesetActionChooser(rulesetDefinition, actingClassKey);
+} = useRulesetActionChooser(rulesetDefinition, actingClassKey, playerInventory);
 const pendingPlayerActions = computed(() =>
   state.value?.actions.filter(action =>
     action.status === 'Pending'
@@ -101,13 +116,14 @@ const publishedFeedActions = computed(() =>
 
 const expandedFeedActions = ref<Set<string>>(new Set());
 const feedCombatEncounters = computed(() => state.value?.combatEncounters ?? []);
+const sessionId = computed(() => state.value?.id);
 
 const {
   expandedGroups: expandedFeedGroups,
   toggleGroup: toggleFeedGroup,
   expandAllGroups: expandAllFeedGroups,
   collapseAllGroups: collapseAllFeedGroups,
-} = useActionLogGroupExpansion(publishedFeedActions, feedCombatEncounters);
+} = useActionLogGroupExpansion(publishedFeedActions, feedCombatEncounters, sessionId);
 
 function toggleFeedAction(id: string) {
   if (expandedFeedActions.value.has(id)) expandedFeedActions.value.delete(id);
@@ -147,9 +163,32 @@ async function withdrawAction(actionId: string) {
   }
 }
 
-const playerAttributes = computed(() => parseStatMap(state.value?.character?.attributesJson));
-const playerSkills = computed(() => parseStatMap(state.value?.character?.skillsJson));
-const playerGameValues = computed(() => parseStatMap(state.value?.character?.rulesetDataJson));
+const playerStats = computed(() => parseCharacterStats(state.value?.character?.rulesetDataJson));
+const playerAttributes = computed(() => playerStats.value.attributes);
+const playerSkills = computed(() => playerStats.value.skills);
+const playerGameValues = computed(() => playerStats.value.gameValues);
+
+const selectedRulesetActionDef = computed(() =>
+  findRulesetAction(rulesetDefinition.value, selectedActionKey.value),
+);
+const effectiveActionRoll = computed(() =>
+  resolveEffectiveActionRoll(rulesetDefinition.value, selectedRulesetActionDef.value),
+);
+const attackOutcome = computed(() => {
+  if (!rollResult.value || actionMode.value !== 'action') return null;
+  return evaluateActionOutcome(
+    rulesetDefinition.value,
+    selectedActionKey.value,
+    `🎲 Roll: ${rollResult.value}`,
+  );
+});
+const showDamageRoll = computed(() =>
+  Boolean(effectiveActionRoll.value?.damageRoll && attackOutcome.value === 'Pass'),
+);
+
+watch([selectedActionKey, rollResult], () => {
+  if (!showDamageRoll.value) damageRollResult.value = '';
+});
 
 const rollContext = useDiceRollContext(
   rulesetDefinition,
@@ -209,10 +248,15 @@ async function submitAction() {
     toastError('Choose or describe an action first.');
     return;
   }
+  if (!actionTargetPickerRef.value?.isValid()) {
+    toastError('Enter a target name for Other.');
+    return;
+  }
 
   // Prepend the dice roll result to the description if the player rolled
   const fullDescription = [
     rollResult.value ? `🎲 Roll: ${rollResult.value}` : '',
+    damageRollResult.value || '',
     payload.description ?? '',
   ].filter(Boolean).join('\n');
 
@@ -224,14 +268,15 @@ async function submitAction() {
       body: {
         actionKey: payload.actionKey,
         actionText: payload.actionText,
-        targetName: targetName.value || undefined,
+        ...actionTargetPickerRef.value.toSubmitFields(),
         description: fullDescription || undefined,
       },
     });
     resetActionSelection();
-    targetName.value = '';
+    actionTargetPickerRef.value?.reset();
     description.value = '';
     rollResult.value = '';
+    damageRollResult.value = '';
     await refresh();
     showActionForm.value = false;
     toastSuccess('Action sent to DM!');
@@ -263,26 +308,33 @@ async function submitAction() {
           <div class="topbar-sub">{{ state?.game.name }}</div>
         </div>
       </div>
-      <div class="topbar-actions">
+      <div v-if="state" class="topbar-status">
         <SessionConnectionStatus
-          v-if="state"
           :status="connectionStatus"
           :error="pollingError"
           :started-at="state.startedAt"
           :ended-at="state.endedAt"
           :is-active="state.isActive"
         />
-        <span v-if="state" class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
+        <span class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
       </div>
     </header>
 
-    <div v-if="!state" class="stack">
+    <div v-if="!state" class="stack session-screen-main">
       <SkeletonBlock :lines="4" />
       <SkeletonBlock :lines="6" />
       <SkeletonBlock :lines="5" />
     </div>
 
-    <main v-else class="stack">
+    <main v-else class="stack session-screen-main">
+      <SessionNotesPanel
+        mode="player"
+        :join-code="String(route.params.code)"
+        :player-token="playerToken"
+      />
+
+      <div class="session-dashboard-grid">
+        <div class="session-primary-column">
       <!-- Character card -->
       <div class="panel">
         <div class="flex justify-between items-center" style="margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
@@ -310,7 +362,11 @@ async function submitAction() {
           </div>
         </div>
 
-        <CharacterSheet v-if="state.character && showCharacterSheet" :character="state.character" />
+        <CharacterSheet
+          v-if="state.character && showCharacterSheet"
+          :character="state.character"
+          :ruleset-definition="rulesetDefinition"
+        />
       </div>
 
       <!-- Initiative tracker (combat only) -->
@@ -423,10 +479,20 @@ async function submitAction() {
             :context="rollContext"
           />
 
-          <label>
-            Target
-            <input v-model.trim="targetName" placeholder="Orc, door, ally… (optional)" />
-          </label>
+          <DamageRollRoller
+            v-if="showDamageRoll && effectiveActionRoll?.damageRoll && rulesetDefinition"
+            v-model="damageRollResult"
+            :damage-roll="effectiveActionRoll.damageRoll"
+            :definition="rulesetDefinition"
+            :attributes="playerAttributes"
+          />
+
+          <ActionTargetPicker
+            ref="actionTargetPickerRef"
+            :characters="state.game.characters"
+            :npcs="state.game.npcsAndMonsters"
+            :disabled="isSubmitting"
+          />
           <label>
             Description
             <textarea v-model="description" placeholder="What are you trying to accomplish?" style="min-height: 3rem;" />
@@ -493,35 +559,41 @@ async function submitAction() {
         </div>
       </div>
 
-      <!-- Action feed -->
-      <div class="panel">
-        <div class="panel-title">
-          <div>
-            <h2>Action Feed</h2>
-            <p v-if="publishedFeedActions.length" class="text-sm">
-              Grouped by combat encounter. Expand actions to see full details.
-            </p>
-          </div>
-          <div v-if="publishedFeedActions.length" class="btn-row">
-            <button class="btn ghost sm" type="button" @click="expandAllFeed">Expand all</button>
-            <button class="btn ghost sm" type="button" @click="collapseAllFeed">Collapse all</button>
-          </div>
         </div>
-        <div v-if="publishedFeedActions.length === 0" class="empty-state" style="padding: 1rem 0;">
-          <p class="text-sm">No resolved actions yet this session.</p>
-        </div>
-        <ActionLogGrouped
-          v-else
-          :actions="publishedFeedActions"
-          :combat-encounters="state.combatEncounters ?? []"
-          :expanded-actions="expandedFeedActions"
-          :expanded-groups="expandedFeedGroups"
-          :game="state.game"
-          :ruleset-definition="rulesetDefinition"
-          action-prefix=""
-          @toggle-action="toggleFeedAction"
-          @toggle-group="toggleFeedGroup"
-        />
+
+        <aside class="session-feed-column">
+          <div class="panel action-log-panel">
+            <div class="panel-title">
+              <div>
+                <h2>Action Feed</h2>
+                <p v-if="publishedFeedActions.length" class="text-sm">
+                  Grouped by combat encounter. Expand actions to see full details.
+                </p>
+              </div>
+              <div v-if="publishedFeedActions.length" class="btn-row">
+                <button class="btn ghost sm" type="button" @click="expandAllFeed">Expand all</button>
+                <button class="btn ghost sm" type="button" @click="collapseAllFeed">Collapse all</button>
+              </div>
+            </div>
+            <div class="action-log-scroll">
+              <div v-if="publishedFeedActions.length === 0" class="empty-state" style="padding: 1rem 0;">
+                <p class="text-sm">No resolved actions yet this session.</p>
+              </div>
+              <ActionLogGrouped
+                v-else
+                :actions="publishedFeedActions"
+                :combat-encounters="state.combatEncounters ?? []"
+                :expanded-actions="expandedFeedActions"
+                :expanded-groups="expandedFeedGroups"
+                :game="state.game"
+                :ruleset-definition="rulesetDefinition"
+                action-prefix=""
+                @toggle-action="toggleFeedAction"
+                @toggle-group="toggleFeedGroup"
+              />
+            </div>
+          </div>
+        </aside>
       </div>
 
       <div v-if="pollingError" class="alert error">{{ pollingError }}</div>

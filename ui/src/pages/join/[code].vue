@@ -13,6 +13,8 @@ const ruleset = ref<SessionJoinOptionsResponse['ruleset'] | null>(null);
 const joinMode = ref<'existing' | 'new'>('existing');
 const selectedCharacterId = ref('');
 const selectedClassKey = ref('');
+const skillAllocations = ref<Record<string, number>>({});
+const startingItemKey = ref('');
 const characterName = ref('');
 const playerName = ref('');
 const fieldError = ref('');
@@ -48,7 +50,13 @@ async function joinSession() {
       method: 'POST',
       body: joinMode.value === 'existing'
         ? { characterId: selectedCharacterId.value, playerName: playerName.value }
-        : { characterName: characterName.value, playerName: playerName.value, classKey: selectedClassKey.value },
+        : {
+            characterName: characterName.value,
+            playerName: playerName.value,
+            classKey: selectedClassKey.value,
+            skillAllocations: skillAllocations.value,
+            startingItemKey: startingItemKey.value || undefined,
+          },
     });
     setPlayerTokenForSessionAndGame(route.params.code, joined.game.id, joined.participantToken);
     await navigateTo(`/sessions/${route.params.code}/player`);
@@ -134,14 +142,16 @@ async function rejoin() {
             <input v-model.trim="characterName" placeholder="Your character's name" required />
           </label>
 
-          <label v-if="joinMode === 'new' && rulesetDefinition?.character.classes.length">
-            Class / Career
-            <select v-model="selectedClassKey" required>
-              <option v-for="characterClass in rulesetDefinition.character.classes" :key="characterClass.key" :value="characterClass.key">
-                {{ characterClass.label }}
-              </option>
-            </select>
-          </label>
+          <CharacterCreationSetup
+            v-if="joinMode === 'new' && rulesetDefinition"
+            :definition="rulesetDefinition"
+            :class-key="selectedClassKey"
+            :skill-allocations="skillAllocations"
+            :starting-item-key="startingItemKey"
+            @update:class-key="selectedClassKey = $event"
+            @update:skill-allocations="skillAllocations = $event"
+            @update:starting-item-key="startingItemKey = $event"
+          />
 
           <label>
             Your name <span class="muted text-xs">(optional)</span>

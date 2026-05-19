@@ -33,28 +33,36 @@
         "label": "Colonial Marine",
         "description": "Combat-trained military specialist.",
         "availableSkills": ["closeCombat", "rangedCombat", "mobility", "stamina"],
-        "startingSkillPoints": 10
+        "startingSkillPoints": 10,
+        "maxSkillRank": 3,
+        "startingItemOptions": ["heavyRevolver", "pulseRifle", "combatKnife", "shotgun"]
       },
       {
         "key": "scientist",
         "label": "Scientist",
         "description": "Research and technical expert.",
         "availableSkills": ["observation", "survival", "comtech", "medicalAid"],
-        "startingSkillPoints": 10
+        "startingSkillPoints": 10,
+        "maxSkillRank": 3,
+        "startingItemOptions": ["medkit", "motionTracker", "heavyRevolver"]
       },
       {
         "key": "roughneck",
         "label": "Roughneck",
         "description": "Tough manual laborer and survivor.",
         "availableSkills": ["closeCombat", "stamina", "heavyMachinery", "survival"],
-        "startingSkillPoints": 10
+        "startingSkillPoints": 10,
+        "maxSkillRank": 3,
+        "startingItemOptions": ["combatKnife", "shotgun", "heavyRevolver"]
       },
       {
         "key": "pilot",
         "label": "Pilot",
         "description": "Expert in spacecraft and vehicles.",
         "availableSkills": ["piloting", "comtech", "mobility", "rangedCombat"],
-        "startingSkillPoints": 10
+        "startingSkillPoints": 10,
+        "maxSkillRank": 3,
+        "startingItemOptions": ["heavyRevolver", "pulseRifle", "motionTracker"]
       }
     ],
     "skills": [
@@ -72,7 +80,182 @@
       { "key": "commandSkill", "label": "Command", "attribute": "empathy", "default": 0 }
     ]
   },
+  "items": [
+    {
+      "key": "combatKnife",
+      "label": "Combat Knife",
+      "description": "Standard-issue blade for close-quarters fighting.",
+      "category": "weapon",
+      "modifiers": [],
+      "attackRoll": {
+        "dice": "d6Pool",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "strength",
+        "skill": "closeCombat",
+        "modifiers": [
+          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+        ],
+        "successRule": "Each 6 rolled is one success. One success hits."
+      },
+      "damageRoll": {
+        "notation": "1d6",
+        "description": "Slashing damage on a hit."
+      }
+    },
+    {
+      "key": "heavyRevolver",
+      "label": "Heavy Revolver",
+      "description": "Reliable sidearm with stopping power at short range.",
+      "category": "weapon",
+      "modifiers": [{ "source": "item", "key": "heavyRevolver", "flatDice": 1 }],
+      "attackRoll": {
+        "dice": "d6Pool",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "agility",
+        "skill": "rangedCombat",
+        "modifiers": [
+          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+        ],
+        "successRule": "Each 6 rolled is one success. One success hits."
+      },
+      "damageRoll": {
+        "notation": "2d6",
+        "description": "Ballistic damage on a hit."
+      }
+    },
+    {
+      "key": "pulseRifle",
+      "label": "M41A Pulse Rifle",
+      "description": "Military assault rifle. Fires bursts in controlled bursts.",
+      "category": "weapon",
+      "modifiers": [{ "source": "item", "key": "pulseRifle", "flatDice": 1 }],
+      "attackRoll": {
+        "dice": "d6Pool",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "agility",
+        "skill": "rangedCombat",
+        "modifiers": [
+          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+        ],
+        "successRule": "Each 6 rolled is one success. One success hits."
+      },
+      "damageRoll": {
+        "notation": "2d6",
+        "description": "Ballistic damage on a hit."
+      }
+    },
+    {
+      "key": "shotgun",
+      "label": "Shotgun",
+      "description": "Pump-action shotgun devastating at close range.",
+      "category": "weapon",
+      "modifiers": [{ "source": "item", "key": "shotgun", "flatDice": 1 }],
+      "attackRoll": {
+        "dice": "d6Pool",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "agility",
+        "skill": "rangedCombat",
+        "modifiers": [
+          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+        ],
+        "successRule": "Each 6 rolled is one success. One success hits at close range."
+      },
+      "damageRoll": {
+        "notation": "3d6",
+        "description": "Ballistic damage on a hit."
+      }
+    },
+    {
+      "key": "medkit",
+      "label": "Medkit",
+      "description": "Field medical supplies for treating injuries.",
+      "category": "consumable",
+      "modifiers": []
+    },
+    {
+      "key": "motionTracker",
+      "label": "Motion Tracker",
+      "description": "Handheld sensor that detects movement through walls.",
+      "category": "gear",
+      "modifiers": [{ "source": "item", "key": "motionTracker", "flatDice": 1 }]
+    }
+  ],
   "actions": [
+    {
+      "key": "fireRevolver",
+      "label": "Fire Heavy Revolver",
+      "description": "Shoot the heavy revolver at a target.",
+      "allowedClasses": [],
+      "requiredItemKey": "heavyRevolver",
+      "roll": {
+        "dice": "d6Pool",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "agility",
+        "skill": "rangedCombat",
+        "modifiers": [],
+        "successRule": "Each 6 rolled is one success. One success hits."
+      }
+    },
+    {
+      "key": "firePulseRifle",
+      "label": "Fire Pulse Rifle",
+      "description": "Fire a burst from the pulse rifle.",
+      "allowedClasses": [],
+      "requiredItemKey": "pulseRifle",
+      "roll": {
+        "dice": "d6Pool",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "agility",
+        "skill": "rangedCombat",
+        "modifiers": [],
+        "successRule": "Each 6 rolled is one success. One success hits."
+      }
+    },
+    {
+      "key": "fireShotgun",
+      "label": "Fire Shotgun",
+      "description": "Blast a target at close range.",
+      "allowedClasses": [],
+      "requiredItemKey": "shotgun",
+      "roll": {
+        "dice": "d6Pool",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "agility",
+        "skill": "rangedCombat",
+        "modifiers": [],
+        "successRule": "Each 6 rolled is one success. One success hits."
+      }
+    },
+    {
+      "key": "knifeAttack",
+      "label": "Attack with Combat Knife",
+      "description": "Strike a target with the combat knife.",
+      "allowedClasses": [],
+      "requiredItemKey": "combatKnife",
+      "roll": {
+        "dice": "d6Pool",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "strength",
+        "skill": "closeCombat",
+        "modifiers": [],
+        "successRule": "Each 6 rolled is one success. One success hits."
+      }
+    },
+    {
+      "key": "useMedkit",
+      "label": "Use Medkit",
+      "description": "Treat wounds with the medkit.",
+      "allowedClasses": [],
+      "requiredItemKey": "medkit",
+      "roll": {
+        "dice": "d6Pool",
+        "dicePoolMode": "attribute+skill",
+        "attribute": "empathy",
+        "skill": "medicalAid",
+        "modifiers": [],
+        "successRule": "Each 6 is a success. One success stabilises; two or more heal 1 HP."
+      }
+    },
     {
       "key": "closeCombatAttack",
       "label": "Close Combat Attack",

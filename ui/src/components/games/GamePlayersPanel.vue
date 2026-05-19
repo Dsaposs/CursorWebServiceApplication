@@ -1,11 +1,39 @@
 <script setup lang="ts">
-import type { CharacterResponse } from '~/types/api';
+import type { CharacterResponse, RulesetDefinition } from '~/types/api';
+import type { InventoryEntry } from '~/utils/inventory';
 
 interface Props {
+  gameId: string;
   characters: CharacterResponse[];
+  rulesetDefinition: RulesetDefinition | null;
+  isSaving?: boolean;
 }
 
-defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  isSaving: false,
+});
+
+const emit = defineEmits<{
+  'inventory-saved': [characterId: string, character: CharacterResponse];
+}>();
+
+const { api } = useApi();
+const { error: toastError, success: toastSuccess } = useToast();
+
+async function saveInventory(characterId: string, inventory: InventoryEntry[]) {
+  try {
+    const updated = await api<CharacterResponse>(`/api/games/${props.gameId}/characters/${characterId}/inventory`, {
+      method: 'PUT',
+      body: {
+        inventory: inventory.map(entry => ({ itemKey: entry.itemKey, quantity: entry.quantity })),
+      },
+    });
+    emit('inventory-saved', characterId, updated);
+    toastSuccess('Character inventory updated.');
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : String(err));
+  }
+}
 </script>
 
 <template>
@@ -25,7 +53,15 @@ defineProps<Props>();
         </div>
         <span style="font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;">AC {{ ch.armor }}</span>
       </div>
-      <CharacterSheet :character="ch" />
+      <CharacterSheet :character="ch" :ruleset-definition="rulesetDefinition" />
+      <InventoryEditor
+        v-if="rulesetDefinition"
+        :inventory-json="ch.inventoryJson"
+        :ruleset-definition="rulesetDefinition"
+        :is-saving="isSaving"
+        style="margin-top: 1rem;"
+        @save="saveInventory(ch.id, $event)"
+      />
     </article>
   </div>
 </template>

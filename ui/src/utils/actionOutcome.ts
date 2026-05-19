@@ -1,4 +1,5 @@
 import type { RulesetDefinition } from '~/types/api';
+import { resolveEffectiveActionRoll } from '~/utils/items';
 import { findRulesetAction, parsePlayerRollFromDescription, resolveDiceRollerKey } from '~/utils/rulesets';
 
 export type ActionOutcomeValue = 'Pass' | 'Fail';
@@ -124,9 +125,12 @@ export function evaluateActionOutcome(
   const rollLine = extractRollLine(description);
   if (!rollLine) return null;
 
+  if (/→\s*total\s+\d+/i.test(rollLine)) return null;
+
   const rollerKey = resolveDiceRollerKey(definition);
   const rulesetAction = findRulesetAction(definition, actionKey);
-  const successRule = rulesetAction?.roll?.successRule;
+  const effective = resolveEffectiveActionRoll(definition, rulesetAction);
+  const successRule = effective?.roll.successRule;
 
   if (rollerKey === 'd6-pool') {
     return resolveD6Pool(rollLine, successRule);
@@ -136,7 +140,7 @@ export function evaluateActionOutcome(
     return resolveD20Check(
       rollLine,
       successRule,
-      rulesetAction?.roll?.difficultyClass,
+      effective?.roll.difficultyClass,
       definition.rollMechanics,
     );
   }

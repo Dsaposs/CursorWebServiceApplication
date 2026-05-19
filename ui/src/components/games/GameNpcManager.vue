@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { NpcResponse, RulesetAttributeDefinition, RulesetDefinition, RulesetSkillDefinition } from '~/types/api';
+import { parseNpcInventory, type InventoryEntry } from '~/utils/inventory';
 
 export interface NpcFormPayload {
   name: string;
@@ -32,6 +33,7 @@ const localHealth = ref(10);
 const localArmor = ref(0);
 const localAttrs = ref<Record<string, number>>({});
 const localSkills = ref<Record<string, number>>({});
+const localInventory = ref<InventoryEntry[]>([]);
 
 const attributes = computed<RulesetAttributeDefinition[]>(() => props.definition?.character.attributes ?? []);
 const skills = computed<RulesetSkillDefinition[]>(() => props.definition?.character.skills ?? []);
@@ -51,6 +53,7 @@ function resetForm() {
   localArmor.value = 0;
   localAttrs.value = defaultAttrs();
   localSkills.value = defaultSkills();
+  localInventory.value = [];
 }
 
 function populateFromNpc(npc: NpcResponse) {
@@ -65,9 +68,11 @@ function populateFromNpc(npc: NpcResponse) {
     };
     localAttrs.value = { ...defaultAttrs(), ...(block.attributes ?? {}) };
     localSkills.value = { ...defaultSkills(), ...(block.skills ?? {}) };
+    localInventory.value = parseNpcInventory(npc.statBlockJson).map(entry => ({ ...entry }));
   } catch {
     localAttrs.value = defaultAttrs();
     localSkills.value = defaultSkills();
+    localInventory.value = [];
   }
 }
 
@@ -100,12 +105,30 @@ watch(
 function buildStatBlockJson(): string {
   const hasAttrs = attributes.value.length > 0;
   const hasSkills = skills.value.length > 0;
-  if (!hasAttrs && !hasSkills) return '{}';
+  const hasInventory = localInventory.value.length > 0;
+  if (!hasAttrs && !hasSkills && !hasInventory) return '{}';
   const block: Record<string, unknown> = {};
   if (hasAttrs) block.attributes = { ...localAttrs.value };
   if (hasSkills) block.skills = { ...localSkills.value };
+  if (hasInventory) {
+    block.inventory = localInventory.value.map(entry => ({
+      itemKey: entry.itemKey,
+      quantity: entry.quantity,
+    }));
+  }
   return JSON.stringify(block);
 }
+
+function onInventorySave(inventory: InventoryEntry[]) {
+  localInventory.value = inventory.map(entry => ({ ...entry }));
+}
+
+const localInventoryJson = computed(() =>
+  JSON.stringify(localInventory.value.map(entry => ({
+    itemKey: entry.itemKey,
+    quantity: entry.quantity,
+  }))),
+);
 
 function handleSubmit() {
   emit('submit', {
@@ -203,6 +226,15 @@ function skillVal(npc: NpcResponse, key: string): number | null {
             </label>
           </div>
         </template>
+
+        <InventoryEditor
+          v-if="definition"
+          embedded
+          :inventory-json="localInventoryJson"
+          :ruleset-definition="definition"
+          style="margin-top: 1rem;"
+          @save="onInventorySave"
+        />
 
         <div class="btn-row" style="margin-top: 1rem;">
           <button class="btn" type="submit" :disabled="isSaving">

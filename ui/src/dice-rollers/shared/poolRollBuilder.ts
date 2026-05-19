@@ -65,7 +65,7 @@ function buildFromCheck(
   }
 
   const { extra, stressExtra, breakdown } = check
-    ? calcModifierDice(check.modifiers, { ...attributes, ...gameValues }, skills)
+    ? calcModifierDice(check.modifiers, attributes, skills, gameValues)
     : { extra: 0, stressExtra: 0, breakdown: [] };
 
   return {
@@ -85,25 +85,28 @@ export function buildActionPoolRoll(
   attributes: Record<string, number>,
   skills: Record<string, number>,
   gameValues: Record<string, number>,
+  rollOverride?: RulesetActionDefinition['roll'],
 ): PoolRollParts | null {
-  const diceEntry = findDice(definition, action.roll.dice);
+  const roll = rollOverride ?? action.roll;
+  const diceEntry = findDice(definition, roll.dice);
   if (!diceEntry?.successTarget) return null;
 
-  const isPool = action.roll.dicePoolMode === 'attribute+skill';
-  const attrValue = attributes[action.roll.attribute] ?? 0;
-  const skillValue = skills[action.roll.skill] ?? 0;
+  const isPool = roll.dicePoolMode === 'attribute+skill';
+  const attrValue = attributes[roll.attribute] ?? 0;
+  const skillValue = skills[roll.skill] ?? 0;
   const baseDiceCount = isPool ? attrValue + skillValue : 1;
 
   const { extra, stressExtra, breakdown } = calcModifierDice(
-    action.roll.modifiers,
-    { ...attributes, ...gameValues },
+    roll.modifiers,
+    attributes,
     skills,
+    gameValues,
   );
 
   const poolBreakdown = isPool
     ? [
-        `${attrLabel(definition, action.roll.attribute)} ${attrValue}`,
-        `${skillLabel(definition, action.roll.skill)} ${skillValue}`,
+        `${attrLabel(definition, roll.attribute)} ${attrValue}`,
+        `${skillLabel(definition, roll.skill)} ${skillValue}`,
         ...breakdown,
       ]
     : breakdown;
@@ -114,7 +117,7 @@ export function buildActionPoolRoll(
     successTarget: diceEntry.successTarget,
     sides: parseSides(diceEntry.notation),
     poolBreakdown,
-    successRule: action.roll.successRule,
+    successRule: roll.successRule,
     label: action.label,
   };
 }

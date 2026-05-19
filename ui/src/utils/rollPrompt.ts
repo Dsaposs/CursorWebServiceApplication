@@ -1,8 +1,8 @@
 import type { CharacterResponse, RollPromptResponse, RulesetDefinition } from '~/types/api';
-import type { DiceRollContext, DiceRollMode } from '~/dice-rollers/types';
+import type { DiceRollContext, DiceRollMode, RollResultKind } from '~/dice-rollers/types';
 import { buildDiceRollContext } from '~/dice-rollers/buildRollContext';
 import { resolveDiceRollerKey } from '~/dice-rollers/registry';
-import { parseStatMap } from '~/utils/dice';
+import { parseCharacterStats } from '~/utils/dice';
 import {
   describeRulesetAction,
   findRulesetAction,
@@ -18,6 +18,14 @@ function parseDiceSides(notation: string): number {
 function defaultDiceSides(definition: RulesetDefinition): number {
   const notation = definition.dice[0]?.notation ?? '1d20';
   return parseDiceSides(notation);
+}
+
+export function normalizeRollResultKind(raw?: string | null): RollResultKind {
+  return raw === 'Total' ? 'Total' : 'PassFail';
+}
+
+export function rollPromptResultKindLabel(kind: RollResultKind): string {
+  return kind === 'Total' ? 'Dice total' : 'Pass / fail';
 }
 
 export function rollPromptCheckLabel(
@@ -50,9 +58,8 @@ export function buildRollPromptContext(
   definition: RulesetDefinition,
   character: CharacterResponse,
 ): DiceRollContext | null {
-  const attributes = parseStatMap(character.attributesJson);
-  const skills = parseStatMap(character.skillsJson);
-  const gameValues = parseStatMap(character.rulesetDataJson);
+  const resultKind = normalizeRollResultKind(prompt.resultKind);
+  const { attributes, skills, gameValues } = parseCharacterStats(character.rulesetDataJson);
 
   if (prompt.checkMode === 'Custom') {
     const label = rollPromptCheckLabel(prompt, definition);
@@ -62,6 +69,7 @@ export function buildRollPromptContext(
         rollerKey,
         label,
         poolBreakdown: [label],
+        resultKind,
         config: { kind: 'd20-check', sides: defaultDiceSides(definition) },
       };
     }
@@ -71,7 +79,10 @@ export function buildRollPromptContext(
       rollerKey: 'd6-pool',
       label,
       poolBreakdown: [label],
-      successRule: `Each die showing ${successTarget}+ is a success.`,
+      resultKind,
+      successRule: resultKind === 'Total'
+        ? 'Add up the values on all dice rolled.'
+        : `Each die showing ${successTarget}+ is a success.`,
       config: {
         kind: 'd6-pool',
         baseDiceCount: 1,
@@ -96,19 +107,30 @@ export function buildRollPromptContext(
 
   if (!context) return null;
 
+  const withKind: DiceRollContext = { ...context, resultKind };
+
   if (prompt.checkMode === 'Action' && prompt.actionKey) {
     const action = findRulesetAction(definition, prompt.actionKey);
     if (action) {
       const detail = describeRulesetAction(action, definition);
       return {
-        ...context,
+        ...withKind,
         label: rollPromptCheckLabel(prompt, definition),
         poolBreakdown: context.poolBreakdown.length ? context.poolBreakdown : [`${detail.attribute} + ${detail.skill}`],
+        successRule: resultKind === 'Total'
+          ? 'Add up the values on all dice rolled.'
+          : context.successRule,
       };
     }
   }
 
-  return { ...context, label: rollPromptCheckLabel(prompt, definition) };
+  return {
+    ...withKind,
+    label: rollPromptCheckLabel(prompt, definition),
+    successRule: resultKind === 'Total'
+      ? 'Add up the values on all dice rolled.'
+      : context.successRule,
+  };
 }
 
 export function toApiCheckMode(mode: string): string {

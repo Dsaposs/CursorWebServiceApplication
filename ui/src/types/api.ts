@@ -38,6 +38,7 @@ export interface RulesetDefinition {
   dice: RulesetDiceDefinition[];
   character: RulesetCharacterDefinition;
   actions: RulesetActionDefinition[];
+  items?: RulesetItemDefinition[];
   npcTemplates: Array<Record<string, unknown>>;
   /** Ruleset-specific mechanics for skill and attribute checks. */
   rollMechanics?: RulesetRollMechanics;
@@ -102,6 +103,8 @@ export interface RulesetClassDefinition {
   description?: string;
   availableSkills: string[];
   startingSkillPoints: number;
+  maxSkillRank?: number;
+  startingItemOptions?: string[];
 }
 
 export interface RulesetSkillDefinition {
@@ -111,24 +114,43 @@ export interface RulesetSkillDefinition {
   default: number;
 }
 
+export interface RulesetItemDefinition {
+  key: string;
+  label: string;
+  description?: string;
+  category?: string;
+  modifiers?: RulesetRollModifier[];
+  attackRoll?: RulesetActionDefinition['roll'];
+  damageRoll?: {
+    notation: string;
+    bonusAttribute?: string;
+    flatBonus?: number;
+    description?: string;
+  };
+}
+
+export interface RulesetRollModifier {
+  source: string;
+  key: string;
+  dicePerPoint?: number;
+  isStressDice?: boolean;
+  flatDice?: number;
+  attackBonus?: number;
+}
+
 export interface RulesetActionDefinition {
   key: string;
   label: string;
   description?: string;
   allowedClasses?: string[];
+  requiredItemKey?: string;
   roll: {
     dice: string;
     /** "attribute+skill" means total dice = attribute value + skill value */
     dicePoolMode?: string;
     attribute: string;
     skill: string;
-    modifiers: Array<{
-      source: string;
-      key: string;
-      dicePerPoint?: number;
-      /** Dice from this modifier are stress dice (1 on stress die = panic check) */
-      isStressDice?: boolean;
-    }>;
+    modifiers: RulesetRollModifier[];
     successRule: string;
     difficultyClass?: number;
   };
@@ -156,8 +178,6 @@ export interface CharacterResponse {
   maxHealth: number;
   health: number;
   armor: number;
-  attributesJson: string;
-  skillsJson: string;
   inventoryJson: string;
   rulesetDataJson: string;
   classKey: string;
@@ -171,7 +191,7 @@ export interface NpcResponse {
   health: number;
   armor: number;
   statBlockJson: string;
-  visibility: 'Visible' | 'Obscured' | 'Hidden';
+  visibility: 'Visible' | 'Hidden';
 }
 
 export interface JoinGameResponse {
@@ -225,6 +245,7 @@ export interface RollPromptResponse {
   targetCharacterName: string;
   promptLabel?: string | null;
   checkMode: 'Action' | 'Skill' | 'Attribute' | 'Custom' | string;
+  resultKind?: 'PassFail' | 'Total' | string;
   actionKey?: string | null;
   skillKey?: string | null;
   attributeKey?: string | null;
@@ -244,6 +265,7 @@ export interface ActionQueueItemResponse {
   actorNpcId?: string | null;
   actionKey?: string | null;
   actionText: string;
+  targetNpcId?: string | null;
   targetName?: string | null;
   description?: string | null;
   status: string;
@@ -269,6 +291,30 @@ export interface InitiativeEntryResponse {
   combatantName: string;
   sortOrder: number;
   isCurrentTurn: boolean;
+}
+
+export interface SessionNoteResponse {
+  id: string;
+  sessionId: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  sessionStartedAt: string;
+  sessionEndedAt?: string | null;
+  sessionIsActive: boolean;
+  canEdit: boolean;
+}
+
+export interface SessionNotesContextResponse {
+  sessionId: string;
+  isSessionActive: boolean;
+  currentNote?: SessionNoteResponse | null;
+  previousNotes: SessionNoteResponse[];
+}
+
+export interface GameSessionNotesResponse {
+  gameId: string;
+  notes: SessionNoteResponse[];
 }
 
 export interface AdminUserReportResponse {

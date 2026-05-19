@@ -26,6 +26,11 @@ export function rollDice(count: number, sides: number): number[] {
   );
 }
 
+/** D&D-style ability modifier from a score (10–11 → 0). */
+export function attributeModifier(score: number): number {
+  return Math.floor((score - 10) / 2);
+}
+
 export function buildRollResult(rolls: number[], notation: string): RollResult {
   const total = rolls.reduce((s, r) => s + r, 0);
   return {
@@ -33,6 +38,36 @@ export function buildRollResult(rolls: number[], notation: string): RollResult {
     total,
     notation,
     summary: `${notation}: [${rolls.join(', ')}] = ${total}`,
+  };
+}
+
+type CharacterStatSection = 'attributes' | 'skills' | 'gameValues';
+
+/**
+ * Parse a nested section from ruleset character data JSON.
+ */
+export function parseNestedStatSection(
+  rulesetDataJson: string | null | undefined,
+  section: CharacterStatSection,
+): Record<string, number> {
+  if (!rulesetDataJson) return {};
+  try {
+    const raw = JSON.parse(rulesetDataJson) as Record<string, unknown>;
+    const source = raw[section];
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+    return Object.fromEntries(
+      Object.entries(source).filter(([, value]) => typeof value === 'number'),
+    ) as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+export function parseCharacterStats(rulesetDataJson?: string | null) {
+  return {
+    attributes: parseNestedStatSection(rulesetDataJson, 'attributes'),
+    skills: parseNestedStatSection(rulesetDataJson, 'skills'),
+    gameValues: parseNestedStatSection(rulesetDataJson, 'gameValues'),
   };
 }
 
@@ -67,18 +102,25 @@ export function calcModifierDice(
   modifiers: Array<{ source: string; key: string; dicePerPoint?: number; isStressDice?: boolean }>,
   attributes: Record<string, number>,
   skills: Record<string, number>,
+  gameValues: Record<string, number> = {},
 ): { extra: number; stressExtra: number; breakdown: string[] } {
   let extra = 0;
   let stressExtra = 0;
   const breakdown: string[] = [];
 
   for (const mod of modifiers) {
+    if (mod.flatDice) {
+      extra += mod.flatDice;
+      breakdown.push(`+${mod.flatDice}d from ${mod.key}`);
+      continue;
+    }
+
     if (!mod.dicePerPoint) continue;
 
     let value = 0;
     if (mod.source === 'attribute') value = attributes[mod.key] ?? 0;
     else if (mod.source === 'skill') value = skills[mod.key] ?? 0;
-    else if (mod.source === 'gameValue') value = attributes[mod.key] ?? skills[mod.key] ?? 0;
+    else if (mod.source === 'gameValue') value = gameValues[mod.key] ?? 0;
 
     const added = value * mod.dicePerPoint;
     if (added === 0) continue;

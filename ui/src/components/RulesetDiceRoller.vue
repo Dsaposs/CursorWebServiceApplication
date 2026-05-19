@@ -30,6 +30,7 @@ const roller = computed(() =>
       label: context.label,
       poolBreakdown: context.poolBreakdown,
       successRule: context.successRule,
+      resultKind: context.resultKind ?? 'PassFail',
       showModifier,
     }"
     :model-value="modelValue"

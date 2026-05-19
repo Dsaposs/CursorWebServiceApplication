@@ -4,6 +4,7 @@ using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Models;
 using NotesApi.Rulesets;
+using BuildResult = NotesApi.Rulesets.CharacterCreation.BuildResult;
 
 namespace NotesApi.Controllers;
 
@@ -50,6 +51,21 @@ public class GameParticipantsController : ControllerBase
                 return BadRequest(new { errors = new[] { "Selected class is not available for this ruleset." } });
             }
 
+            BuildResult buildResult;
+            try
+            {
+                buildResult = CharacterCreation.Build(
+                    game.Ruleset.DefinitionJson,
+                    game.Ruleset.CharacterTemplateJson,
+                    classKey,
+                    request.SkillAllocations,
+                    request.StartingItemKey);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { errors = new[] { ex.Message } });
+            }
+
             character = new Character
             {
                 Id = Guid.NewGuid(),
@@ -59,10 +75,8 @@ public class GameParticipantsController : ControllerBase
                 Health = 10,
                 MaxHealth = 10,
                 Armor = 0,
-                AttributesJson = "{}",
-                SkillsJson = "{}",
-                InventoryJson = "[]",
-                RulesetDataJson = RulesetCharacterBuilder.BuildRulesetDataJson(game.Ruleset.CharacterTemplateJson, classKey),
+                InventoryJson = buildResult.InventoryJson,
+                RulesetDataJson = buildResult.RulesetDataJson,
                 ClassKey = classKey,
                 CreatedAt = now,
                 UpdatedAt = now,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { D20CheckRollConfig } from '~/dice-rollers/types';
+import type { D20CheckRollConfig, RollResultKind } from '~/dice-rollers/types';
 import { rollDice } from '~/utils/dice';
 import { useDiceMode } from '~/composables/useDiceMode';
 
@@ -8,14 +8,18 @@ interface Props {
   poolBreakdown?: string[];
   label?: string;
   successRule?: string;
+  resultKind?: RollResultKind;
   modelValue?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   poolBreakdown: () => [],
   label: 'Dice Roll',
+  resultKind: 'PassFail',
   modelValue: '',
 });
+
+const isTotalMode = computed(() => props.resultKind === 'Total');
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const { mode, setMode } = useDiceMode();
@@ -24,7 +28,7 @@ const sides = computed(() => props.config.sides);
 const roll = ref<number | null>(null);
 const hasRolled = ref(false);
 const manualTotal = ref('');
-const modifier = ref(0);
+const modifier = ref(props.config.attackBonus ?? 0);
 
 const displayTotal = computed(() => (roll.value ?? 0) + modifier.value);
 
@@ -35,9 +39,13 @@ function clear() {
   roll.value = null;
   hasRolled.value = false;
   manualTotal.value = '';
-  modifier.value = 0;
+  modifier.value = props.config.attackBonus ?? 0;
   emit('update:modelValue', '');
 }
+
+watch(() => props.config.attackBonus, (bonus) => {
+  modifier.value = bonus ?? 0;
+});
 
 function autoRoll() {
   roll.value = rollDice(1, sides.value)[0];
@@ -58,7 +66,11 @@ function emitResult() {
   const total = base + modifier.value;
   const modNote = modifier.value !== 0 ? ` + ${modifier.value} = ${total}` : '';
   const source = roll.value !== null ? `[${roll.value}]` : `(manual ${base})`;
-  emit('update:modelValue', `1d${sides.value}: ${source}${modNote}`);
+  if (isTotalMode.value) {
+    emit('update:modelValue', `1d${sides.value}: ${source}${modNote} → total ${total}`);
+  } else {
+    emit('update:modelValue', `1d${sides.value}: ${source}${modNote}`);
+  }
 }
 
 watch(modifier, emitResult);
@@ -91,7 +103,8 @@ function onManualChange() {
       </ul>
     </div>
 
-    <p v-if="successRule" class="dr-success-hint">{{ successRule }}</p>
+    <p v-if="isTotalMode" class="dr-success-hint">Roll 1d{{ sides }} and report the total value of the die (plus any modifier).</p>
+    <p v-else-if="successRule" class="dr-success-hint">{{ successRule }}</p>
     <p v-else class="dr-success-hint">Roll 1d{{ sides }} and add modifiers; compare the total to the target DC or AC.</p>
 
     <div v-if="mode === 'auto'" class="dr-panel">

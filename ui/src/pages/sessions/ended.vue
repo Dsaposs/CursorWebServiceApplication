@@ -2,6 +2,20 @@
 const route = useRoute();
 const reason = computed(() => route.query.reason as string | undefined);
 const isExpired = computed(() => reason.value === 'inactivity');
+const sessionId = computed(() => {
+  const value = route.query.sessionId;
+  return typeof value === 'string' ? value : '';
+});
+const gameId = computed(() => {
+  const value = route.query.gameId;
+  return typeof value === 'string' ? value : '';
+});
+const summaryLink = computed(() => {
+  if (!sessionId.value) return null;
+  const query: Record<string, string> = { player: '1' };
+  if (gameId.value) query.gameId = gameId.value;
+  return { path: `/sessions/${sessionId.value}/summary`, query };
+});
 </script>
 
 <template>
@@ -16,7 +30,10 @@ const isExpired = computed(() => reason.value === 'inactivity');
         This session is no longer available. The Dungeon Master may have ended it.
       </p>
       <div class="ended-actions">
-        <NuxtLink to="/" class="btn btn-primary">Return Home</NuxtLink>
+        <NuxtLink v-if="summaryLink" :to="summaryLink" class="btn btn-primary">
+          View Session Summary
+        </NuxtLink>
+        <NuxtLink v-else to="/" class="btn btn-primary">Return Home</NuxtLink>
       </div>
     </div>
   </div>

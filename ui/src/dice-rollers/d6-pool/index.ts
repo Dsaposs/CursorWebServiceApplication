@@ -5,6 +5,7 @@ import {
   buildSkillPoolRoll,
 } from '~/dice-rollers/shared/poolRollBuilder';
 import { findRulesetAction } from '~/utils/rulesets';
+import { resolveEffectiveActionRoll } from '~/utils/items';
 import D6PoolRoller from '~/dice-rollers/d6-pool/D6PoolRoller.vue';
 
 function buildContext(params: BuildRollContextParams) {
@@ -13,7 +14,10 @@ function buildContext(params: BuildRollContextParams) {
   let parts = null;
   if (mode === 'action' && actionKey) {
     const action = findRulesetAction(definition, actionKey);
-    if (action) parts = buildActionPoolRoll(definition, action, attributes, skills, gameValues);
+    const effective = resolveEffectiveActionRoll(definition, action);
+    if (action && effective) {
+      parts = buildActionPoolRoll(definition, action, attributes, skills, gameValues, effective.roll);
+    }
   } else if (mode === 'skill' && skillKey) {
     parts = buildSkillPoolRoll(definition, skillKey, attributes, skills, gameValues);
   } else if (mode === 'attribute' && attributeKey) {

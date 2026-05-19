@@ -25,6 +25,7 @@ public class ActionsController : ControllerBase
     public async Task<ActionResult<IEnumerable<ActionQueueItemResponse>>> GetActions(string joinCode, int sinceSequence = 0)
     {
         var session = await _db.GameSessions
+            .Include(s => s.Game)
             .Include(s => s.Actions).ThenInclude(a => a.Resolution)
             .Include(s => s.Actions).ThenInclude(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
             .Include(s => s.Actions).ThenInclude(a => a.CombatEncounter)
@@ -35,10 +36,13 @@ public class ActionsController : ControllerBase
             return NotFound();
         }
 
+        var npcVisibilities = ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson);
+        var playerView = !IsDm(session.Game.DmUserId);
+
         return Ok(session.Actions
             .Where(a => a.Sequence > sinceSequence)
             .OrderBy(a => a.Sequence)
-            .Select(a => ControllerHelpers.ToActionResponse(a)));
+            .Select(a => ControllerHelpers.ToActionResponse(a, playerView: playerView, npcVisibilities: npcVisibilities)));
     }
 
     [HttpPost("sessions/{joinCode}/actions")]
@@ -65,20 +69,21 @@ public class ActionsController : ControllerBase
         var actorName = participant?.Character.Name;
         Guid? actorCharacterId = participant?.CharacterId;
         Guid? actorNpcId = null;
+        NpcOrMonster? actorNpc = null;
         string actorClassKey = participant?.Character.ClassKey ?? string.Empty;
 
         if (isDm && request.ActorNpcId.HasValue)
         {
-            var npc = session.Game.NpcsAndMonsters.FirstOrDefault(n => n.Id == request.ActorNpcId.Value);
-            if (npc is null)
+            actorNpc = session.Game.NpcsAndMonsters.FirstOrDefault(n => n.Id == request.ActorNpcId.Value);
+            if (actorNpc is null)
             {
                 return BadRequest(new { errors = new[] { "NPC or monster was not found in this game." } });
             }
 
-            actorName = npc.Name;
+            actorName = actorNpc.Name;
             actorCharacterId = null;
-            actorNpcId = npc.Id;
-            actorClassKey = ReadClassKey(npc.StatBlockJson);
+            actorNpcId = actorNpc.Id;
+            actorClassKey = ReadClassKey(actorNpc.StatBlockJson);
         }
 
         if (string.IsNullOrWhiteSpace(actorName))
@@ -98,6 +103,20 @@ public class ActionsController : ControllerBase
             if (!RulesetActionCatalog.IsAllowedForClass(rulesetAction, actorClassKey))
             {
                 return BadRequest(new { errors = new[] { "Selected action is not available for this actor." } });
+            }
+
+            if (!string.IsNullOrWhiteSpace(rulesetAction.RequiredItemKey))
+            {
+                var inventory = actorNpc is not null
+                    ? CharacterInventory.ParseFromStatBlock(actorNpc.StatBlockJson)
+                    : CharacterInventory.Parse(participant?.Character.InventoryJson);
+
+                if (!CharacterInventory.HasItem(inventory, rulesetAction.RequiredItemKey))
+                {
+                    var item = RulesetActionCatalog.FindItem(session.Game.Ruleset.DefinitionJson, rulesetAction.RequiredItemKey);
+                    var itemLabel = item?.Label ?? rulesetAction.RequiredItemKey;
+                    return BadRequest(new { errors = new[] { $"This action requires {itemLabel} in inventory." } });
+                }
             }
 
             actionText = string.IsNullOrWhiteSpace(actionText) ? rulesetAction.Label : actionText;
@@ -354,6 +373,11 @@ public class ActionsController : ControllerBase
                 return BadRequest(new { errors = new[] { "CheckMode must be Action, Skill, Attribute, or Custom." } });
             }
 
+            if (!RollPromptValidator.TryNormalizeResultKind(item.ResultKind, out var resultKind))
+            {
+                return BadRequest(new { errors = new[] { "ResultKind must be PassFail or Total." } });
+            }
+
             var validationError = RollPromptValidator.ValidateCheck(
                 checkMode,
                 item,
@@ -372,6 +396,7 @@ public class ActionsController : ControllerBase
                 TargetCharacter = character,
                 PromptLabel = string.IsNullOrWhiteSpace(item.PromptLabel) ? null : item.PromptLabel.Trim(),
                 CheckMode = checkMode,
+                ResultKind = resultKind,
                 ActionKey = string.IsNullOrWhiteSpace(item.ActionKey) ? null : item.ActionKey.Trim(),
                 SkillKey = string.IsNullOrWhiteSpace(item.SkillKey) ? null : item.SkillKey.Trim(),
                 AttributeKey = string.IsNullOrWhiteSpace(item.AttributeKey) ? null : item.AttributeKey.Trim(),
@@ -588,9 +613,11 @@ public class ActionsController : ControllerBase
             if (character is null) return;
             ApplyHealthAndArmor(character, statChange);
             if (statChange.SetGameValues is { Count: > 0 } || statChange.GameValueDeltas is { Count: > 0 })
-                ApplyGameValues(character, statChange.SetGameValues, statChange.GameValueDeltas);
+                RulesetCharacterData.ApplyGameValues(character, statChange.SetGameValues, statChange.GameValueDeltas);
             if (statChange.AttributeDeltas is { Count: > 0 })
-                ApplyAttributeDeltas(character, statChange.AttributeDeltas);
+                RulesetCharacterData.ApplyNestedDeltas(character, "attributes", statChange.AttributeDeltas);
+            if (statChange.InventoryDeltas is { Count: > 0 })
+                CharacterInventory.ApplyDeltas(character, statChange.InventoryDeltas);
         }
         else if (statChange.TargetType.Equals("NpcOrMonster", StringComparison.OrdinalIgnoreCase))
         {
@@ -616,76 +643,6 @@ public class ActionsController : ControllerBase
         if (statChange.SetArmor.HasValue) npc.Armor = statChange.SetArmor.Value;
         npc.Health = Math.Clamp(npc.Health, 0, npc.MaxHealth);
         npc.UpdatedAt = DateTime.UtcNow;
-    }
-
-    /// <summary>
-    /// Merges game value changes into the character's RulesetDataJson.
-    /// Absolute sets (<paramref name="setGameValues"/>) are applied first,
-    /// then deltas (<paramref name="gameValueDeltas"/>) are added on top.
-    /// </summary>
-    private static void ApplyGameValues(
-        Character character,
-        Dictionary<string, int>? setGameValues,
-        Dictionary<string, int>? gameValueDeltas)
-    {
-        Dictionary<string, JsonElement> root;
-        try
-        {
-            root = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(character.RulesetDataJson)
-                   ?? new Dictionary<string, JsonElement>();
-        }
-        catch
-        {
-            root = new Dictionary<string, JsonElement>();
-        }
-
-        var gameValues = new Dictionary<string, int>();
-        if (root.TryGetValue("gameValues", out var gvElem) && gvElem.ValueKind == JsonValueKind.Object)
-        {
-            foreach (var prop in gvElem.EnumerateObject())
-                if (prop.Value.TryGetInt32(out var v))
-                    gameValues[prop.Name] = v;
-        }
-
-        // Absolute sets first
-        foreach (var kv in setGameValues ?? [])
-            gameValues[kv.Key] = kv.Value;
-
-        // Delta changes on top
-        foreach (var kv in gameValueDeltas ?? [])
-            gameValues[kv.Key] = (gameValues.TryGetValue(kv.Key, out var cur) ? cur : 0) + kv.Value;
-
-        var merged = new Dictionary<string, object?>();
-        foreach (var kv in root)
-            if (!kv.Key.Equals("gameValues", StringComparison.Ordinal))
-                merged[kv.Key] = kv.Value;
-        merged["gameValues"] = gameValues;
-
-        character.RulesetDataJson = JsonSerializer.Serialize(merged);
-        character.UpdatedAt = DateTime.UtcNow;
-    }
-
-    /// <summary>
-    /// Applies delta changes to individual attributes stored in the character's AttributesJson.
-    /// </summary>
-    private static void ApplyAttributeDeltas(Character character, Dictionary<string, int> attributeDeltas)
-    {
-        Dictionary<string, int> attrs;
-        try
-        {
-            attrs = JsonSerializer.Deserialize<Dictionary<string, int>>(character.AttributesJson)
-                    ?? new Dictionary<string, int>();
-        }
-        catch
-        {
-            attrs = new Dictionary<string, int>();
-        }
-
-        foreach (var kv in attributeDeltas)
-            attrs[kv.Key] = (attrs.TryGetValue(kv.Key, out var cur) ? cur : 0) + kv.Value;
-
-        character.AttributesJson = JsonSerializer.Serialize(attrs);
-        character.UpdatedAt = DateTime.UtcNow;
     }
 
     private static void Touch(GameSession session)

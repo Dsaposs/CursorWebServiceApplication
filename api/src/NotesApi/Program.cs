@@ -509,8 +509,155 @@ static async Task ApplySchemaUpdatesAsync(ApplicationDbContext db)
         await alter.ExecuteNonQueryAsync();
     }
 
+    var hasActionRollPromptResultKind = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('ActionRollPrompts')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "ResultKind")
+            {
+                hasActionRollPromptResultKind = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasActionRollPromptResultKind)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = """
+            ALTER TABLE "ActionRollPrompts" ADD COLUMN "ResultKind" TEXT NOT NULL DEFAULT 'PassFail';
+            """;
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    var hasSessionRollPromptResultKind = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('SessionRollPrompts')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "ResultKind")
+            {
+                hasSessionRollPromptResultKind = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasSessionRollPromptResultKind)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = """
+            ALTER TABLE "SessionRollPrompts" ADD COLUMN "ResultKind" TEXT NOT NULL DEFAULT 'PassFail';
+            """;
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    var hasSessionNotesTable = false;
+    using (var tables = connection.CreateCommand())
+    {
+        tables.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='SessionNotes'";
+        hasSessionNotesTable = await tables.ExecuteScalarAsync() is not null;
+    }
+
+    if (!hasSessionNotesTable)
+    {
+        using var create = connection.CreateCommand();
+        create.CommandText = """
+            CREATE TABLE "SessionNotes" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SessionNotes" PRIMARY KEY,
+                "SessionId" TEXT NOT NULL,
+                "OwnerKind" TEXT NOT NULL,
+                "OwnerId" TEXT NOT NULL,
+                "Content" TEXT NOT NULL DEFAULT '',
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NOT NULL,
+                CONSTRAINT "FK_SessionNotes_GameSessions_SessionId" FOREIGN KEY ("SessionId") REFERENCES "GameSessions" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX "IX_SessionNotes_SessionId_OwnerKind_OwnerId" ON "SessionNotes" ("SessionId", "OwnerKind", "OwnerId");
+            CREATE INDEX "IX_SessionNotes_OwnerKind_OwnerId_UpdatedAt" ON "SessionNotes" ("OwnerKind", "OwnerId", "UpdatedAt");
+            """;
+        await create.ExecuteNonQueryAsync();
+    }
+
+    var hasAttributesJsonColumn = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('Characters')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "AttributesJson")
+            {
+                hasAttributesJsonColumn = true;
+                break;
+            }
+        }
+    }
+
+    if (hasAttributesJsonColumn)
+    {
+        await MigrateLegacyCharacterStatsAsync(connection);
+        using var dropAttributes = connection.CreateCommand();
+        dropAttributes.CommandText = "ALTER TABLE \"Characters\" DROP COLUMN \"AttributesJson\"";
+        await dropAttributes.ExecuteNonQueryAsync();
+        using var dropSkills = connection.CreateCommand();
+        dropSkills.CommandText = "ALTER TABLE \"Characters\" DROP COLUMN \"SkillsJson\"";
+        await dropSkills.ExecuteNonQueryAsync();
+    }
+
     if (!wasOpen)
         await connection.CloseAsync();
+}
+
+static async Task MigrateLegacyCharacterStatsAsync(System.Data.Common.DbConnection connection)
+{
+    var updates = new List<(string Id, string RulesetDataJson)>();
+    using (var select = connection.CreateCommand())
+    {
+        select.CommandText = """
+            SELECT "Id", "AttributesJson", "SkillsJson", "RulesetDataJson"
+            FROM "Characters"
+            """;
+        using var reader = await select.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var id = reader.GetString(0);
+            var attributesJson = reader.IsDBNull(1) ? "{}" : reader.GetString(1);
+            var skillsJson = reader.IsDBNull(2) ? "{}" : reader.GetString(2);
+            var rulesetDataJson = reader.IsDBNull(3) ? "{}" : reader.GetString(3);
+            var merged = RulesetCharacterData.MergeLegacyStats(rulesetDataJson, attributesJson, skillsJson);
+            updates.Add((id, merged));
+        }
+    }
+
+    var now = DateTime.UtcNow.ToString("O");
+    foreach (var (id, rulesetDataJson) in updates)
+    {
+        using var update = connection.CreateCommand();
+        update.CommandText = """
+            UPDATE "Characters"
+            SET "RulesetDataJson" = $rulesetDataJson, "UpdatedAt" = $updatedAt
+            WHERE "Id" = $id
+            """;
+        var rulesetParam = update.CreateParameter();
+        rulesetParam.ParameterName = "$rulesetDataJson";
+        rulesetParam.Value = rulesetDataJson;
+        update.Parameters.Add(rulesetParam);
+        var updatedAtParam = update.CreateParameter();
+        updatedAtParam.ParameterName = "$updatedAt";
+        updatedAtParam.Value = now;
+        update.Parameters.Add(updatedAtParam);
+        var idParam = update.CreateParameter();
+        idParam.ParameterName = "$id";
+        idParam.Value = id;
+        update.Parameters.Add(idParam);
+        await update.ExecuteNonQueryAsync();
+    }
 }
 
 static async Task SeedDefaultUsersAsync(RoleManager<IdentityRole> roleManager, UserManager<ApplicationUser> userManager, string adminPassword)

@@ -134,11 +134,20 @@ p:last-child { margin-bottom: 0; }
   color: var(--muted);
 }
 
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
+  flex: 0 0 auto;
   justify-content: flex-end;
 }
 
@@ -226,6 +235,9 @@ p:last-child { margin-bottom: 0; }
 /* ─── Panels / Cards ───────────────────────────────────── */
 
 .panel {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 1.25rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -264,29 +276,47 @@ p:last-child { margin-bottom: 0; }
 
 .session-dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(18rem, 0.85fr);
-  gap: clamp(1rem, 2vw, 1.5rem);
+  grid-template-columns: 1fr;
+  gap: 1rem;
   align-items: start;
+  width: 100%;
 }
 
 .dm-screen-main,
+.session-screen-main,
 .session-dashboard-grid,
+.session-primary-column,
+.session-feed-column,
 .session-action-column,
 .session-support-column {
   min-height: 0;
 }
 
+.session-primary-column,
+.session-feed-column,
 .session-action-column,
 .session-support-column {
   display: grid;
   gap: 1rem;
   align-content: start;
+  min-width: 0;
+}
+
+.session-primary-column > .session-support-column {
+  gap: 1rem;
 }
 
 .pending-actions-list,
 .action-log-scroll {
   display: grid;
   gap: 0.75rem;
+  align-items: start;
+}
+
+.pending-actions-list .action-card,
+.action-log-scroll .action-card {
+  height: auto;
+  min-height: 0;
 }
 
 .dashboard-primary-panel {
@@ -296,6 +326,12 @@ p:last-child { margin-bottom: 0; }
 
 .pending-actions-panel {
   background: linear-gradient(135deg, rgba(251, 146, 60, 0.1), var(--panel) 38%);
+  height: auto;
+}
+
+.session-feed-column > .panel {
+  height: auto;
+  min-height: 0;
 }
 
 .action-log-panel {
@@ -799,10 +835,6 @@ select option {
   color: var(--success);
 }
 
-.npc-visibility-btn.visibility-obscured {
-  color: var(--accent);
-}
-
 .npc-visibility-btn.visibility-hidden {
   color: var(--danger);
 }
@@ -934,7 +966,6 @@ select option {
 /* ─── Stat-change body + delta rows (DM resolution form) ── */
 
 .stat-change-body {
-  margin-top: 0.6rem;
   display: grid;
   gap: 0.6rem;
 }
@@ -994,6 +1025,9 @@ select option {
   background: var(--surface);
   display: grid;
   gap: 0.75rem;
+  height: auto;
+  min-height: 0;
+  align-self: start;
   transition: border-color 0.15s;
 }
 
@@ -1808,6 +1842,78 @@ tr:hover td { background: var(--panel-alt); }
 
 /* ─── Responsive ────────────────────────────────────────── */
 
+@media (min-width: 1024px) {
+  .dm-screen-main {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    max-height: calc(100dvh - 3.75rem);
+    overflow: hidden;
+  }
+
+  .dm-screen-main > .session-dashboard-grid {
+    min-height: 0;
+    overflow: auto;
+    align-self: stretch;
+  }
+
+  .session-screen-main {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    max-height: calc(100dvh - 3.75rem);
+    overflow: hidden;
+  }
+
+  .session-screen-main > .session-dashboard-grid {
+    min-height: 0;
+    overflow: auto;
+    align-self: stretch;
+  }
+
+  .session-dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+    align-items: start;
+  }
+
+  .session-feed-column {
+    position: sticky;
+    top: 0.75rem;
+    align-self: start;
+    max-height: calc(100dvh - 5rem);
+    overflow: auto;
+    padding-right: 0.15rem;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .session-feed-column .pending-actions-panel {
+    height: auto;
+    max-height: min(42vh, 26rem);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .session-feed-column .pending-actions-list {
+    min-height: 0;
+    overflow: auto;
+    padding-right: 0.15rem;
+  }
+
+  .session-feed-column .action-log-panel {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 12rem;
+    max-height: none;
+    overflow: hidden;
+  }
+
+  .session-feed-column .action-log-scroll {
+    min-height: 0;
+    overflow: auto;
+    padding-right: 0.15rem;
+  }
+}
+
 @media (min-width: 900px) and (orientation: landscape) {
   .dm-app-shell {
     height: 100dvh;
@@ -1816,10 +1922,15 @@ tr:hover td { background: var(--panel-alt); }
 
   .dm-screen-main {
     height: calc(100dvh - 3.75rem);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: clamp(0.75rem, 1.3vw, 1rem);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: clamp(0.75rem, 1.2vw, 1rem);
     overflow: hidden;
-    padding: clamp(0.75rem, 1.3vw, 1.25rem);
+    padding: clamp(0.75rem, 1.2vw, 1.25rem);
+  }
+
+  .dm-screen-main > .session-dashboard-grid {
+    min-height: 0;
+    overflow: auto;
   }
 
   .dm-session-info {
@@ -1828,79 +1939,175 @@ tr:hover td { background: var(--panel-alt); }
 
   .session-dashboard-grid {
     height: 100%;
-    grid-template-columns: minmax(24rem, 38vw) minmax(0, 1fr);
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
     align-items: stretch;
   }
 
-  .session-action-column {
+  .session-primary-column {
     height: 100%;
-    grid-template-rows: minmax(8rem, auto) minmax(0, 1fr);
-    align-content: stretch;
+    min-height: 0;
+    overflow: auto;
+    padding-right: 0.2rem;
+    align-content: start;
   }
 
-  .pending-actions-panel {
+  .session-feed-column {
+    position: static;
+    height: 100%;
+    max-height: none;
+    overflow: hidden;
+    padding-right: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .session-feed-column .pending-actions-panel {
     display: flex;
     flex-direction: column;
-    max-height: min(42vh, 26rem);
-    margin-bottom: 0 !important;
+    height: auto;
+    max-height: min(38vh, 24rem);
     overflow: hidden;
+    flex: 0 1 auto;
   }
 
-  .pending-actions-panel .panel-title,
-  .action-log-panel .panel-title {
+  .session-feed-column .action-log-panel {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1 1 auto;
+  }
+
+  .session-feed-column .pending-actions-panel .panel-title,
+  .session-feed-column .action-log-panel .panel-title {
     flex: 0 0 auto;
   }
 
-  .pending-actions-list {
+  .session-feed-column .pending-actions-list {
     min-height: 0;
     overflow: auto;
     padding-right: 0.2rem;
   }
 
-  .action-log-panel {
+  .session-primary-column > .session-support-column {
+    min-height: 0;
+    overflow: visible;
+  }
+}
+
+/* Portrait / narrow: one column, equal gap between every session panel */
+@media (max-width: 1023px), (orientation: portrait) {
+  .dm-screen-main {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, auto);
+    max-height: none;
+    overflow: visible;
+  }
+
+  .session-screen-main {
+    display: grid;
+    grid-template-rows: auto minmax(0, auto);
+    max-height: none;
+    overflow: visible;
+  }
+
+  .dm-screen-main > .session-dashboard-grid,
+  .session-screen-main > .session-dashboard-grid {
+    overflow: visible;
+    min-height: 0;
+  }
+
+  .session-dashboard-grid {
     display: flex;
-    min-height: 0;
     flex-direction: column;
-    overflow: hidden;
+    gap: 1rem;
+    align-items: stretch;
   }
 
-  .action-log-scroll {
+  .session-primary-column,
+  .session-feed-column,
+  .session-primary-column > .session-support-column {
+    display: contents;
+  }
+
+  .session-feed-column .pending-actions-panel,
+  .session-feed-column .action-log-panel {
+    height: auto;
     min-height: 0;
-    overflow: auto;
-    padding-right: 0.2rem;
+    max-height: none;
+    overflow: visible;
   }
 
-  .session-support-column {
-    height: 100%;
-    overflow: auto;
-    padding-right: 0.2rem;
+  .session-feed-column .pending-actions-list,
+  .session-feed-column .action-log-scroll {
+    overflow: visible;
+    max-height: none;
   }
 }
 
 @media (min-width: 769px) and (max-width: 1100px) {
-  .session-dashboard-grid {
-    grid-template-columns: minmax(0, 1.15fr) minmax(17rem, 0.85fr);
-  }
-
   .panel {
     padding: 1rem;
   }
 }
 
-/* DM follow-up roll prompts */
-.follow-up-roll-panel {
-  margin: 1rem 0;
-  padding: 1rem;
+/* DM resolve optional sections (collapsible cards) */
+.dm-resolve-optional-card {
+  margin: 0.75rem 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--panel-alt);
-  display: grid;
-  gap: 0.75rem;
 }
 
-.follow-up-roll-title {
-  margin: 0;
+.dm-resolve-optional-card > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.85rem 1rem;
   font-size: 0.95rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  user-select: none;
+}
+
+.dm-resolve-optional-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dm-resolve-optional-card > summary::after {
+  content: '▸';
+  color: var(--muted-light);
+  font-size: 0.85rem;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+
+.dm-resolve-optional-card[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.dm-resolve-optional-card .optional-tag {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted-light);
+  margin-right: auto;
+  margin-left: 0.35rem;
+}
+
+.dm-resolve-optional-body {
+  padding: 0 1rem 1rem;
+  display: grid;
+  gap: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+/* DM follow-up roll prompts */
+.follow-up-roll-panel {
+  display: block;
 }
 
 .follow-up-roll-hint {
@@ -1942,6 +2149,161 @@ tr:hover td { background: var(--panel-alt); }
   border: none;
   margin: 0;
   padding: 0;
+}
+
+.action-target-picker {
+  display: grid;
+  gap: 0.75rem;
+}
+
+/* Session notes — in document flow below invite, above dashboard */
+.session-notes-collapsible {
+  flex-shrink: 0;
+}
+
+.session-notes-collapsible > summary.session-notes-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0;
+  padding: 0;
+  user-select: none;
+}
+
+.session-notes-collapsible > summary.session-notes-summary::-webkit-details-marker {
+  display: none;
+}
+
+.session-notes-collapsible > summary.session-notes-summary::after {
+  content: '▸';
+  flex-shrink: 0;
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted-light);
+  transition: transform 0.15s;
+}
+
+.session-notes-collapsible[open] > summary.session-notes-summary::after {
+  transform: rotate(90deg);
+}
+
+.session-notes-summary-text h2 {
+  margin: 0;
+}
+
+.session-notes-summary-text p {
+  margin: 0.25rem 0 0;
+}
+
+.session-notes-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.session-notes-body {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.session-notes-panel .session-notes-section + .session-notes-section {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.session-notes-heading {
+  margin: 0 0 0.65rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink-bright);
+}
+
+.session-notes-editor {
+  width: 100%;
+  min-height: 7rem;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.session-notes-readonly {
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.session-notes-readonly p {
+  margin: 0;
+}
+
+.session-notes-previous {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: 0.5rem;
+}
+
+.session-notes-previous > summary {
+  cursor: pointer;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  list-style: none;
+}
+
+.session-notes-previous > summary::-webkit-details-marker {
+  display: none;
+}
+
+.session-notes-previous > .session-notes-readonly {
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.session-notes-game-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.session-notes-game-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  background: var(--surface);
+}
+
+.session-notes-game-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.session-notes-game-item-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .follow-up-roll-players legend {
@@ -2016,12 +2378,26 @@ tr:hover td { background: var(--panel-alt); }
 @media (max-width: 768px) {
   .topbar {
     align-items: flex-start;
-    flex-direction: column;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .topbar-brand {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .topbar-actions {
-    width: 100%;
-    justify-content: flex-start;
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
+  }
+
+  .topbar-status {
+    flex: 1 1 100%;
+    order: 3;
+    justify-content: flex-end;
+    margin-left: 0;
+    padding-top: 0.1rem;
   }
 
   .workspace {
@@ -2039,12 +2415,12 @@ tr:hover td { background: var(--panel-alt); }
     grid-template-columns: 1fr;
   }
 
-  .dm-screen-main {
+  .dm-screen-main,
+  .session-screen-main {
     gap: 0.85rem;
   }
 
-  .session-action-column,
-  .session-support-column {
+  .session-dashboard-grid {
     gap: 0.85rem;
   }
 
@@ -2092,4 +2468,35 @@ tr:hover td { background: var(--panel-alt); }
   }
   .copy-row { flex-direction: column; }
   .inline-fields { grid-template-columns: 1fr; }
+}
+
+.inventory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.inventory-list-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.inventory-item-qty {
+  color: var(--muted);
+}
+
+.inventory-quick-add {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.inventory-quick-add select {
+  width: 100%;
 }

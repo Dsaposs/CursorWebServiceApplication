@@ -5,6 +5,7 @@ import {
   findRulesetAttribute,
   findRulesetSkill,
 } from '~/utils/rulesets';
+import { resolveEffectiveActionRoll } from '~/utils/items';
 import D20CheckRoller from '~/dice-rollers/d20-check/D20CheckRoller.vue';
 
 function parseSides(notation: string): number {
@@ -22,7 +23,8 @@ function buildContext(params: BuildRollContextParams) {
 
   if (mode === 'action' && actionKey) {
     const action = findRulesetAction(definition, actionKey);
-    if (!action) return null;
+    const effective = resolveEffectiveActionRoll(definition, action);
+    if (!action || !effective) return null;
     const detail = describeRulesetAction(action, definition);
     return {
       rollerKey: 'd20-check',
@@ -30,12 +32,15 @@ function buildContext(params: BuildRollContextParams) {
       poolBreakdown: [
         `${detail.attribute} + ${detail.skill}`,
         detail.dice,
+        ...(detail.itemLabel ? [`Item: ${detail.itemLabel}`] : []),
+        ...(effective.itemAttackBonus ? [`Item bonus +${effective.itemAttackBonus}`] : []),
       ],
-      successRule: action.roll.successRule,
+      successRule: effective.roll.successRule,
       config: {
         kind: 'd20-check' as const,
-        sides: resolveDiceSides(definition, action.roll.dice),
-        successRule: action.roll.successRule,
+        sides: resolveDiceSides(definition, effective.roll.dice),
+        successRule: effective.roll.successRule,
+        attackBonus: effective.itemAttackBonus,
       },
     };
   }

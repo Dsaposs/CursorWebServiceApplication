@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { CharacterResponse, RollPromptResponse, RulesetDefinition } from '~/types/api';
 import { availableSkillsForClass } from '~/utils/rulesets';
-import { rollPromptCheckLabel, toApiCheckMode } from '~/utils/rollPrompt';
+import { rollPromptCheckLabel, rollPromptResultKindLabel, toApiCheckMode } from '~/utils/rollPrompt';
+import type { RollResultKind } from '~/dice-rollers/types';
 import { describeSkillCheck, findRulesetSkill } from '~/utils/rulesets';
 
 interface Props {
@@ -22,6 +23,7 @@ const emit = defineEmits<{
       checkMode: string;
       skillKey?: string;
       promptLabel?: string;
+      resultKind: string;
     }>;
   }];
   cancel: [promptId: string];
@@ -31,6 +33,7 @@ const showForm = ref(false);
 const selectedCharacterIds = ref<string[]>([]);
 const selectedSkillKey = ref('');
 const promptLabel = ref('');
+const resultKind = ref<RollResultKind>('PassFail');
 
 const awaitingPlayerPrompts = computed(() =>
   props.rollPrompts.filter(p => p.status === 'Pending'),
@@ -102,11 +105,13 @@ function sendPrompts() {
       checkMode: toApiCheckMode('skill'),
       skillKey: selectedSkillKey.value,
       promptLabel: promptLabel.value.trim() || undefined,
+      resultKind: resultKind.value,
     })),
   });
 
   promptLabel.value = '';
   selectedSkillKey.value = '';
+  resultKind.value = 'PassFail';
   showForm.value = false;
 }
 
@@ -190,6 +195,14 @@ function resetForm() {
           </label>
         </div>
       </fieldset>
+
+      <label>
+        Result type
+        <select v-model="resultKind" :disabled="isBusy">
+          <option value="PassFail">Pass / fail (successes or vs DC)</option>
+          <option value="Total">Dice total (sum values, e.g. damage)</option>
+        </select>
+      </label>
 
       <label>
         Skill

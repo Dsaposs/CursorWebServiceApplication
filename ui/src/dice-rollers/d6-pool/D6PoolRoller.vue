@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { D6PoolRollConfig } from '~/dice-rollers/types';
+import type { D6PoolRollConfig, RollResultKind } from '~/dice-rollers/types';
 import { classifyRolls, rollDice } from '~/utils/dice';
 import { useDiceMode } from '~/composables/useDiceMode';
 
@@ -8,6 +8,7 @@ interface Props {
   poolBreakdown?: string[];
   label?: string;
   successRule?: string;
+  resultKind?: RollResultKind;
   modelValue?: string;
   showModifier?: boolean;
 }
@@ -15,9 +16,12 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   poolBreakdown: () => [],
   label: 'Dice Roll',
+  resultKind: 'PassFail',
   modelValue: '',
   showModifier: false,
 });
+
+const isTotalMode = computed(() => props.resultKind === 'Total');
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const { mode, setMode } = useDiceMode();
@@ -71,11 +75,20 @@ function autoRoll() {
 function buildResultString(): string {
   const result = classification.value;
   if (!result) return '';
-  const { totalSuccesses, panicDice } = result;
-  const panic = panicDice.length ? ` ⚠️ PANIC (${panicDice.length} stress 1s)` : '';
+  const panic = result.panicDice.length ? ` ⚠️ PANIC (${result.panicDice.length} stress 1s)` : '';
   const stressNote = stressRolls.value.length
     ? ` [base: ${baseRolls.value.join(',')} | stress: ${stressRolls.value.join(',')}]`
     : ` [${[...baseRolls.value, ...stressRolls.value].join(', ')}]`;
+
+  if (isTotalMode.value) {
+    const allRolls = [...baseRolls.value, ...stressRolls.value];
+    const rawTotal = allRolls.reduce((sum, value) => sum + value, 0);
+    const total = rawTotal + modifier.value;
+    const modNote = modifier.value !== 0 ? ` (${rawTotal} + ${modifier.value} modifier)` : '';
+    return `${totalBaseDice.value + stressDiceCount.value}d${sides.value}${stressNote} → total ${total}${modNote}${panic}`;
+  }
+
+  const { totalSuccesses } = result;
   const adj = adjustedSuccesses.value;
   const modNote = modifier.value !== 0
     ? `${totalSuccesses} + ${modifier.value} modifier = ${adj} success${adj !== 1 ? 'es' : ''}`
@@ -92,6 +105,12 @@ function onManualChange() {
   const n = parseInt(manualSuccesses.value, 10);
   if (isNaN(n) || n < 0) {
     emit('update:modelValue', '');
+    return;
+  }
+  if (isTotalMode.value) {
+    const total = n + modifier.value;
+    const modNote = modifier.value !== 0 ? ` (${n} + ${modifier.value} modifier)` : '';
+    emit('update:modelValue', `${totalDice.value}d${sides.value} → total ${total}${modNote} (manual)`);
     return;
   }
   const adj = n + modifier.value;
@@ -134,7 +153,11 @@ function isPanic(value: number, isStress: boolean) {
     </div>
 
     <!-- Success rule hint (pool mode only) -->
-    <p class="dr-success-hint">
+    <p v-if="isTotalMode" class="dr-success-hint">
+      Add up the face values on every die you roll
+      <template v-if="stressDiceCount > 0">· stress dice showing <strong>1</strong> still trigger a panic check</template>
+    </p>
+    <p v-else class="dr-success-hint">
       Count each <strong>{{ successTarget }}</strong> as one success
       <template v-if="stressDiceCount > 0">· stress dice: <strong>1 = panic check</strong></template>
     </p>
@@ -167,12 +190,22 @@ function isPanic(value: number, isStress: boolean) {
           </div>
         </div>
         <div v-if="classification" class="dr-result-line">
-          <span class="dr-successes" :class="{ zero: adjustedSuccesses === 0 }">
-            {{ adjustedSuccesses }} success{{ adjustedSuccesses !== 1 ? 'es' : '' }}
-          </span>
-          <span v-if="modifier !== 0" class="dr-modifier-note">
-            ({{ classification.totalSuccesses }} raw {{ modifier > 0 ? '+' : '' }}{{ modifier }})
-          </span>
+          <template v-if="isTotalMode">
+            <span class="dr-successes">
+              Total {{ [...baseRolls, ...stressRolls].reduce((s, v) => s + v, 0) + modifier }}
+            </span>
+            <span v-if="modifier !== 0" class="dr-modifier-note">
+              (dice {{ [...baseRolls, ...stressRolls].reduce((s, v) => s + v, 0) }} {{ modifier > 0 ? '+' : '' }}{{ modifier }})
+            </span>
+          </template>
+          <template v-else>
+            <span class="dr-successes" :class="{ zero: adjustedSuccesses === 0 }">
+              {{ adjustedSuccesses }} success{{ adjustedSuccesses !== 1 ? 'es' : '' }}
+            </span>
+            <span v-if="modifier !== 0" class="dr-modifier-note">
+              ({{ classification.totalSuccesses }} raw {{ modifier > 0 ? '+' : '' }}{{ modifier }})
+            </span>
+          </template>
           <span v-if="classification.panicDice.length" class="dr-panic-warning">
             ⚠️ Panic! Roll on the panic table ({{ classification.panicDice.length }} stress die showed 1)
           </span>
@@ -198,11 +231,21 @@ function isPanic(value: number, isStress: boolean) {
         <p class="dr-instruction">
           Roll <strong>{{ totalBaseDice }}d{{ sides }}</strong>
           <template v-if="stressDiceCount > 0"> (plus <strong>{{ stressDiceCount }} stress dice</strong>)</template>
-          with physical dice, then enter the number of <strong>{{ successTarget }}s</strong> rolled:
+          with physical dice, then enter
+          <template v-if="isTotalMode">the <strong>sum of all dice</strong>:</template>
+          <template v-else>the number of <strong>{{ successTarget }}s</strong> rolled:</template>
         </p>
         <div class="dr-manual-row">
-          <input v-model="manualSuccesses" type="number" min="0" :max="totalDice" :placeholder="`# of ${successTarget}s…`" class="dr-input" @input="onManualChange" />
-          <span class="dr-input-unit">successes</span>
+          <input
+            v-model="manualSuccesses"
+            type="number"
+            min="0"
+            :max="isTotalMode ? totalDice * sides : totalDice"
+            :placeholder="isTotalMode ? 'Dice total…' : `# of ${successTarget}s…`"
+            class="dr-input"
+            @input="onManualChange"
+          />
+          <span class="dr-input-unit">{{ isTotalMode ? 'total' : 'successes' }}</span>
         </div>
         <p v-if="stressDiceCount > 0" class="dr-instruction" style="margin-top: 0.25rem; font-size: 0.8rem;">
           Also note any <strong>1s</strong> on stress dice — those trigger a panic check.

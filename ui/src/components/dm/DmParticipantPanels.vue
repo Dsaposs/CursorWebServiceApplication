@@ -1,15 +1,28 @@
 <script setup lang="ts">
-import type { GameResponse } from '~/types/api';
+import type { GameResponse, NpcResponse, RulesetDefinition } from '~/types/api';
 
 interface Props {
   game: GameResponse;
+  gameId: string;
+  rulesetDefinition: RulesetDefinition | null;
+  isBusy?: boolean;
 }
 
-defineProps<Props>();
+withDefaults(defineProps<Props>(), {
+  isBusy: false,
+});
 
 const emit = defineEmits<{
   cycleNpcVisibility: [npcId: string, currentVisibility: string];
+  npcCreated: [npc: NpcResponse];
 }>();
+
+const showNpcForm = ref(false);
+
+function onNpcCreated(npc: NpcResponse) {
+  showNpcForm.value = false;
+  emit('npcCreated', npc);
+}
 </script>
 
 <template>
@@ -46,14 +59,34 @@ const emit = defineEmits<{
         <h2>NPCs / Monsters</h2>
         <p class="text-sm">Open an NPC to review health, armor, and stat block details.</p>
       </div>
-      <span v-if="game.npcsAndMonsters.length" class="badge active">{{ game.npcsAndMonsters.length }}</span>
+      <div class="btn-row" style="flex-shrink: 0;">
+        <span v-if="game.npcsAndMonsters.length" class="badge active">{{ game.npcsAndMonsters.length }}</span>
+        <button
+          v-if="!showNpcForm"
+          class="btn sm"
+          type="button"
+          :disabled="isBusy"
+          @click="showNpcForm = true"
+        >
+          Add NPC
+        </button>
+      </div>
     </div>
 
-    <div v-if="game.npcsAndMonsters.length === 0" class="empty-state" style="padding: 1rem 0;">
-      <p class="text-sm">No NPCs or monsters yet. Use <strong>Add NPC</strong> above to create one.</p>
+    <DmNpcCreator
+      v-if="showNpcForm"
+      :game-id="gameId"
+      :ruleset-definition="rulesetDefinition"
+      :is-busy="isBusy"
+      @created="onNpcCreated"
+      @cancel="showNpcForm = false"
+    />
+
+    <div v-if="game.npcsAndMonsters.length === 0 && !showNpcForm" class="empty-state" style="padding: 1rem 0;">
+      <p class="text-sm">No NPCs or monsters yet.</p>
     </div>
 
-    <div v-else class="entity-stat-list">
+    <div v-if="game.npcsAndMonsters.length" class="entity-stat-list">
       <details v-for="npc in game.npcsAndMonsters" :key="npc.id" class="entity-stat-details">
         <summary>
           <span>
@@ -63,12 +96,12 @@ const emit = defineEmits<{
           <span class="entity-stat-actions">
             <button
               class="npc-visibility-btn"
-              :class="`visibility-${(npc.visibility ?? 'Visible').toLowerCase()}`"
+              :class="`visibility-${(npc.visibility ?? 'Hidden').toLowerCase()}`"
               type="button"
-              :title="`Click to cycle: Visible -> Obscured -> Hidden (currently ${npc.visibility ?? 'Visible'})`"
-              @click.stop="emit('cycleNpcVisibility', npc.id, npc.visibility ?? 'Visible')"
+              :title="`Click to toggle visibility (currently ${npc.visibility ?? 'Hidden'})`"
+              @click.stop="emit('cycleNpcVisibility', npc.id, npc.visibility ?? 'Hidden')"
             >
-              {{ npc.visibility === 'Hidden' ? 'Hidden' : npc.visibility === 'Obscured' ? 'Obscured' : 'Visible' }}
+              {{ npc.visibility === 'Visible' ? 'Visible' : 'Hidden' }}
             </button>
             <span class="entity-stat-summary">HP {{ npc.health }}/{{ npc.maxHealth }} · AC {{ npc.armor }}</span>
           </span>

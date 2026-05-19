@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CharacterResponse, RollPromptResponse, RulesetDefinition } from '~/types/api';
-import { buildRollPromptContext, rollPromptCheckLabel } from '~/utils/rollPrompt';
+import { buildRollPromptContext, rollPromptCheckLabel, rollPromptResultKindLabel, normalizeRollResultKind } from '~/utils/rollPrompt';
 
 interface Props {
   prompt: RollPromptResponse;
@@ -28,7 +28,9 @@ const heading = computed(() => rollPromptCheckLabel(props.prompt, props.rulesetD
 
 const queueHint = computed(() => {
   const note = props.prompt.promptLabel?.trim();
-  return note || 'The DM is waiting for your roll.';
+  const kind = rollPromptResultKindLabel(normalizeRollResultKind(props.prompt.resultKind));
+  if (note) return `${note} · Report: ${kind}`;
+  return `The DM is waiting for your roll (${kind}).`;
 });
 
 function submitRoll() {

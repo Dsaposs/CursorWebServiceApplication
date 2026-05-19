@@ -4,6 +4,13 @@ import { parseRulesetDefinition } from '~/utils/rulesets';
 
 const route = useRoute();
 const { api, token, loadSession } = useApi();
+const { getGamePlayerToken } = usePlayerTokens();
+
+const isPlayerView = computed(() => route.query.player === '1');
+const playerGameId = computed(() => {
+  const value = route.query.gameId;
+  return typeof value === 'string' ? value : '';
+});
 
 const state = ref<SessionStateResponse | null>(null);
 const ruleset = ref<RulesetResponse | null>(null);
@@ -11,12 +18,33 @@ const rulesetDefinition = computed(() => parseRulesetDefinition(ruleset.value));
 const isLoading = ref(true);
 const loadError = ref('');
 
-onMounted(async () => {
-  loadSession();
-  if (!token.value) { await navigateTo('/login'); return; }
+async function loadSummary() {
+  isLoading.value = true;
+  loadError.value = '';
 
   try {
-    state.value = await api<SessionStateResponse>(`/api/sessions/${route.params.id}/dm`);
+    if (isPlayerView.value) {
+      const gameId = playerGameId.value || state.value?.gameId;
+      const playerToken = gameId ? getGamePlayerToken(gameId) : null;
+      if (!playerToken) {
+        await navigateTo('/sessions/ended');
+        return;
+      }
+
+      state.value = await api<SessionStateResponse>(
+        `/api/session-join/sessions/${route.params.id}/summary`,
+        { playerToken },
+      );
+    } else {
+      loadSession();
+      if (!token.value) {
+        await navigateTo('/login');
+        return;
+      }
+
+      state.value = await api<SessionStateResponse>(`/api/sessions/${route.params.id}/dm`);
+    }
+
     if (state.value) {
       ruleset.value = await api<RulesetResponse>(`/api/rulesets/${state.value.game.rulesetCode}`);
     }
@@ -25,7 +53,9 @@ onMounted(async () => {
   } finally {
     isLoading.value = false;
   }
-});
+}
+
+onMounted(() => { void loadSummary(); });
 
 // Duration helpers
 const duration = computed(() => {
@@ -67,12 +97,18 @@ const pendingActions = computed(() =>
 );
 const allActions = computed(() => [...(state.value?.actions ?? [])].sort((a, b) => a.sequence - b.sequence));
 const summaryCombatEncounters = computed(() => state.value?.combatEncounters ?? []);
+const summarySessionId = computed(() => state.value?.id ?? String(route.params.id ?? ''));
 const expandedSummaryActions = ref<Set<string>>(new Set());
 
 const {
   expandedGroups: expandedSummaryGroups,
   toggleGroup: toggleSummaryGroup,
-} = useActionLogGroupExpansion(allActions, summaryCombatEncounters, { expandAllOnFirstLoad: true });
+} = useActionLogGroupExpansion(
+  allActions,
+  summaryCombatEncounters,
+  summarySessionId,
+  { expandAllOnFirstLoad: true },
+);
 
 function toggleSummaryAction(id: string) {
   if (expandedSummaryActions.value.has(id)) expandedSummaryActions.value.delete(id);
@@ -84,6 +120,14 @@ const participantNames = computed(() => {
   if (!state.value) return [];
   const names = new Set(state.value.actions.map(a => a.actorName));
   return [...names];
+});
+
+const summaryCharacters = computed(() => {
+  if (!state.value) return [];
+  if (isPlayerView.value && state.value.character) {
+    return [state.value.character];
+  }
+  return state.value.game.characters;
 });
 
 function formatTime(iso: string) {
@@ -105,8 +149,20 @@ function formatTime(iso: string) {
       <div class="topbar-actions">
         <span v-if="state && !state.isActive" class="badge ended">Ended</span>
         <span v-else-if="state" class="badge active">Active</span>
-        <NuxtLink class="btn ghost sm" to="/games">← Games</NuxtLink>
-        <NuxtLink v-if="state?.isActive" class="btn sm" :to="`/sessions/${route.params.id}/dm`">Open DM Screen</NuxtLink>
+        <template v-if="isPlayerView">
+          <span v-if="state?.character" class="badge active">{{ state.character.name }}</span>
+          <NuxtLink
+            v-if="state?.isActive && state.joinUrl"
+            class="btn sm"
+            :to="state.joinUrl"
+          >
+            Back to Session
+          </NuxtLink>
+        </template>
+        <template v-else>
+          <NuxtLink class="btn ghost sm" to="/games">← Games</NuxtLink>
+          <NuxtLink v-if="state?.isActive" class="btn sm" :to="`/sessions/${route.params.id}/dm`">Open DM Screen</NuxtLink>
+        </template>
       </div>
     </header>
 
@@ -171,14 +227,14 @@ function formatTime(iso: string) {
         <!-- Left: Participants -->
         <div style="display: grid; gap: 1rem; align-content: start;">
           <div class="panel">
-            <h2>Characters</h2>
+            <h2>{{ isPlayerView ? 'Your Character' : 'Characters' }}</h2>
 
-            <div v-if="state.game.characters.length === 0" class="empty-state" style="padding: 1rem 0;">
+            <div v-if="summaryCharacters.length === 0" class="empty-state" style="padding: 1rem 0;">
               <p class="text-sm">No characters joined this game yet.</p>
             </div>
 
             <div style="display: grid; gap: 0.75rem;">
-              <div v-for="ch in state.game.characters" :key="ch.id" class="action-card">
+              <div v-for="ch in summaryCharacters" :key="ch.id" class="action-card">
                 <div class="flex justify-between items-center" style="margin-bottom: 0.5rem;">
                   <div>
                     <div class="flex items-center gap-2">

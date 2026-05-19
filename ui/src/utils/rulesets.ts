@@ -4,9 +4,11 @@ import type {
   RulesetAttributeDefinition,
   RulesetCheckMechanics,
   RulesetDefinition,
+  RulesetItemDefinition,
   RulesetResponse,
   RulesetSkillDefinition,
 } from '~/types/api';
+import { hasInventoryItem, parseInventory, parseNpcInventory, type InventoryEntry } from '~/utils/inventory';
 export { buildDiceRollContext, parsePlayerRollFromDescription } from '~/dice-rollers/buildRollContext';
 export { getDiceRoller, resolveDiceRollerKey } from '~/dice-rollers/registry';
 export type { DiceRollContext, DiceRollMode } from '~/dice-rollers/types';
@@ -22,17 +24,50 @@ export function parseRulesetDefinition(ruleset?: Pick<RulesetResponse, 'definiti
 }
 
 export function availableActionsForCharacter(definition: RulesetDefinition | null, character?: CharacterResponse | null) {
-  return availableActionsForClass(definition, character?.classKey);
+  return availableActionsForClass(definition, character?.classKey, inventoryForActor(character));
 }
 
-export function availableActionsForClass(definition: RulesetDefinition | null, classKey?: string | null) {
+export function availableActionsForClass(
+  definition: RulesetDefinition | null,
+  classKey?: string | null,
+  inventory: InventoryEntry[] = [],
+) {
   if (!definition) return [];
 
   const normalizedClassKey = classKey ?? '';
   return definition.actions.filter(action => {
     const allowedClasses = action.allowedClasses ?? [];
-    return !allowedClasses.length || allowedClasses.includes(normalizedClassKey);
+    const classAllowed = !allowedClasses.length || allowedClasses.includes(normalizedClassKey);
+    const itemAllowed = !action.requiredItemKey || hasInventoryItem(inventory, action.requiredItemKey);
+    return classAllowed && itemAllowed;
   });
+}
+
+export function inventoryForActor(
+  character?: CharacterResponse | null,
+  statBlockJson?: string | null,
+): InventoryEntry[] {
+  if (character) return parseInventory(character.inventoryJson);
+  if (statBlockJson) return parseNpcInventory(statBlockJson);
+  return [];
+}
+
+export function findRulesetItem(definition: RulesetDefinition | null, itemKey?: string | null) {
+  if (!definition || !itemKey) return null;
+  return (definition.items ?? []).find(item => item.key === itemKey) ?? null;
+}
+
+export function classForKey(definition: RulesetDefinition | null, classKey?: string | null) {
+  if (!definition || !classKey) return null;
+  return definition.character.classes.find(c => c.key === classKey) ?? null;
+}
+
+export function startingItemOptionsForClass(definition: RulesetDefinition | null, classKey?: string | null) {
+  const cls = classForKey(definition, classKey);
+  if (!cls?.startingItemOptions?.length) return [];
+  return cls.startingItemOptions
+    .map(key => findRulesetItem(definition, key))
+    .filter((item): item is RulesetItemDefinition => Boolean(item));
 }
 
 export function availableSkillsForClass(definition: RulesetDefinition | null, classKey?: string | null) {
@@ -89,20 +124,25 @@ export function findRulesetAction(definition: RulesetDefinition | null, actionKe
 }
 
 export function describeRulesetAction(action: RulesetActionDefinition, definition: RulesetDefinition) {
-  const attribute = definition.character.attributes.find(item => item.key === action.roll.attribute);
-  const skill = definition.character.skills.find(item => item.key === action.roll.skill);
-  const dice = definition.dice.find(item => item.key === action.roll.dice);
-  const modifierText = action.roll.modifiers.length
-    ? action.roll.modifiers.map(modifier => `${modifier.key} (${modifier.source})`).join(', ')
+  const item = action.requiredItemKey ? findRulesetItem(definition, action.requiredItemKey) : null;
+  const roll = item?.attackRoll ?? action.roll;
+  const attribute = definition.character.attributes.find(itemDef => itemDef.key === roll.attribute);
+  const skill = definition.character.skills.find(itemDef => itemDef.key === roll.skill);
+  const dice = definition.dice.find(itemDef => itemDef.key === roll.dice);
+  const allModifiers = [...(roll.modifiers ?? []), ...(item?.modifiers ?? [])];
+  const modifierText = allModifiers.length
+    ? allModifiers.map(modifier => `${modifier.key} (${modifier.source})`).join(', ')
     : 'No listed modifiers';
 
   return {
-    dice: dice?.label ?? action.roll.dice,
+    dice: dice?.label ?? roll.dice,
     notation: dice?.notation ?? definition.diceNotation,
-    attribute: attribute?.label ?? action.roll.attribute,
-    skill: skill?.label ?? action.roll.skill,
+    attribute: attribute?.label ?? roll.attribute,
+    skill: skill?.label ?? roll.skill,
     modifiers: modifierText,
-    successRule: action.roll.successRule,
+    successRule: roll.successRule,
+    itemLabel: item?.label,
+    damageRoll: item?.damageRoll,
   };
 }
 

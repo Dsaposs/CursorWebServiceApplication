@@ -1,5 +1,6 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
 import type { RulesetDefinition } from '~/types/api';
+import type { InventoryEntry } from '~/utils/inventory';
 import {
   availableActionsForClass,
   availableSkillsForClass,
@@ -22,6 +23,7 @@ export interface RulesetActionSubmitPayload {
 export function useRulesetActionChooser(
   definition: ComputedRef<RulesetDefinition | null>,
   classKey: ComputedRef<string | null | undefined>,
+  inventory: ComputedRef<InventoryEntry[]> = computed(() => []),
   isEnabled: Ref<boolean> | ComputedRef<boolean> = computed(() => true),
 ) {
   const actionMode = ref<RulesetActionMode>('action');
@@ -31,7 +33,7 @@ export function useRulesetActionChooser(
   const customActionText = ref('');
 
   const availableActions = computed(() => isEnabled.value
-    ? availableActionsForClass(definition.value, classKey.value)
+    ? availableActionsForClass(definition.value, classKey.value, inventory.value)
     : []);
   const availableSkills = computed(() => isEnabled.value
     ? availableSkillsForClass(definition.value, classKey.value)

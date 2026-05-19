@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { ActionQueueItemResponse, CharacterResponse, RollPromptResponse, RulesetDefinition } from '~/types/api';
 import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
-import { rollPromptCheckLabel, toApiCheckMode } from '~/utils/rollPrompt';
+import { parseInventory } from '~/utils/inventory';
+import { normalizeRollResultKind, rollPromptCheckLabel, rollPromptResultKindLabel, toApiCheckMode } from '~/utils/rollPrompt';
+import type { RollResultKind } from '~/dice-rollers/types';
 
 interface Props {
   action: ActionQueueItemResponse;
@@ -25,6 +27,7 @@ const emit = defineEmits<{
       attributeKey?: string;
       customCheckText?: string;
       promptLabel?: string;
+      resultKind: string;
     }>;
   }];
   cancel: [promptId: string];
@@ -32,6 +35,7 @@ const emit = defineEmits<{
 
 const selectedCharacterIds = ref<string[]>([]);
 const promptLabel = ref('');
+const resultKind = ref<RollResultKind>('PassFail');
 
 const promptClassKey = computed(() => {
   const firstId = selectedCharacterIds.value[0];
@@ -39,6 +43,12 @@ const promptClassKey = computed(() => {
 });
 
 const isChooserEnabled = computed(() => selectedCharacterIds.value.length > 0);
+
+const promptInventory = computed(() => {
+  const firstId = selectedCharacterIds.value[0];
+  const character = props.characters.find(c => c.id === firstId);
+  return parseInventory(character?.inventoryJson);
+});
 
 const {
   actionMode,
@@ -55,6 +65,7 @@ const {
 } = useRulesetActionChooser(
   computed(() => props.rulesetDefinition),
   promptClassKey,
+  promptInventory,
   isChooserEnabled,
 );
 
@@ -97,6 +108,7 @@ function sendPrompts() {
       attributeKey: actionMode.value === 'attribute' ? selectedAttributeKey.value : undefined,
       customCheckText: actionMode.value === 'custom' ? customActionText.value.trim() : undefined,
       promptLabel: promptLabel.value.trim() || undefined,
+      resultKind: resultKind.value,
     })),
   });
 }
@@ -107,8 +119,12 @@ function promptSummary(prompt: RollPromptResponse) {
 </script>
 
 <template>
-  <div class="follow-up-roll-panel">
-    <h3 class="follow-up-roll-title">Request follow-up roll</h3>
+  <details class="dm-resolve-optional-card follow-up-roll-panel">
+    <summary>
+      Request follow-up roll
+      <span class="optional-tag">optional</span>
+    </summary>
+    <div class="dm-resolve-optional-body">
     <p class="text-sm follow-up-roll-hint">
       Prompt one or more players to roll before you publish the resolution. You can send multiple prompts.
     </p>
@@ -127,6 +143,7 @@ function promptSummary(prompt: RollPromptResponse) {
           <span class="badge" :class="prompt.status === 'Completed' ? 'active' : 'pending'">
             {{ prompt.status }}
           </span>
+          <span class="badge" style="margin-left: 0.25rem;">{{ rollPromptResultKindLabel(normalizeRollResultKind(prompt.resultKind)) }}</span>
           <span v-if="prompt.rollSummary" class="text-sm roll-result">{{ prompt.rollSummary }}</span>
           <button
             v-if="prompt.status === 'Pending'"
@@ -164,6 +181,14 @@ function promptSummary(prompt: RollPromptResponse) {
     <label>
       Short note for players (optional)
       <input v-model.trim="promptLabel" placeholder="e.g. Roll damage, Attack of opportunity…" :disabled="isBusy" />
+    </label>
+
+    <label>
+      Result type
+      <select v-model="resultKind" :disabled="isBusy">
+        <option value="PassFail">Pass / fail (successes or vs DC)</option>
+        <option value="Total">Dice total (sum values, e.g. damage)</option>
+      </select>
     </label>
 
     <label>
@@ -229,5 +254,6 @@ function promptSummary(prompt: RollPromptResponse) {
     >
       Send roll prompt{{ selectedCharacterIds.length > 1 ? 's' : '' }}
     </button>
-  </div>
+    </div>
+  </details>
 </template>

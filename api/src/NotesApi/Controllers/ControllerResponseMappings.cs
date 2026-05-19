@@ -7,8 +7,8 @@ namespace NotesApi.Controllers;
 public static partial class ControllerHelpers
 {
     /// <summary>
-    /// Builds a GameResponse. When playerView is true, Hidden NPCs are excluded
-    /// and Obscured NPCs appear anonymised (no name, no stats).
+    /// Builds a GameResponse. When playerView is true, hidden NPCs are omitted entirely.
+    /// NPCs default to hidden until the DM marks them visible for the session.
     /// </summary>
     public static GameResponse ToGameResponse(
         this ControllerBase controller,
@@ -28,11 +28,9 @@ public static partial class ControllerHelpers
         Characters = game.Characters.OrderBy(c => c.Name).Select(ToCharacterResponse),
         NpcsAndMonsters = game.NpcsAndMonsters
             .OrderBy(n => n.Name)
-            .Select(n => (npc: n, vis: npcVisibilities?.GetValueOrDefault(n.Id.ToString(), "Visible") ?? "Visible"))
-            .Where(x => !playerView || x.vis != "Hidden")
-            .Select(x => playerView && x.vis == "Obscured"
-                ? new NpcResponse { Id = x.npc.Id, Name = "Unknown", Kind = "???", Visibility = "Obscured" }
-                : ToNpcResponse(x.npc, x.vis)),
+            .Select(n => (npc: n, vis: ControllerHelpers.GetNpcVisibility(n.Id, npcVisibilities)))
+            .Where(x => !playerView || ControllerHelpers.IsNpcVisible(x.npc.Id, npcVisibilities))
+            .Select(x => ToNpcResponse(x.npc, x.vis)),
         Sessions = game.Sessions.OrderByDescending(s => s.StartedAt).Select(s => controller.ToSessionSummaryResponse(s)),
     };
 
@@ -70,14 +68,12 @@ public static partial class ControllerHelpers
         MaxHealth = character.MaxHealth,
         Health = character.Health,
         Armor = character.Armor,
-        AttributesJson = character.AttributesJson,
-        SkillsJson = character.SkillsJson,
         InventoryJson = character.InventoryJson,
         RulesetDataJson = character.RulesetDataJson,
         ClassKey = character.ClassKey,
     };
 
-    public static NpcResponse ToNpcResponse(NpcOrMonster npc, string visibility = "Visible") => new()
+    public static NpcResponse ToNpcResponse(NpcOrMonster npc, string visibility = ControllerHelpers.NpcVisibilityHidden) => new()
     {
         Id = npc.Id,
         Name = npc.Name,
@@ -103,17 +99,43 @@ public static partial class ControllerHelpers
         UpdatedAt = session.UpdatedAt,
     };
 
-    public static ActionQueueItemResponse ToActionResponse(ActionRequest action, bool isSkillCheckResponse = false) => new()
+    public static ActionQueueItemResponse ToActionResponse(
+        ActionRequest action,
+        bool isSkillCheckResponse = false,
+        Dictionary<string, string>? npcVisibilities = null,
+        bool playerView = false)
+    {
+        var actorName = action.ActorName;
+        var targetName = action.TargetName;
+        if (playerView)
+        {
+            if (action.ActorNpcId.HasValue && !ControllerHelpers.IsNpcVisible(action.ActorNpcId.Value, npcVisibilities))
+            {
+                actorName = "???";
+            }
+
+            if (action.TargetNpcId.HasValue && !ControllerHelpers.IsNpcVisible(action.TargetNpcId.Value, npcVisibilities))
+            {
+                targetName = null;
+            }
+        }
+
+        return new ActionQueueItemResponse
     {
         Id = action.Id,
         Sequence = action.Sequence,
         IsSkillCheckResponse = isSkillCheckResponse,
-        ActorName = action.ActorName,
+        ActorName = actorName,
         ActorCharacterId = action.ActorCharacterId,
-        ActorNpcId = action.ActorNpcId,
+        ActorNpcId = playerView && action.ActorNpcId.HasValue && !ControllerHelpers.IsNpcVisible(action.ActorNpcId.Value, npcVisibilities)
+            ? null
+            : action.ActorNpcId,
         ActionKey = action.ActionKey,
         ActionText = action.ActionText,
-        TargetName = action.TargetName,
+        TargetNpcId = playerView && action.TargetNpcId.HasValue && !ControllerHelpers.IsNpcVisible(action.TargetNpcId.Value, npcVisibilities)
+            ? null
+            : action.TargetNpcId,
+        TargetName = targetName,
         Description = action.Description,
         Status = action.Status.ToString(),
         ResolutionText = action.Resolution?.ResolutionText,
@@ -132,6 +154,18 @@ public static partial class ControllerHelpers
         SubmittedAt = action.SubmittedAt,
         PublishedAt = action.PublishedAt,
     };
+    }
+
+    public static IEnumerable<InitiativeEntryResponse> SelectInitiativeEntries(
+        GameSession session,
+        Dictionary<string, string>? npcVisibilities = null,
+        bool playerView = false) =>
+        session.InitiativeEntries
+            .OrderBy(i => i.SortOrder)
+            .Where(i => !playerView
+                || i.CombatantType != CombatantType.NpcOrMonster
+                || ControllerHelpers.IsNpcVisible(i.CombatantId, npcVisibilities))
+            .Select(ToInitiativeResponse);
 
     public static CombatEncounterResponse ToCombatEncounterResponse(CombatEncounter encounter, Guid? activeEncounterId) => new()
     {
@@ -207,6 +241,7 @@ public static partial class ControllerHelpers
         TargetCharacterName = prompt.TargetCharacter?.Name ?? string.Empty,
         PromptLabel = prompt.PromptLabel,
         CheckMode = prompt.CheckMode,
+        ResultKind = prompt.ResultKind,
         ActionKey = prompt.ActionKey,
         SkillKey = prompt.SkillKey,
         AttributeKey = prompt.AttributeKey,
@@ -227,6 +262,7 @@ public static partial class ControllerHelpers
         TargetCharacterName = prompt.TargetCharacter?.Name ?? string.Empty,
         PromptLabel = prompt.PromptLabel,
         CheckMode = prompt.CheckMode,
+        ResultKind = prompt.ResultKind,
         ActionKey = prompt.ActionKey,
         SkillKey = prompt.SkillKey,
         AttributeKey = prompt.AttributeKey,

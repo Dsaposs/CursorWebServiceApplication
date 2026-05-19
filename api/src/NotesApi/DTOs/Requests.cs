@@ -55,6 +55,27 @@ public class JoinGameRequest
 
     [MaxLength(80)]
     public string ClassKey { get; set; } = string.Empty;
+
+    /// <summary>Skill ranks to assign at creation (keys must be class availableSkills).</summary>
+    public Dictionary<string, int>? SkillAllocations { get; set; }
+
+    /// <summary>Starting item chosen from the class startingItemOptions list.</summary>
+    [MaxLength(80)]
+    public string? StartingItemKey { get; set; }
+}
+
+public class UpdateCharacterInventoryRequest
+{
+    public IEnumerable<InventoryEntryRequest> Inventory { get; set; } = Array.Empty<InventoryEntryRequest>();
+}
+
+public class InventoryEntryRequest
+{
+    [Required, MaxLength(80)]
+    public string ItemKey { get; set; } = string.Empty;
+
+    [Range(0, 999)]
+    public int Quantity { get; set; }
 }
 
 public class ImportRulesetRequest
@@ -144,6 +165,10 @@ public class CreateRollPromptRequest
     [Required, MaxLength(20)]
     public string CheckMode { get; set; } = "Custom";
 
+    /// <summary>PassFail or Total.</summary>
+    [MaxLength(20)]
+    public string? ResultKind { get; set; }
+
     [MaxLength(80)]
     public string? ActionKey { get; set; }
 
@@ -206,6 +231,12 @@ public class StatChangeRequest
     /// Only applicable when TargetType is "Character".
     /// </summary>
     public Dictionary<string, int>? AttributeDeltas { get; set; }
+
+    /// <summary>
+    /// Inventory quantity deltas by item key (negative removes items).
+    /// Only applicable when TargetType is "Character".
+    /// </summary>
+    public Dictionary<string, int>? InventoryDeltas { get; set; }
 }
 
 public class SetupCombatRequest
@@ -230,4 +261,10 @@ public class SetNpcVisibilityRequest
 
     [Required]
     public string Visibility { get; set; } = "Visible";
+}
+
+public class UpsertSessionNoteRequest
+{
+    [MaxLength(20000)]
+    public string Content { get; set; } = string.Empty;
 }

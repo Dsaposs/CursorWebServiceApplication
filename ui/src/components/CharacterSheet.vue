@@ -1,17 +1,15 @@
 <script setup lang="ts">
-import type { CharacterResponse } from '~/types/api';
+import type { CharacterResponse, RulesetDefinition } from '~/types/api';
 import { buildSheetSection, type SheetSection } from '~/utils/jsonDisplay';
 
 interface Props {
   character: CharacterResponse;
+  rulesetDefinition?: RulesetDefinition | null;
 }
 
 const props = defineProps<Props>();
 
 const sections = computed<SheetSection[]>(() => [
-  buildSheetSection('attributes', 'Attributes', props.character.attributesJson),
-  buildSheetSection('skills', 'Skills', props.character.skillsJson),
-  buildSheetSection('inventory', 'Inventory', props.character.inventoryJson),
   buildSheetSection('ruleset', 'Ruleset Data', props.character.rulesetDataJson),
 ].filter(section => !section.isEmpty));
 </script>
@@ -25,6 +23,14 @@ const sections = computed<SheetSection[]>(() => [
         <dd>{{ character.armor }}</dd>
       </div>
     </div>
+
+    <section class="sheet-section">
+      <h3>Inventory</h3>
+      <CharacterInventoryList
+        :inventory-json="character.inventoryJson"
+        :ruleset-definition="rulesetDefinition"
+      />
+    </section>
 
     <div v-if="sections.length" class="character-sheet-sections">
       <section v-for="section in sections" :key="section.key" class="sheet-section">

@@ -62,8 +62,6 @@ public class CharacterResponse
     public int MaxHealth { get; set; }
     public int Health { get; set; }
     public int Armor { get; set; }
-    public string AttributesJson { get; set; } = "{}";
-    public string SkillsJson { get; set; } = "{}";
     public string InventoryJson { get; set; } = "[]";
     public string RulesetDataJson { get; set; } = "{}";
     public string ClassKey { get; set; } = string.Empty;
@@ -78,7 +76,7 @@ public class NpcResponse
     public int Health { get; set; }
     public int Armor { get; set; }
     public string StatBlockJson { get; set; } = "{}";
-    public string Visibility { get; set; } = "Visible";
+    public string Visibility { get; set; } = "Hidden";
 }
 
 public class JoinGameResponse
@@ -146,6 +144,7 @@ public class RollPromptResponse
     public string TargetCharacterName { get; set; } = string.Empty;
     public string? PromptLabel { get; set; }
     public string CheckMode { get; set; } = string.Empty;
+    public string ResultKind { get; set; } = string.Empty;
     public string? ActionKey { get; set; }
     public string? SkillKey { get; set; }
     public string? AttributeKey { get; set; }
@@ -166,6 +165,7 @@ public class ActionQueueItemResponse
     public Guid? ActorNpcId { get; set; }
     public string? ActionKey { get; set; }
     public string ActionText { get; set; } = string.Empty;
+    public Guid? TargetNpcId { get; set; }
     public string? TargetName { get; set; }
     public string? Description { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -192,6 +192,33 @@ public class InitiativeEntryResponse
     public string CombatantName { get; set; } = string.Empty;
     public int SortOrder { get; set; }
     public bool IsCurrentTurn { get; set; }
+}
+
+public class SessionNoteResponse
+{
+    public Guid Id { get; set; }
+    public Guid SessionId { get; set; }
+    public string Content { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public DateTime SessionStartedAt { get; set; }
+    public DateTime? SessionEndedAt { get; set; }
+    public bool SessionIsActive { get; set; }
+    public bool CanEdit { get; set; }
+}
+
+public class SessionNotesContextResponse
+{
+    public Guid SessionId { get; set; }
+    public bool IsSessionActive { get; set; }
+    public SessionNoteResponse? CurrentNote { get; set; }
+    public IEnumerable<SessionNoteResponse> PreviousNotes { get; set; } = Array.Empty<SessionNoteResponse>();
+}
+
+public class GameSessionNotesResponse
+{
+    public Guid GameId { get; set; }
+    public IEnumerable<SessionNoteResponse> Notes { get; set; } = Array.Empty<SessionNoteResponse>();
 }
 
 public class AdminUserReportResponse

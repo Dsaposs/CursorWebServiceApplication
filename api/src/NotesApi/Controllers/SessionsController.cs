@@ -86,18 +86,18 @@ public class SessionsController : ControllerBase
             return NotFound();
         }
 
-        if (!new[] { "Visible", "Obscured", "Hidden" }.Contains(request.Visibility))
+        if (!new[] { ControllerHelpers.NpcVisibilityVisible, ControllerHelpers.NpcVisibilityHidden }.Contains(request.Visibility))
         {
-            return BadRequest(new { errors = new[] { "Visibility must be Visible, Obscured, or Hidden." } });
+            return BadRequest(new { errors = new[] { "Visibility must be Visible or Hidden." } });
         }
 
         var visibilities = ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson);
         var key = request.NpcId.ToString();
 
-        if (request.Visibility == "Visible")
+        if (request.Visibility == ControllerHelpers.NpcVisibilityHidden)
             visibilities.Remove(key);
         else
-            visibilities[key] = request.Visibility;
+            visibilities[key] = ControllerHelpers.NpcVisibilityVisible;
 
         session.NpcVisibilitiesJson = System.Text.Json.JsonSerializer.Serialize(visibilities);
         Touch(session);
@@ -145,6 +145,11 @@ public class SessionsController : ControllerBase
                 return BadRequest(new { errors = new[] { "CheckMode must be Action, Skill, Attribute, or Custom." } });
             }
 
+            if (!RollPromptValidator.TryNormalizeResultKind(item.ResultKind, out var resultKind))
+            {
+                return BadRequest(new { errors = new[] { "ResultKind must be PassFail or Total." } });
+            }
+
             var validationError = RollPromptValidator.ValidateCheck(
                 checkMode,
                 item,
@@ -163,6 +168,7 @@ public class SessionsController : ControllerBase
                 TargetCharacter = character,
                 PromptLabel = string.IsNullOrWhiteSpace(item.PromptLabel) ? null : item.PromptLabel.Trim(),
                 CheckMode = checkMode,
+                ResultKind = resultKind,
                 ActionKey = string.IsNullOrWhiteSpace(item.ActionKey) ? null : item.ActionKey.Trim(),
                 SkillKey = string.IsNullOrWhiteSpace(item.SkillKey) ? null : item.SkillKey.Trim(),
                 AttributeKey = string.IsNullOrWhiteSpace(item.AttributeKey) ? null : item.AttributeKey.Trim(),

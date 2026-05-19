@@ -22,6 +22,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ActionRollPrompt> ActionRollPrompts => Set<ActionRollPrompt>();
     public DbSet<SessionRollPrompt> SessionRollPrompts => Set<SessionRollPrompt>();
     public DbSet<CombatEncounter> CombatEncounters => Set<CombatEncounter>();
+    public DbSet<SessionNote> SessionNotes => Set<SessionNote>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -161,6 +162,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         {
             entity.Property(p => p.PromptLabel).HasMaxLength(200);
             entity.Property(p => p.CheckMode).HasMaxLength(20).IsRequired();
+            entity.Property(p => p.ResultKind).HasMaxLength(20).IsRequired();
             entity.Property(p => p.ActionKey).HasMaxLength(80);
             entity.Property(p => p.SkillKey).HasMaxLength(80);
             entity.Property(p => p.AttributeKey).HasMaxLength(80);
@@ -177,10 +179,24 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        builder.Entity<SessionNote>(entity =>
+        {
+            entity.Property(n => n.OwnerKind).HasMaxLength(16).IsRequired();
+            entity.Property(n => n.OwnerId).HasMaxLength(128).IsRequired();
+            entity.Property(n => n.Content).IsRequired();
+            entity.HasIndex(n => new { n.SessionId, n.OwnerKind, n.OwnerId }).IsUnique();
+            entity.HasIndex(n => new { n.OwnerKind, n.OwnerId, n.UpdatedAt });
+            entity.HasOne(n => n.Session)
+                .WithMany(s => s.SessionNotes)
+                .HasForeignKey(n => n.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         builder.Entity<SessionRollPrompt>(entity =>
         {
             entity.Property(p => p.PromptLabel).HasMaxLength(200);
             entity.Property(p => p.CheckMode).HasMaxLength(20).IsRequired();
+            entity.Property(p => p.ResultKind).HasMaxLength(20).IsRequired();
             entity.Property(p => p.ActionKey).HasMaxLength(80);
             entity.Property(p => p.SkillKey).HasMaxLength(80);
             entity.Property(p => p.AttributeKey).HasMaxLength(80);
