@@ -23,4 +23,26 @@ public static class RulesetActionCatalog
         return allowedClasses.Count == 0
             || allowedClasses.Any(key => key.Equals(classKey, StringComparison.OrdinalIgnoreCase));
     }
+
+    public static RulesetSkillDefinition? FindSkill(string definitionJson, string? skillKey)
+    {
+        if (string.IsNullOrWhiteSpace(skillKey))
+        {
+            return null;
+        }
+
+        var definition = JsonSerializer.Deserialize<RulesetDefinition>(definitionJson, JsonOptions);
+        return definition?.Character.Skills.FirstOrDefault(skill => skill.Key.Equals(skillKey, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static RulesetAttributeDefinition? FindAttribute(string definitionJson, string? attributeKey)
+    {
+        if (string.IsNullOrWhiteSpace(attributeKey))
+        {
+            return null;
+        }
+
+        var definition = JsonSerializer.Deserialize<RulesetDefinition>(definitionJson, JsonOptions);
+        return definition?.Character.Attributes.FirstOrDefault(attr => attr.Key.Equals(attributeKey, StringComparison.OrdinalIgnoreCase));
+    }
 }

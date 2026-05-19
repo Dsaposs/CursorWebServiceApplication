@@ -19,6 +19,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ActionRequest> ActionRequests => Set<ActionRequest>();
     public DbSet<ActionResolution> ActionResolutions => Set<ActionResolution>();
     public DbSet<InitiativeEntry> InitiativeEntries => Set<InitiativeEntry>();
+    public DbSet<ActionRollPrompt> ActionRollPrompts => Set<ActionRollPrompt>();
+    public DbSet<SessionRollPrompt> SessionRollPrompts => Set<SessionRollPrompt>();
+    public DbSet<CombatEncounter> CombatEncounters => Set<CombatEncounter>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -101,6 +104,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(g => g.Sessions)
                 .HasForeignKey(s => s.GameId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(s => s.ActiveCombatEncounter)
+                .WithMany()
+                .HasForeignKey(s => s.ActiveCombatEncounterId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<ActionRequest>(entity =>
@@ -115,6 +122,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(s => s.Actions)
                 .HasForeignKey(a => a.SessionId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(a => a.CombatEncounter)
+                .WithMany(e => e.Actions)
+                .HasForeignKey(a => a.CombatEncounterId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<ActionResolution>(entity =>
@@ -135,6 +146,59 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(s => s.InitiativeEntries)
                 .HasForeignKey(i => i.SessionId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<CombatEncounter>(entity =>
+        {
+            entity.HasIndex(e => new { e.SessionId, e.Sequence }).IsUnique();
+            entity.HasOne(e => e.Session)
+                .WithMany(s => s.CombatEncounters)
+                .HasForeignKey(e => e.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ActionRollPrompt>(entity =>
+        {
+            entity.Property(p => p.PromptLabel).HasMaxLength(200);
+            entity.Property(p => p.CheckMode).HasMaxLength(20).IsRequired();
+            entity.Property(p => p.ActionKey).HasMaxLength(80);
+            entity.Property(p => p.SkillKey).HasMaxLength(80);
+            entity.Property(p => p.AttributeKey).HasMaxLength(80);
+            entity.Property(p => p.CustomCheckText).HasMaxLength(240);
+            entity.Property(p => p.RollSummary).HasMaxLength(500);
+            entity.HasIndex(p => new { p.ActionRequestId, p.Status });
+            entity.HasOne(p => p.ActionRequest)
+                .WithMany(a => a.RollPrompts)
+                .HasForeignKey(p => p.ActionRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(p => p.TargetCharacter)
+                .WithMany()
+                .HasForeignKey(p => p.TargetCharacterId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SessionRollPrompt>(entity =>
+        {
+            entity.Property(p => p.PromptLabel).HasMaxLength(200);
+            entity.Property(p => p.CheckMode).HasMaxLength(20).IsRequired();
+            entity.Property(p => p.ActionKey).HasMaxLength(80);
+            entity.Property(p => p.SkillKey).HasMaxLength(80);
+            entity.Property(p => p.AttributeKey).HasMaxLength(80);
+            entity.Property(p => p.CustomCheckText).HasMaxLength(240);
+            entity.Property(p => p.RollSummary).HasMaxLength(500);
+            entity.HasIndex(p => new { p.SessionId, p.Status });
+            entity.HasOne(p => p.Session)
+                .WithMany(s => s.SessionRollPrompts)
+                .HasForeignKey(p => p.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(p => p.TargetCharacter)
+                .WithMany()
+                .HasForeignKey(p => p.TargetCharacterId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(p => p.ActionRequest)
+                .WithMany()
+                .HasForeignKey(p => p.ActionRequestId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

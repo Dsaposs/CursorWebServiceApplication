@@ -1,0 +1,12 @@
+[
+  {
+    "key": "d6-pool",
+    "label": "D6 Dice Pool",
+    "description": "Roll pools of d6s; count successes at a target value. Supports stress dice and panic checks."
+  },
+  {
+    "key": "d20-check",
+    "label": "D20 Check",
+    "description": "Roll a single die (typically d20) and compare the total to a DC or AC."
+  }
+]

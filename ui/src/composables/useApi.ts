@@ -1,5 +1,15 @@
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 interface ApiOptions {
   method?: HttpMethod;
   body?: unknown;
@@ -56,7 +66,9 @@ export function useApi() {
         headers,
       });
     } catch (fetchError) {
-      throw new Error(extractError(fetchError));
+      const err = fetchError as { status?: number; statusCode?: number };
+      const status = err.status ?? err.statusCode ?? 0;
+      throw new ApiError(status, extractError(fetchError));
     }
   }
 

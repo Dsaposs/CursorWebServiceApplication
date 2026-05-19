@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import type { SessionStateResponse } from '~/types/api';
+import type { RulesetResponse, SessionStateResponse } from '~/types/api';
+import { parseRulesetDefinition } from '~/utils/rulesets';
 
 const route = useRoute();
 const { api, token, loadSession } = useApi();
 
 const state = ref<SessionStateResponse | null>(null);
+const ruleset = ref<RulesetResponse | null>(null);
+const rulesetDefinition = computed(() => parseRulesetDefinition(ruleset.value));
 const isLoading = ref(true);
 const loadError = ref('');
 
@@ -14,6 +17,9 @@ onMounted(async () => {
 
   try {
     state.value = await api<SessionStateResponse>(`/api/sessions/${route.params.id}/dm`);
+    if (state.value) {
+      ruleset.value = await api<RulesetResponse>(`/api/rulesets/${state.value.game.rulesetCode}`);
+    }
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -60,6 +66,18 @@ const pendingActions = computed(() =>
   state.value?.actions.filter(a => a.status === 'Pending') ?? [],
 );
 const allActions = computed(() => [...(state.value?.actions ?? [])].sort((a, b) => a.sequence - b.sequence));
+const summaryCombatEncounters = computed(() => state.value?.combatEncounters ?? []);
+const expandedSummaryActions = ref<Set<string>>(new Set());
+
+const {
+  expandedGroups: expandedSummaryGroups,
+  toggleGroup: toggleSummaryGroup,
+} = useActionLogGroupExpansion(allActions, summaryCombatEncounters, { expandAllOnFirstLoad: true });
+
+function toggleSummaryAction(id: string) {
+  if (expandedSummaryActions.value.has(id)) expandedSummaryActions.value.delete(id);
+  else expandedSummaryActions.value.add(id);
+}
 
 // Action actor unique names (for participation derived from actor name when no characterId)
 const participantNames = computed(() => {
@@ -224,25 +242,22 @@ function formatTime(iso: string) {
             <p class="text-sm">No actions were submitted this session.</p>
           </div>
 
-          <div style="display: grid; gap: 0.6rem;">
-            <ActionCard
-              v-for="action in allActions"
-              :key="action.id"
-              :action="action"
-              :show-sequence="true"
-            >
-              <template #meta>
-                <span class="text-xs muted">{{ formatTime(action.submittedAt) }}</span>
-              </template>
-              <template #resolution-extra>
-                <div v-if="action.statChangesJson && action.statChangesJson !== '[]'" class="mt-1">
-                  <span class="badge" style="background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(232,163,42,0.25); font-size: 0.7rem;">
-                    stat change applied
-                  </span>
-                </div>
-              </template>
-            </ActionCard>
-          </div>
+          <ActionLogGrouped
+            :actions="allActions"
+            :combat-encounters="state.combatEncounters ?? []"
+            :expanded-actions="expandedSummaryActions"
+            :expanded-groups="expandedSummaryGroups"
+            :game="state.game"
+            :ruleset-definition="rulesetDefinition"
+            :show-sequence="true"
+            action-prefix="used"
+            @toggle-action="toggleSummaryAction"
+            @toggle-group="toggleSummaryGroup"
+          >
+            <template #action-meta="{ action }">
+              <span class="text-xs muted">{{ formatTime(action.submittedAt) }}</span>
+            </template>
+          </ActionLogGrouped>
         </div>
       </div>
 

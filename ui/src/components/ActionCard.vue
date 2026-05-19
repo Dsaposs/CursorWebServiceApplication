@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import type { ActionQueueItemResponse } from '~/types/api';
+import type { ActionQueueItemResponse, GameResponse, RulesetDefinition } from '~/types/api';
+import {
+  formatActionStatChanges,
+  formatActionTimestamp,
+  formatFollowUpRollLabel,
+  splitActionDescription,
+} from '~/utils/actionLog';
 
 interface Props {
   action: ActionQueueItemResponse;
@@ -7,6 +13,8 @@ interface Props {
   collapsible?: boolean;
   expanded?: boolean;
   showSequence?: boolean;
+  game?: GameResponse | null;
+  rulesetDefinition?: RulesetDefinition | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -14,6 +22,8 @@ const props = withDefaults(defineProps<Props>(), {
   collapsible: false,
   expanded: true,
   showSequence: false,
+  game: null,
+  rulesetDefinition: null,
 });
 
 const emit = defineEmits<{
@@ -21,6 +31,47 @@ const emit = defineEmits<{
 }>();
 
 const isPublished = computed(() => props.action.status === 'Published');
+const isRejected = computed(() => props.action.status === 'Rejected');
+const isResolved = computed(() => isPublished.value || isRejected.value);
+
+const submission = computed(() => splitActionDescription(props.action.description));
+
+const followUpRolls = computed(() => props.action.followUpRolls ?? []);
+
+const statChangeLines = computed(() =>
+  formatActionStatChanges(props.action, props.game, props.rulesetDefinition),
+);
+
+const submittedLabel = computed(() => formatActionTimestamp(props.action.submittedAt));
+
+const publishedLabel = computed(() => formatActionTimestamp(props.action.publishedAt));
+
+const outcomeBadge = computed(() => {
+  if (isPublished.value && props.action.outcome === 'Pass') {
+    return { label: 'Pass', className: 'pass' };
+  }
+  if (isPublished.value && props.action.outcome === 'Fail') {
+    return { label: 'Fail', className: 'fail' };
+  }
+  if (isRejected.value) {
+    return { label: 'Rejected', className: 'rejected' };
+  }
+  return null;
+});
+
+const hasSubmissionDetails = computed(() =>
+  Boolean(submission.value.playerRoll || submission.value.body),
+);
+
+const hasResolutionDetails = computed(() =>
+  Boolean(
+    props.action.rollSummary
+    || props.action.resolutionText
+    || props.action.additionalActions
+    || followUpRolls.value.length
+    || statChangeLines.value.length,
+  ),
+);
 
 function toggle() {
   if (props.collapsible) {
@@ -33,7 +84,12 @@ function toggle() {
   <component
     :is="collapsible ? 'button' : 'article'"
     class="action-card"
-    :class="[isPublished ? 'published-card' : 'pending-card', { 'action-card-button': collapsible }]"
+    :class="[
+      isPublished ? 'published-card' : '',
+      isRejected ? 'rejected-card' : '',
+      !isResolved ? 'pending-card' : '',
+      { 'action-card-button': collapsible },
+    ]"
     :type="collapsible ? 'button' : undefined"
     :aria-expanded="collapsible ? expanded : undefined"
     @click="toggle"
@@ -49,24 +105,68 @@ function toggle() {
           <span v-if="prefix">{{ prefix }} </span><strong>{{ action.actionText }}</strong>
           <span v-if="action.targetName"> on {{ action.targetName }}</span>
         </div>
-        <div v-if="action.description" class="action-card-desc">{{ action.description }}</div>
+        <p v-if="submittedLabel || publishedLabel" class="action-card-time text-xs muted">
+          <span v-if="submittedLabel">Submitted {{ submittedLabel }}</span>
+          <span v-if="submittedLabel && publishedLabel"> · </span>
+          <span v-if="publishedLabel && isPublished">Resolved {{ publishedLabel }}</span>
+          <span v-else-if="publishedLabel && isRejected">Rejected {{ publishedLabel }}</span>
+        </p>
       </div>
-      <span class="badge" :class="isPublished ? 'published' : 'pending'">
-        {{ isPublished ? 'Done' : action.status }}
+      <span v-if="outcomeBadge" class="badge" :class="outcomeBadge.className">
+        {{ outcomeBadge.label }}
       </span>
     </div>
 
-    <template v-if="isPublished && (!collapsible || expanded)">
-      <div class="action-resolution">
-        <div v-if="action.rollSummary" class="roll-summary">
-          <span aria-hidden="true">🎲</span> {{ action.rollSummary }}
+    <div
+      v-if="hasSubmissionDetails && (!collapsible || expanded || !isResolved)"
+      class="action-detail-block"
+    >
+      <div v-if="submission.playerRoll" class="action-detail-row">
+        <span class="action-detail-label">Player roll</span>
+        <span class="roll-summary">🎲 {{ submission.playerRoll }}</span>
+      </div>
+      <p v-if="submission.body" class="action-card-desc">{{ submission.body }}</p>
+    </div>
+
+    <template v-if="isResolved && (!collapsible || expanded)">
+      <div v-if="hasResolutionDetails" class="action-resolution">
+        <div v-if="action.rollSummary" class="action-detail-row">
+          <span class="action-detail-label">DM roll</span>
+          <span class="roll-summary">🎲 {{ action.rollSummary }}</span>
         </div>
-        <p class="action-resolution-text">{{ action.resolutionText }}</p>
-        <p v-if="action.additionalActions" class="action-resolution-extra">{{ action.additionalActions }}</p>
+
+        <div v-if="followUpRolls.length" class="action-detail-section">
+          <span class="action-detail-label">Follow-up rolls</span>
+          <ul class="action-detail-list">
+            <li v-for="roll in followUpRolls" :key="roll.id" class="action-follow-up-item">
+              <strong>{{ roll.targetCharacterName }}</strong>
+              <span class="action-check-desc">{{ formatFollowUpRollLabel(roll, rulesetDefinition) }}</span>
+              <span v-if="roll.rollSummary" class="roll-summary">🎲 {{ roll.rollSummary }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="action.resolutionText" class="action-detail-section">
+          <span class="action-detail-label">{{ isRejected ? 'Rejection note' : 'Resolution' }}</span>
+          <p class="action-resolution-text">{{ action.resolutionText }}</p>
+        </div>
+
+        <div v-if="action.additionalActions" class="action-detail-section">
+          <span class="action-detail-label">Additional actions</span>
+          <p class="action-resolution-extra">{{ action.additionalActions }}</p>
+        </div>
+
+        <div v-if="statChangeLines.length" class="action-detail-section">
+          <span class="action-detail-label">Stat changes</span>
+          <ul class="action-detail-list">
+            <li v-for="(line, index) in statChangeLines" :key="index">{{ line }}</li>
+          </ul>
+        </div>
+
         <slot name="resolution-extra" />
       </div>
     </template>
 
-    <p v-else-if="!isPublished" class="text-xs muted">Waiting for DM to resolve…</p>
+    <p v-else-if="!isResolved" class="text-xs muted">Waiting for DM to resolve…</p>
   </component>
 </template>

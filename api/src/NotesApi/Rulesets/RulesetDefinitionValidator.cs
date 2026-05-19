@@ -4,6 +4,12 @@ namespace NotesApi.Rulesets;
 
 public class RulesetDefinitionValidator
 {
+    private static readonly HashSet<string> KnownDiceRollerKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "d6-pool",
+        "d20-check",
+    };
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -32,7 +38,17 @@ public class RulesetDefinitionValidator
         }
 
         var errors = new List<string>();
-        Require(definition.SchemaVersion == 1, "schemaVersion must be 1.", errors);
+        Require(definition.SchemaVersion is 1 or 2, "schemaVersion must be 1 or 2.", errors);
+
+        var rollerKey = string.IsNullOrWhiteSpace(definition.DiceRollerKey)
+            ? (definition.SchemaVersion >= 2 ? "d6-pool" : "d20-check")
+            : definition.DiceRollerKey;
+        Require(KnownDiceRollerKeys.Contains(rollerKey), $"diceRollerKey '{rollerKey}' is not a known dice roller.", errors);
+        if (definition.SchemaVersion >= 2)
+        {
+            Require(rollerKey == "d6-pool", "schema version 2 rulesets must use diceRollerKey 'd6-pool'.", errors);
+        }
+
         RequireKey(definition.Code, "code", errors);
         Require(definition.Code.Length <= 50, "code must be 50 characters or fewer.", errors);
         Require(!string.IsNullOrWhiteSpace(definition.DisplayName), "displayName is required.", errors);
@@ -79,6 +95,16 @@ public class RulesetDefinitionValidator
             {
                 Require(gameValueKeys.Contains(modifier.Key), $"Action '{action.Key}' modifier references missing game value '{modifier.Key}'.", errors);
             }
+
+            if (definition.SchemaVersion >= 2 && action.Roll.DicePoolMode is not null and not "attribute+skill")
+            {
+                errors.Add($"Action '{action.Key}' dicePoolMode must be 'attribute+skill' for schema version 2.");
+            }
+        }
+
+        if (definition.SchemaVersion >= 2)
+        {
+            ValidateRollMechanics(definition, diceKeys, gameValueKeys, errors);
         }
 
         return errors.Count > 0
@@ -138,6 +164,47 @@ public class RulesetDefinitionValidator
         if (!condition)
         {
             errors.Add(message);
+        }
+    }
+
+    private static void ValidateRollMechanics(
+        RulesetDefinition definition,
+        HashSet<string> diceKeys,
+        HashSet<string> gameValueKeys,
+        List<string> errors)
+    {
+        if (definition.RollMechanics is null)
+        {
+            errors.Add("rollMechanics is required for schema version 2.");
+            return;
+        }
+
+        ValidateCheckDefinition(definition.RollMechanics.SkillCheck, "rollMechanics.skillCheck", diceKeys, gameValueKeys, errors);
+        ValidateCheckDefinition(definition.RollMechanics.AttributeCheck, "rollMechanics.attributeCheck", diceKeys, gameValueKeys, errors);
+    }
+
+    private static void ValidateCheckDefinition(
+        RulesetCheckDefinition? check,
+        string path,
+        HashSet<string> diceKeys,
+        HashSet<string> gameValueKeys,
+        List<string> errors)
+    {
+        if (check is null)
+        {
+            errors.Add($"{path} is required for schema version 2.");
+            return;
+        }
+
+        Require(diceKeys.Contains(check.DiceKey), $"{path} references missing dice definition '{check.DiceKey}'.", errors);
+        Require(
+            check.PoolMode is "attribute+skill" or "attribute" or "fixed",
+            $"{path}.poolMode must be 'attribute+skill', 'attribute', or 'fixed'.",
+            errors);
+
+        foreach (var modifier in check.Modifiers.Where(m => m.Source.Equals("gameValue", StringComparison.OrdinalIgnoreCase)))
+        {
+            Require(gameValueKeys.Contains(modifier.Key), $"{path} modifier references missing game value '{modifier.Key}'.", errors);
         }
     }
 }

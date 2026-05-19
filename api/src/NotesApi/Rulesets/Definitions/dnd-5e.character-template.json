@@ -1,0 +1,25 @@
+{
+  "attributes": {
+    "strength": 10,
+    "dexterity": 10,
+    "constitution": 10,
+    "intelligence": 10,
+    "wisdom": 10,
+    "charisma": 10
+  },
+  "skills": {
+    "athletics": 0,
+    "acrobatics": 0,
+    "stealth": 0,
+    "arcana": 0,
+    "investigation": 0,
+    "perception": 0,
+    "insight": 0,
+    "deception": 0
+  },
+  "gameValues": {
+    "proficiencyBonus": 2,
+    "level": 1
+  },
+  "level": 1
+}

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Models;
+using NotesApi.Services;
 
 namespace NotesApi.Controllers;
 
@@ -28,6 +29,7 @@ public class CombatController : ControllerBase
             return NotFound();
         }
 
+        var enteringCombat = session.State != SessionMode.Combat;
         var currentCombatantId = session.InitiativeEntries.FirstOrDefault(i => i.IsCurrentTurn)?.CombatantId;
 
         // Delete all existing entries for this session with a direct SQL statement.
@@ -79,6 +81,15 @@ public class CombatController : ControllerBase
         // that would re-attach stale entities and generate UPDATE statements instead.
         _db.InitiativeEntries.AddRange(newEntries);
         session.State = SessionMode.Combat;
+        if (enteringCombat)
+        {
+            await CombatEncounterLifecycle.BeginEncounterAsync(_db, session);
+        }
+        else
+        {
+            await CombatEncounterLifecycle.EnsureEncounterForCombatAsync(_db, session);
+        }
+
         Touch(session);
         await _db.SaveChangesAsync();
 

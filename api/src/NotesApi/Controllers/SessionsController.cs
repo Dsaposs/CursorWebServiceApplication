@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Models;
+using NotesApi.Services;
 
 namespace NotesApi.Controllers;
 
@@ -105,6 +106,81 @@ public class SessionsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("sessions/{sessionId:guid}/roll-prompts")]
+    public async Task<ActionResult<IEnumerable<RollPromptResponse>>> CreateSessionRollPrompts(
+        Guid sessionId,
+        CreateSessionRollPromptsRequest request)
+    {
+        var session = await GetOwnedSessionAsync(sessionId);
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        if (!session.IsActive)
+        {
+            return BadRequest(new { errors = new[] { "Roll prompts can only be sent during an active session." } });
+        }
+
+        var prompts = request.Prompts?.ToList() ?? [];
+        if (prompts.Count == 0)
+        {
+            return BadRequest(new { errors = new[] { "At least one roll prompt is required." } });
+        }
+
+        var created = new List<SessionRollPrompt>();
+        var now = DateTime.UtcNow;
+        var batchId = Guid.NewGuid();
+
+        foreach (var item in prompts)
+        {
+            var character = session.Game.Characters.FirstOrDefault(c => c.Id == item.TargetCharacterId);
+            if (character is null)
+            {
+                return BadRequest(new { errors = new[] { "Target character was not found in this game." } });
+            }
+
+            if (!RollPromptValidator.TryNormalizeCheckMode(item.CheckMode, out var checkMode))
+            {
+                return BadRequest(new { errors = new[] { "CheckMode must be Action, Skill, Attribute, or Custom." } });
+            }
+
+            var validationError = RollPromptValidator.ValidateCheck(
+                checkMode,
+                item,
+                session.Game.Ruleset.DefinitionJson,
+                character.ClassKey);
+            if (validationError is not null)
+            {
+                return BadRequest(new { errors = new[] { validationError } });
+            }
+
+            var prompt = new SessionRollPrompt
+            {
+                Id = Guid.NewGuid(),
+                SessionId = session.Id,
+                TargetCharacterId = character.Id,
+                TargetCharacter = character,
+                PromptLabel = string.IsNullOrWhiteSpace(item.PromptLabel) ? null : item.PromptLabel.Trim(),
+                CheckMode = checkMode,
+                ActionKey = string.IsNullOrWhiteSpace(item.ActionKey) ? null : item.ActionKey.Trim(),
+                SkillKey = string.IsNullOrWhiteSpace(item.SkillKey) ? null : item.SkillKey.Trim(),
+                AttributeKey = string.IsNullOrWhiteSpace(item.AttributeKey) ? null : item.AttributeKey.Trim(),
+                CustomCheckText = string.IsNullOrWhiteSpace(item.CustomCheckText) ? null : item.CustomCheckText.Trim(),
+                Status = RollPromptStatus.Pending,
+                SkillCheckBatchId = batchId,
+                CreatedAt = now,
+            };
+            _db.SessionRollPrompts.Add(prompt);
+            created.Add(prompt);
+        }
+
+        Touch(session);
+        await _db.SaveChangesAsync();
+
+        return Ok(created.Select(ControllerHelpers.ToSessionRollPromptResponse));
+    }
+
     [HttpPost("sessions/{sessionId:guid}/state")]
     public async Task<ActionResult<SessionSummaryResponse>> ChangeState(Guid sessionId, ChangeSessionStateRequest request)
     {
@@ -119,7 +195,17 @@ public class SessionsController : ControllerBase
             return BadRequest(new { errors = new[] { "State must be Exploration or Combat." } });
         }
 
-        session.State = state;
+        if (state == SessionMode.Combat)
+        {
+            await CombatEncounterLifecycle.EnsureEncounterForCombatAsync(_db, session);
+            session.State = SessionMode.Combat;
+        }
+        else
+        {
+            await CombatEncounterLifecycle.EndActiveEncounterAsync(_db, session);
+            session.State = SessionMode.Exploration;
+        }
+
         Touch(session);
         await _db.SaveChangesAsync();
 
@@ -134,13 +220,22 @@ public class SessionsController : ControllerBase
             .Include(s => s.Game).ThenInclude(g => g.Characters)
             .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
             .Include(s => s.Actions).ThenInclude(a => a.Resolution)
+            .Include(s => s.Actions).ThenInclude(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .Include(s => s.Actions).ThenInclude(a => a.CombatEncounter)
+            .Include(s => s.CombatEncounters)
             .Include(s => s.InitiativeEntries)
+            .Include(s => s.SessionRollPrompts).ThenInclude(p => p.TargetCharacter)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.Game.DmUserId == userId);
     }
 
     private SessionStateResponse ToSessionState(GameSession session, Character? character, int sinceSequence)
     {
         var summary = this.ToSessionSummaryResponse(session);
+        var skillCheckActionIds = session.SessionRollPrompts
+            .Where(p => p.ActionRequestId.HasValue)
+            .Select(p => p.ActionRequestId!.Value)
+            .ToHashSet();
+
         return new SessionStateResponse
         {
             Id = summary.Id,
@@ -158,8 +253,10 @@ public class SessionsController : ControllerBase
             Actions = session.Actions
                 .Where(a => a.Sequence > sinceSequence)
                 .OrderBy(a => a.Sequence)
-                .Select(ControllerHelpers.ToActionResponse),
+                .Select(a => ControllerHelpers.ToActionResponse(a, skillCheckActionIds.Contains(a.Id))),
             Initiative = session.InitiativeEntries.OrderBy(i => i.SortOrder).Select(ControllerHelpers.ToInitiativeResponse),
+            RollPrompts = ControllerHelpers.SelectRollPrompts(session),
+            CombatEncounters = ControllerHelpers.SelectCombatEncounters(session),
         };
     }
 

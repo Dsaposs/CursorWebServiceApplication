@@ -12,6 +12,21 @@ public enum ActionStatus
 {
     Pending = 0,
     Published = 1,
+    Rejected = 2,
+    Cancelled = 3,
+}
+
+public enum ActionOutcome
+{
+    Pass = 0,
+    Fail = 1,
+}
+
+public enum RollPromptStatus
+{
+    Pending = 0,
+    Completed = 1,
+    Cancelled = 2,
 }
 
 public enum CombatantType
@@ -190,9 +205,83 @@ public class GameSession
 
     public string NpcVisibilitiesJson { get; set; } = "{}";
 
+    public Guid? ActiveCombatEncounterId { get; set; }
+
+    public CombatEncounter? ActiveCombatEncounter { get; set; }
+
     public ICollection<ActionRequest> Actions { get; set; } = new List<ActionRequest>();
 
+    public ICollection<CombatEncounter> CombatEncounters { get; set; } = new List<CombatEncounter>();
+
     public ICollection<InitiativeEntry> InitiativeEntries { get; set; } = new List<InitiativeEntry>();
+
+    public ICollection<SessionRollPrompt> SessionRollPrompts { get; set; } = new List<SessionRollPrompt>();
+}
+
+public class SessionRollPrompt
+{
+    public Guid Id { get; set; }
+
+    public Guid SessionId { get; set; }
+
+    public GameSession Session { get; set; } = null!;
+
+    public Guid TargetCharacterId { get; set; }
+
+    public Character TargetCharacter { get; set; } = null!;
+
+    [MaxLength(200)]
+    public string? PromptLabel { get; set; }
+
+    /// <summary>Action, Skill, Attribute, or Custom.</summary>
+    [Required, MaxLength(20)]
+    public string CheckMode { get; set; } = "Skill";
+
+    [MaxLength(80)]
+    public string? ActionKey { get; set; }
+
+    [MaxLength(80)]
+    public string? SkillKey { get; set; }
+
+    [MaxLength(80)]
+    public string? AttributeKey { get; set; }
+
+    [MaxLength(240)]
+    public string? CustomCheckText { get; set; }
+
+    public RollPromptStatus Status { get; set; } = RollPromptStatus.Pending;
+
+    [MaxLength(500)]
+    public string? RollSummary { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
+
+    /// <summary>Groups prompts sent together in one DM skill-check request.</summary>
+    public Guid? SkillCheckBatchId { get; set; }
+
+    /// <summary>Pending action queued when the player submits their roll.</summary>
+    public Guid? ActionRequestId { get; set; }
+
+    public ActionRequest? ActionRequest { get; set; }
+}
+
+public class CombatEncounter
+{
+    public Guid Id { get; set; }
+
+    public Guid SessionId { get; set; }
+
+    public GameSession Session { get; set; } = null!;
+
+    public int Sequence { get; set; }
+
+    public DateTime StartedAt { get; set; }
+
+    public DateTime? EndedAt { get; set; }
+
+    public ICollection<ActionRequest> Actions { get; set; } = new List<ActionRequest>();
 }
 
 public class ActionRequest
@@ -230,11 +319,63 @@ public class ActionRequest
 
     public int Sequence { get; set; }
 
+    public Guid? CombatEncounterId { get; set; }
+
+    public CombatEncounter? CombatEncounter { get; set; }
+
+    public Guid? SkillCheckBatchId { get; set; }
+
+    [MaxLength(200)]
+    public string? SkillCheckGroupLabel { get; set; }
+
     public DateTime SubmittedAt { get; set; }
 
     public DateTime? PublishedAt { get; set; }
 
     public ActionResolution? Resolution { get; set; }
+
+    public ICollection<ActionRollPrompt> RollPrompts { get; set; } = new List<ActionRollPrompt>();
+}
+
+public class ActionRollPrompt
+{
+    public Guid Id { get; set; }
+
+    public Guid ActionRequestId { get; set; }
+
+    public ActionRequest ActionRequest { get; set; } = null!;
+
+    public Guid TargetCharacterId { get; set; }
+
+    public Character TargetCharacter { get; set; } = null!;
+
+    [MaxLength(200)]
+    public string? PromptLabel { get; set; }
+
+    /// <summary>Action, Skill, Attribute, or Custom.</summary>
+    [Required, MaxLength(20)]
+    public string CheckMode { get; set; } = "Custom";
+
+    [MaxLength(80)]
+    public string? ActionKey { get; set; }
+
+    [MaxLength(80)]
+    public string? SkillKey { get; set; }
+
+    [MaxLength(80)]
+    public string? AttributeKey { get; set; }
+
+    [MaxLength(240)]
+    public string? CustomCheckText { get; set; }
+
+    public RollPromptStatus Status { get; set; } = RollPromptStatus.Pending;
+
+    [MaxLength(500)]
+    public string? RollSummary { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
 }
 
 public class ActionResolution
@@ -253,6 +394,8 @@ public class ActionResolution
     public string? AdditionalActions { get; set; }
 
     public string StatChangesJson { get; set; } = "[]";
+
+    public ActionOutcome? Outcome { get; set; }
 
     public DateTime PublishedAt { get; set; }
 }

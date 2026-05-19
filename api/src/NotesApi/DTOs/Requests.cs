@@ -129,6 +129,53 @@ public class ResolveActionRequest
     public IEnumerable<StatChangeRequest> StatChanges { get; set; } = Array.Empty<StatChangeRequest>();
 }
 
+public class RejectActionRequest
+{
+    [MaxLength(1000)]
+    public string? RejectionReason { get; set; }
+}
+
+public class CreateRollPromptRequest
+{
+    [Required]
+    public Guid TargetCharacterId { get; set; }
+
+    /// <summary>Action, Skill, Attribute, or Custom.</summary>
+    [Required, MaxLength(20)]
+    public string CheckMode { get; set; } = "Custom";
+
+    [MaxLength(80)]
+    public string? ActionKey { get; set; }
+
+    [MaxLength(80)]
+    public string? SkillKey { get; set; }
+
+    [MaxLength(80)]
+    public string? AttributeKey { get; set; }
+
+    [MaxLength(240)]
+    public string? CustomCheckText { get; set; }
+
+    [MaxLength(200)]
+    public string? PromptLabel { get; set; }
+}
+
+public class CreateRollPromptsRequest
+{
+    public IEnumerable<CreateRollPromptRequest> Prompts { get; set; } = Array.Empty<CreateRollPromptRequest>();
+}
+
+public class CreateSessionRollPromptsRequest
+{
+    public IEnumerable<CreateRollPromptRequest> Prompts { get; set; } = Array.Empty<CreateRollPromptRequest>();
+}
+
+public class SubmitRollPromptRequest
+{
+    [Required, MaxLength(500)]
+    public string RollSummary { get; set; } = string.Empty;
+}
+
 public class StatChangeRequest
 {
     [Required]
@@ -141,6 +188,24 @@ public class StatChangeRequest
     public int? SetHealth { get; set; }
 
     public int? SetArmor { get; set; }
+
+    /// <summary>
+    /// Ruleset-specific game values to set (absolute) on the target character (e.g. stress, experience).
+    /// Only applicable when TargetType is "Character".
+    /// </summary>
+    public Dictionary<string, int>? SetGameValues { get; set; }
+
+    /// <summary>
+    /// Delta changes to ruleset-specific game values (e.g. stress +1, experience -2).
+    /// Applied after SetGameValues. Only applicable when TargetType is "Character".
+    /// </summary>
+    public Dictionary<string, int>? GameValueDeltas { get; set; }
+
+    /// <summary>
+    /// Delta changes to character attributes (e.g. strength +1).
+    /// Only applicable when TargetType is "Character".
+    /// </summary>
+    public Dictionary<string, int>? AttributeDeltas { get; set; }
 }
 
 public class SetupCombatRequest

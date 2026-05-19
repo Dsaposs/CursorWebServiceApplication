@@ -45,6 +45,15 @@ public class NpcsController : ControllerBase
 
         npc.Health = Math.Clamp(npc.Health, 0, npc.MaxHealth);
         _db.NpcsAndMonsters.Add(npc);
+
+        var activeSession = await _db.GameSessions
+            .FirstOrDefaultAsync(s => s.GameId == game.Id && s.IsActive);
+        if (activeSession is not null)
+        {
+            activeSession.Version++;
+            activeSession.UpdatedAt = now;
+        }
+
         game.UpdatedAt = now;
         await _db.SaveChangesAsync();
 

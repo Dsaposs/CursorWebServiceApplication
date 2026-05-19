@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "diceRollerKey": "d20-check",
+  "code": "dnd-5e",
+  "displayName": "Dungeons & Dragons",
+  "description": "Fantasy adventure ruleset with d20 rolls, three core classes, and class-specific actions.",
+  "diceNotation": "d20",
+  "dice": [
+    {
+      "key": "d20",
+      "label": "D20",
+      "notation": "1d20"
+    }
+  ],
+  "character": {
+    "vitals": {
+      "hitPoints": { "label": "Hit Points", "defaultMax": 10 },
+      "armorClass": { "label": "Armor Class", "default": 10 }
+    },
+    "attributes": [
+      { "key": "strength", "label": "Strength", "default": 10, "min": 3, "max": 20 },
+      { "key": "dexterity", "label": "Dexterity", "default": 10, "min": 3, "max": 20 },
+      { "key": "constitution", "label": "Constitution", "default": 10, "min": 3, "max": 20 },
+      { "key": "intelligence", "label": "Intelligence", "default": 10, "min": 3, "max": 20 },
+      { "key": "wisdom", "label": "Wisdom", "default": 10, "min": 3, "max": 20 },
+      { "key": "charisma", "label": "Charisma", "default": 10, "min": 3, "max": 20 }
+    ],
+    "gameValues": [
+      { "key": "proficiencyBonus", "label": "Proficiency Bonus", "type": "number", "default": 2, "min": 2 },
+      { "key": "level", "label": "Level", "type": "number", "default": 1, "min": 1 }
+    ],
+    "classes": [
+      {
+        "key": "fighter",
+        "label": "Fighter",
+        "description": "A master of martial combat, skilled with a variety of weapons and armor.",
+        "availableSkills": ["athletics", "acrobatics", "perception"],
+        "startingSkillPoints": 2
+      },
+      {
+        "key": "rogue",
+        "label": "Rogue",
+        "description": "A scoundrel who uses stealth and trickery to overcome obstacles and enemies.",
+        "availableSkills": ["acrobatics", "stealth", "deception", "perception"],
+        "startingSkillPoints": 2
+      },
+      {
+        "key": "wizard",
+        "label": "Wizard",
+        "description": "A scholarly magic-user capable of manipulating the structures of reality.",
+        "availableSkills": ["arcana", "investigation", "insight"],
+        "startingSkillPoints": 2
+      }
+    ],
+    "skills": [
+      { "key": "athletics", "label": "Athletics", "attribute": "strength", "default": 0 },
+      { "key": "acrobatics", "label": "Acrobatics", "attribute": "dexterity", "default": 0 },
+      { "key": "stealth", "label": "Stealth", "attribute": "dexterity", "default": 0 },
+      { "key": "arcana", "label": "Arcana", "attribute": "intelligence", "default": 0 },
+      { "key": "investigation", "label": "Investigation", "attribute": "intelligence", "default": 0 },
+      { "key": "perception", "label": "Perception", "attribute": "wisdom", "default": 0 },
+      { "key": "insight", "label": "Insight", "attribute": "wisdom", "default": 0 },
+      { "key": "deception", "label": "Deception", "attribute": "charisma", "default": 0 }
+    ]
+  },
+  "actions": [
+    {
+      "key": "greatWeaponAttack",
+      "label": "Great Weapon Attack",
+      "description": "Swing a heavy melee weapon with devastating force.",
+      "allowedClasses": ["fighter"],
+      "roll": {
+        "dice": "d20",
+        "attribute": "strength",
+        "skill": "athletics",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Strength modifier + proficiency vs target AC. Meet or beat AC to hit; add weapon damage on a hit."
+      }
+    },
+    {
+      "key": "secondWind",
+      "label": "Second Wind",
+      "description": "Regain stamina in the heat of battle.",
+      "allowedClasses": ["fighter"],
+      "roll": {
+        "dice": "d20",
+        "attribute": "constitution",
+        "skill": "athletics",
+        "modifiers": [],
+        "successRule": "Recover 1d10 + fighter level hit points. Usable once per short rest."
+      }
+    },
+    {
+      "key": "actionSurge",
+      "label": "Action Surge",
+      "description": "Push beyond your limits to act again immediately.",
+      "allowedClasses": ["fighter"],
+      "roll": {
+        "dice": "d20",
+        "attribute": "strength",
+        "skill": "athletics",
+        "modifiers": [],
+        "successRule": "Take one additional action on your turn. Usable once per short rest."
+      }
+    },
+    {
+      "key": "sneakAttack",
+      "label": "Sneak Attack",
+      "description": "Strike when the enemy is distracted or you have advantage.",
+      "allowedClasses": ["rogue"],
+      "roll": {
+        "dice": "d20",
+        "attribute": "dexterity",
+        "skill": "stealth",
+        "modifiers": [],
+        "successRule": "On a hit with a finesse or ranged weapon, add extra damage (1d6 at level 1). Requires advantage or an ally adjacent to the target."
+      }
+    },
+    {
+      "key": "cunningAction",
+      "label": "Cunning Action",
+      "description": "Dash, Disengage, or Hide as a bonus action.",
+      "allowedClasses": ["rogue"],
+      "roll": {
+        "dice": "d20",
+        "attribute": "dexterity",
+        "skill": "acrobatics",
+        "modifiers": [],
+        "successRule": "Use Dash, Disengage, or Hide as a bonus action on your turn."
+      }
+    },
+    {
+      "key": "thievesTools",
+      "label": "Thieves' Tools",
+      "description": "Pick a lock or disarm a trap with practiced hands.",
+      "allowedClasses": ["rogue"],
+      "roll": {
+        "dice": "d20",
+        "attribute": "dexterity",
+        "skill": "investigation",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Dexterity modifier + proficiency vs DC set by the DM. Success opens the lock or disables the trap."
+      }
+    },
+    {
+      "key": "fireBolt",
+      "label": "Fire Bolt",
+      "description": "Hurl a mote of fire at a creature in range.",
+      "allowedClasses": ["wizard"],
+      "roll": {
+        "dice": "d20",
+        "attribute": "intelligence",
+        "skill": "arcana",
+        "modifiers": [],
+        "successRule": "Ranged spell attack: roll 1d20 + Intelligence modifier + proficiency vs target AC. On a hit, deal 1d10 fire damage."
+      }
+    },
+    {
+      "key": "magicMissile",
+      "label": "Magic Missile",
+      "description": "Create three glowing darts of magical force that unerringly strike your target.",
+      "allowedClasses": ["wizard"],
+      "roll": {
+        "dice": "d20",
+        "attribute": "intelligence",
+        "skill": "arcana",
+        "modifiers": [],
+        "successRule": "Automatically hits. Three darts each deal 1d4 + 1 force damage (no attack roll required)."
+      }
+    },
+    {
+      "key": "burningHands",
+      "label": "Burning Hands",
+      "description": "Sweep flames from your fingertips in a 15-foot cone.",
+      "allowedClasses": ["wizard"],
+      "roll": {
+        "dice": "d20",
+        "attribute": "intelligence",
+        "skill": "arcana",
+        "modifiers": [],
+        "successRule": "Creatures in the cone make a Dexterity saving throw vs your spell save DC. On a failed save, take 3d6 fire damage; half on a success."
+      }
+    }
+  ],
+  "npcTemplates": [],
+  "rollMechanics": {
+    "skillCheck": {
+      "diceKey": "d20",
+      "poolMode": "fixed",
+      "modifiers": [],
+      "successRule": "Roll 1d20 + modifiers vs DC. Default DC 15 if not specified.",
+      "difficultyClass": 15
+    },
+    "attributeCheck": {
+      "diceKey": "d20",
+      "poolMode": "fixed",
+      "modifiers": [],
+      "successRule": "Roll 1d20 + modifiers vs DC. Default DC 15 if not specified.",
+      "difficultyClass": 15
+    }
+  }
+}

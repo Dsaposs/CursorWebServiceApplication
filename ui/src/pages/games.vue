@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import ConfirmModal from '~/components/ConfirmModal.vue';
 import GameNpcManager from '~/components/games/GameNpcManager.vue';
+import type { NpcFormPayload } from '~/components/games/GameNpcManager.vue';
 import GameOverview from '~/components/games/GameOverview.vue';
 import GamePlayersPanel from '~/components/games/GamePlayersPanel.vue';
 import GameSidebar from '~/components/games/GameSidebar.vue';
@@ -23,13 +24,7 @@ const createName = ref('');
 const createDesc = ref('');
 const createRulesetCode = ref('alien-rpg');
 
-// NPC form
-const npcName = ref('');
-const npcKind = ref('Monster');
-const npcMaxHealth = ref(10);
-const npcHealth = ref(10);
-const npcArmor = ref(0);
-const npcStatBlockJson = ref('{\n  "attributes": {},\n  "skills": {},\n  "inventory": []\n}');
+// NPC management
 const editingNpcId = ref<string | null>(null);
 
 const isLoading = ref(false);
@@ -41,6 +36,8 @@ const hasGames = computed(() => games.value.length > 0);
 const activeSession = computed(() => selectedGame.value?.sessions.find(s => s.isActive) ?? null);
 const selectedCreateRuleset = computed(() => rulesets.value.find(ruleset => ruleset.code === createRulesetCode.value) ?? null);
 const selectedCreateDefinition = computed(() => parseRulesetDefinition(selectedCreateRuleset.value));
+const selectedGameRuleset = computed(() => rulesets.value.find(r => r.code === selectedGame.value?.rulesetCode) ?? null);
+const selectedGameDefinition = computed(() => parseRulesetDefinition(selectedGameRuleset.value));
 
 onMounted(async () => {
   loadSession();
@@ -137,13 +134,18 @@ async function deleteGame() {
   }
 }
 
-async function createNpc() {
+async function onNpcSubmit(payload: NpcFormPayload) {
   if (!selectedGame.value) return;
   isSaving.value = true;
   try {
-    await api<NpcResponse>(`/api/games/${selectedGame.value.id}/npcs`, { method: 'POST', body: npcPayload() });
-    toastSuccess(`${npcName.value} added.`);
-    resetNpcForm();
+    if (editingNpcId.value) {
+      await api<NpcResponse>(`/api/games/${selectedGame.value.id}/npcs/${editingNpcId.value}`, { method: 'PUT', body: payload });
+      toastSuccess('NPC updated.');
+    } else {
+      await api<NpcResponse>(`/api/games/${selectedGame.value.id}/npcs`, { method: 'POST', body: payload });
+      toastSuccess(`${payload.name} added.`);
+    }
+    editingNpcId.value = null;
     await openGame(selectedGame.value.id);
     activeTab.value = 'npcs';
   } catch (err) {
@@ -153,20 +155,13 @@ async function createNpc() {
   }
 }
 
-async function updateNpc() {
-  if (!selectedGame.value || !editingNpcId.value) return;
-  isSaving.value = true;
-  try {
-    await api<NpcResponse>(`/api/games/${selectedGame.value.id}/npcs/${editingNpcId.value}`, { method: 'PUT', body: npcPayload() });
-    toastSuccess('NPC updated.');
-    resetNpcForm();
-    await openGame(selectedGame.value.id);
-    activeTab.value = 'npcs';
-  } catch (err) {
-    toastError(err instanceof Error ? err.message : String(err));
-  } finally {
-    isSaving.value = false;
-  }
+function editNpc(npc: NpcResponse) {
+  editingNpcId.value = npc.id;
+  activeTab.value = 'npcs';
+}
+
+function resetNpcForm() {
+  editingNpcId.value = null;
 }
 
 function requestDeleteNpc(npc: NpcResponse) {
@@ -189,31 +184,6 @@ async function deleteNpc() {
   } finally {
     isSaving.value = false;
   }
-}
-
-function npcPayload() {
-  return { name: npcName.value, kind: npcKind.value, maxHealth: npcMaxHealth.value, health: npcHealth.value, armor: npcArmor.value, statBlockJson: npcStatBlockJson.value };
-}
-
-function editNpc(npc: NpcResponse) {
-  editingNpcId.value = npc.id;
-  npcName.value = npc.name;
-  npcKind.value = npc.kind;
-  npcMaxHealth.value = npc.maxHealth;
-  npcHealth.value = npc.health;
-  npcArmor.value = npc.armor;
-  npcStatBlockJson.value = npc.statBlockJson;
-  activeTab.value = 'npcs';
-}
-
-function resetNpcForm() {
-  editingNpcId.value = null;
-  npcName.value = '';
-  npcKind.value = 'Monster';
-  npcMaxHealth.value = 10;
-  npcHealth.value = 10;
-  npcArmor.value = 0;
-  npcStatBlockJson.value = '{\n  "attributes": {},\n  "skills": {},\n  "inventory": []\n}';
 }
 
 async function copyToClipboard(path: string) {
@@ -360,16 +330,11 @@ function signOut() {
         <!-- NPCs tab -->
         <GameNpcManager
           v-if="activeTab === 'npcs'"
-          v-model:npc-name="npcName"
-          v-model:npc-kind="npcKind"
-          v-model:npc-max-health="npcMaxHealth"
-          v-model:npc-health="npcHealth"
-          v-model:npc-armor="npcArmor"
-          v-model:npc-stat-block-json="npcStatBlockJson"
           :npcs="selectedGame.npcsAndMonsters"
           :is-saving="isSaving"
           :editing-npc-id="editingNpcId"
-          @submit="editingNpcId ? updateNpc() : createNpc()"
+          :definition="selectedGameDefinition"
+          @submit="onNpcSubmit"
           @edit="editNpc"
           @delete="requestDeleteNpc"
           @reset="resetNpcForm"

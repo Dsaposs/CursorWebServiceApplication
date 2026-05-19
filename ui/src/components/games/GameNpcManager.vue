@@ -1,105 +1,364 @@
 <script setup lang="ts">
-import type { NpcResponse } from '~/types/api';
+import type { NpcResponse, RulesetAttributeDefinition, RulesetDefinition, RulesetSkillDefinition } from '~/types/api';
+
+export interface NpcFormPayload {
+  name: string;
+  maxHealth: number;
+  health: number;
+  armor: number;
+  statBlockJson: string;
+}
 
 interface Props {
   npcs: NpcResponse[];
   isSaving: boolean;
   editingNpcId: string | null;
-  npcName: string;
-  npcKind: string;
-  npcMaxHealth: number;
-  npcHealth: number;
-  npcArmor: number;
-  npcStatBlockJson: string;
+  definition: RulesetDefinition | null;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const emit = defineEmits<{
-  submit: [];
+  submit: [payload: NpcFormPayload];
   edit: [npc: NpcResponse];
   delete: [npc: NpcResponse];
   reset: [];
-  'update:npcName': [value: string];
-  'update:npcKind': [value: string];
-  'update:npcMaxHealth': [value: number];
-  'update:npcHealth': [value: number];
-  'update:npcArmor': [value: number];
-  'update:npcStatBlockJson': [value: string];
 }>();
 
-function inputValue(event: Event) {
-  return (event.target as HTMLInputElement).value;
+// ── Internal form state ───────────────────────────────────────
+const localName = ref('');
+const localMaxHealth = ref(10);
+const localHealth = ref(10);
+const localArmor = ref(0);
+const localAttrs = ref<Record<string, number>>({});
+const localSkills = ref<Record<string, number>>({});
+
+const attributes = computed<RulesetAttributeDefinition[]>(() => props.definition?.character.attributes ?? []);
+const skills = computed<RulesetSkillDefinition[]>(() => props.definition?.character.skills ?? []);
+
+function defaultAttrs(): Record<string, number> {
+  return Object.fromEntries(attributes.value.map(a => [a.key, a.default ?? 0]));
 }
 
-function inputNumber(event: Event) {
-  return Number(inputValue(event));
+function defaultSkills(): Record<string, number> {
+  return Object.fromEntries(skills.value.map(s => [s.key, s.default ?? 0]));
+}
+
+function resetForm() {
+  localName.value = '';
+  localMaxHealth.value = 10;
+  localHealth.value = 10;
+  localArmor.value = 0;
+  localAttrs.value = defaultAttrs();
+  localSkills.value = defaultSkills();
+}
+
+function populateFromNpc(npc: NpcResponse) {
+  localName.value = npc.name;
+  localMaxHealth.value = npc.maxHealth;
+  localHealth.value = npc.health;
+  localArmor.value = npc.armor;
+  try {
+    const block = JSON.parse(npc.statBlockJson) as {
+      attributes?: Record<string, number>;
+      skills?: Record<string, number>;
+    };
+    localAttrs.value = { ...defaultAttrs(), ...(block.attributes ?? {}) };
+    localSkills.value = { ...defaultSkills(), ...(block.skills ?? {}) };
+  } catch {
+    localAttrs.value = defaultAttrs();
+    localSkills.value = defaultSkills();
+  }
+}
+
+// Populate or reset the form whenever the editing target changes.
+watch(
+  [() => props.editingNpcId, () => props.npcs],
+  () => {
+    if (!props.editingNpcId) {
+      resetForm();
+      return;
+    }
+    const npc = props.npcs.find(n => n.id === props.editingNpcId);
+    if (npc) populateFromNpc(npc);
+  },
+  { immediate: true },
+);
+
+// Re-seed defaults when the definition loads or switches (only when not editing).
+watch(
+  () => props.definition,
+  () => {
+    if (!props.editingNpcId) {
+      localAttrs.value = defaultAttrs();
+      localSkills.value = defaultSkills();
+    }
+  },
+);
+
+// ── Submit ────────────────────────────────────────────────────
+function buildStatBlockJson(): string {
+  const hasAttrs = attributes.value.length > 0;
+  const hasSkills = skills.value.length > 0;
+  if (!hasAttrs && !hasSkills) return '{}';
+  const block: Record<string, unknown> = {};
+  if (hasAttrs) block.attributes = { ...localAttrs.value };
+  if (hasSkills) block.skills = { ...localSkills.value };
+  return JSON.stringify(block);
+}
+
+function handleSubmit() {
+  emit('submit', {
+    name: localName.value.trim(),
+    maxHealth: localMaxHealth.value,
+    health: localHealth.value,
+    armor: localArmor.value,
+    statBlockJson: buildStatBlockJson(),
+  });
+}
+
+// ── Card display helpers ──────────────────────────────────────
+interface ParsedStatBlock {
+  attributes?: Record<string, number>;
+  skills?: Record<string, number>;
+}
+
+function parsedBlock(npc: NpcResponse): ParsedStatBlock | null {
+  try {
+    const b = JSON.parse(npc.statBlockJson) as ParsedStatBlock;
+    if (b && typeof b === 'object') return b;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function hasStats(npc: NpcResponse): boolean {
+  const b = parsedBlock(npc);
+  return Boolean(b?.attributes || b?.skills);
+}
+
+function attrVal(npc: NpcResponse, key: string): number | null {
+  return parsedBlock(npc)?.attributes?.[key] ?? null;
+}
+
+function skillVal(npc: NpcResponse, key: string): number | null {
+  return parsedBlock(npc)?.skills?.[key] ?? null;
 }
 </script>
 
 <template>
-  <div class="grid-2">
-    <div class="panel">
+  <div class="npc-manager-layout">
+    <!-- ── Left: Form panel ───────────────────────────────────── -->
+    <div class="panel npc-form-panel">
       <h2>{{ editingNpcId ? 'Edit' : 'Add' }} NPC / Monster</h2>
-      <form @submit.prevent="emit('submit')">
+      <form @submit.prevent="handleSubmit">
         <label>
           Name
-          <input :value="npcName" placeholder="Xenomorph, Goblin, Guard…" required @input="emit('update:npcName', inputValue($event))" />
+          <input v-model.trim="localName" placeholder="Xenomorph, Goblin, Guard…" required />
         </label>
-        <label>
-          Kind
-          <input :value="npcKind" placeholder="NPC, Monster, Boss…" required @input="emit('update:npcKind', inputValue($event))" />
-        </label>
+
         <div class="inline-fields">
           <label>
             Max HP
-            <input :value="npcMaxHealth" type="number" min="1" required @input="emit('update:npcMaxHealth', inputNumber($event))" />
+            <input v-model.number="localMaxHealth" type="number" min="1" required />
           </label>
           <label>
             Current HP
-            <input :value="npcHealth" type="number" min="0" required @input="emit('update:npcHealth', inputNumber($event))" />
+            <input v-model.number="localHealth" type="number" min="0" required />
           </label>
           <label>
             Armor
-            <input :value="npcArmor" type="number" min="0" required @input="emit('update:npcArmor', inputNumber($event))" />
+            <input v-model.number="localArmor" type="number" min="0" />
           </label>
         </div>
-        <label>
-          Stat block JSON
-          <textarea :value="npcStatBlockJson" required @input="emit('update:npcStatBlockJson', inputValue($event))" />
-        </label>
-        <div class="btn-row">
+
+        <!-- Dynamic attributes from ruleset -->
+        <template v-if="attributes.length">
+          <p class="text-xs muted" style="margin: 0.75rem 0 0.25rem;">Attributes</p>
+          <div class="inline-fields">
+            <label v-for="attr in attributes" :key="attr.key">
+              {{ attr.label }}
+              <input
+                v-model.number="localAttrs[attr.key]"
+                type="number"
+                :min="attr.min ?? 1"
+                :max="attr.max ?? undefined"
+              />
+            </label>
+          </div>
+        </template>
+
+        <!-- Dynamic skills from ruleset -->
+        <template v-if="skills.length">
+          <p class="text-xs muted" style="margin: 0.75rem 0 0.25rem;">Skills</p>
+          <div class="inline-fields">
+            <label v-for="skill in skills" :key="skill.key">
+              {{ skill.label }}
+              <input
+                v-model.number="localSkills[skill.key]"
+                type="number"
+                min="0"
+              />
+            </label>
+          </div>
+        </template>
+
+        <div class="btn-row" style="margin-top: 1rem;">
           <button class="btn" type="submit" :disabled="isSaving">
-            {{ isSaving ? 'Saving…' : editingNpcId ? 'Save' : 'Add NPC' }}
+            {{ isSaving ? 'Saving…' : editingNpcId ? 'Save Changes' : 'Add NPC' }}
           </button>
-          <button v-if="editingNpcId" class="btn ghost" type="button" @click="emit('reset')">Cancel</button>
+          <button v-if="editingNpcId" class="btn ghost" type="button" @click="emit('reset')">
+            Cancel
+          </button>
         </div>
       </form>
     </div>
 
-    <div v-if="npcs.length === 0" class="panel">
-      <div class="empty-state">
-        <div class="empty-state-icon" aria-hidden="true">👾</div>
-        <p>No NPCs or monsters yet.</p>
+    <!-- ── Right: NPC list (sticky) ──────────────────────────── -->
+    <div class="npc-list-column">
+      <!-- Empty state -->
+      <div v-if="npcs.length === 0" class="panel">
+        <div class="empty-state">
+          <div class="empty-state-icon" aria-hidden="true">👾</div>
+          <p>No NPCs or monsters yet.</p>
+        </div>
       </div>
-    </div>
 
-    <article v-for="npc in npcs" :key="npc.id" class="panel">
-      <div class="flex justify-between items-center mb-1" style="margin-bottom: 0.75rem;">
-        <div>
-          <h3 style="margin: 0;">{{ npc.name }}</h3>
-          <p class="text-xs muted" style="margin: 0;">{{ npc.kind }}</p>
+      <!-- NPC cards -->
+      <details
+        v-for="npc in npcs"
+        :key="npc.id"
+        class="panel npc-card"
+        :class="{ 'panel-editing': npc.id === editingNpcId }"
+      >
+        <summary class="npc-card-summary">
+          <span class="npc-card-identity">
+            <span class="npc-card-name">{{ npc.name }}</span>
+            <span class="npc-stat-bar">
+              <span class="stat-chip">HP {{ npc.health }}/{{ npc.maxHealth }}</span>
+              <span class="stat-chip">AC {{ npc.armor }}</span>
+            </span>
+          </span>
+          <span class="btn-row" @click.stop>
+            <button class="btn ghost sm" type="button" @click="emit('edit', npc)">Edit</button>
+            <button class="btn danger sm" type="button" aria-label="Delete NPC" @click="emit('delete', npc)">✕</button>
+          </span>
+        </summary>
+
+        <div class="npc-card-body">
+          <HealthBar :current="npc.health" :max="npc.maxHealth" />
+
+          <!-- Structured stat display when definition is available -->
+          <template v-if="hasStats(npc) && (attributes.length || skills.length)">
+            <div v-if="attributes.length" class="npc-stats-section">
+              <p class="text-xs muted" style="margin-bottom: 0.35rem;">Attributes</p>
+              <div class="stat-grid">
+                <div v-for="attr in attributes" :key="attr.key" class="stat-cell">
+                  <dt>{{ attr.label }}</dt>
+                  <dd>{{ attrVal(npc, attr.key) ?? '–' }}</dd>
+                </div>
+              </div>
+            </div>
+            <div v-if="skills.length" class="npc-stats-section">
+              <p class="text-xs muted" style="margin-bottom: 0.35rem;">Skills</p>
+              <div class="stat-grid">
+                <div v-for="skill in skills" :key="skill.key" class="stat-cell">
+                  <dt>{{ skill.label }}</dt>
+                  <dd>{{ skillVal(npc, skill.key) ?? '–' }}</dd>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <p v-else class="text-sm muted" style="margin-top: 0.5rem;">No stats recorded.</p>
         </div>
-        <div class="btn-row">
-          <button class="btn ghost sm" type="button" @click="emit('edit', npc)">Edit</button>
-          <button class="btn danger sm" type="button" aria-label="Delete NPC" @click="emit('delete', npc)">✕</button>
-        </div>
-      </div>
-      <HealthBar :current="npc.health" :max="npc.maxHealth" />
-      <details style="margin-top: 0.75rem;">
-        <summary style="cursor: pointer; font-size: 0.8rem; color: var(--muted-light);">Stat block</summary>
-        <pre style="margin-top: 0.5rem; font-size: 0.72rem;">{{ npc.statBlockJson }}</pre>
       </details>
-    </article>
+    </div>
   </div>
 </template>
+
+<style scoped>
+/* ── Two-column layout ──────────────────────────── */
+.npc-manager-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.npc-list-column {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: calc(100vh - 10rem);
+  overflow-y: auto;
+  padding-right: 2px; /* prevent outline clipping */
+}
+
+.panel-editing {
+  outline: 2px solid var(--accent);
+}
+
+/* ── Collapsible NPC card ───────────────────────── */
+.npc-card {
+  overflow: hidden;
+}
+
+.npc-card-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+/* Hide the default disclosure triangle in all browsers */
+.npc-card-summary::-webkit-details-marker { display: none; }
+.npc-card-summary::marker { display: none; }
+
+.npc-card-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.npc-card-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--ink-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.npc-stat-bar {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.stat-chip {
+  font-size: 0.7rem;
+  font-family: 'Menlo', 'Consolas', monospace;
+  color: var(--muted-light);
+  background: var(--panel-hover);
+  border-radius: var(--radius-sm);
+  padding: 0.1rem 0.4rem;
+}
+
+.npc-card-body {
+  padding: 0 0.85rem 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.npc-stats-section {
+  margin-top: 0.75rem;
+}
+</style>

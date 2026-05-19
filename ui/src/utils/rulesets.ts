@@ -2,10 +2,14 @@ import type {
   CharacterResponse,
   RulesetActionDefinition,
   RulesetAttributeDefinition,
+  RulesetCheckMechanics,
   RulesetDefinition,
   RulesetResponse,
   RulesetSkillDefinition,
 } from '~/types/api';
+export { buildDiceRollContext, parsePlayerRollFromDescription } from '~/dice-rollers/buildRollContext';
+export { getDiceRoller, resolveDiceRollerKey } from '~/dice-rollers/registry';
+export type { DiceRollContext, DiceRollMode } from '~/dice-rollers/types';
 
 export function parseRulesetDefinition(ruleset?: Pick<RulesetResponse, 'definitionJson'> | null) {
   if (!ruleset?.definitionJson) return null;
@@ -106,3 +110,4 @@ export function buildRollSummary(action: RulesetActionDefinition, definition: Ru
   const detail = describeRulesetAction(action, definition);
   return `${detail.dice}: ${detail.attribute} + ${detail.skill}`;
 }
+

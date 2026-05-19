@@ -50,7 +50,7 @@ const emit = defineEmits<{
     </div>
 
     <div v-if="game.npcsAndMonsters.length === 0" class="empty-state" style="padding: 1rem 0;">
-      <p class="text-sm">No NPCs or monsters have been added.</p>
+      <p class="text-sm">No NPCs or monsters yet. Use <strong>Add NPC</strong> above to create one.</p>
     </div>
 
     <div v-else class="entity-stat-list">

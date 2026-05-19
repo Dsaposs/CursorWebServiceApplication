@@ -169,7 +169,11 @@ public class SessionJoinController : ControllerBase
             .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
             .Include(s => s.Game).ThenInclude(g => g.Sessions)
             .Include(s => s.Actions).ThenInclude(a => a.Resolution)
+            .Include(s => s.Actions).ThenInclude(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .Include(s => s.Actions).ThenInclude(a => a.CombatEncounter)
+            .Include(s => s.CombatEncounters)
             .Include(s => s.InitiativeEntries)
+            .Include(s => s.SessionRollPrompts).ThenInclude(p => p.TargetCharacter)
             .FirstOrDefaultAsync(s => s.JoinCode == joinCode && s.IsActive);
 
         if (session is null)
@@ -184,6 +188,11 @@ public class SessionJoinController : ControllerBase
         }
 
         var summary = this.ToSessionSummaryResponse(session);
+        var skillCheckActionIds = session.SessionRollPrompts
+            .Where(p => p.ActionRequestId.HasValue)
+            .Select(p => p.ActionRequestId!.Value)
+            .ToHashSet();
+
         return Ok(new SessionStateResponse
         {
             Id = summary.Id,
@@ -204,8 +213,10 @@ public class SessionJoinController : ControllerBase
             Actions = session.Actions
                 .Where(a => a.Sequence > sinceSequence)
                 .OrderBy(a => a.Sequence)
-                .Select(ControllerHelpers.ToActionResponse),
+                .Select(a => ControllerHelpers.ToActionResponse(a, skillCheckActionIds.Contains(a.Id))),
             Initiative = session.InitiativeEntries.OrderBy(i => i.SortOrder).Select(ControllerHelpers.ToInitiativeResponse),
+            RollPrompts = ControllerHelpers.SelectRollPrompts(session, participant.CharacterId),
+            CombatEncounters = ControllerHelpers.SelectCombatEncounters(session),
         });
     }
 

@@ -103,11 +103,14 @@ public static partial class ControllerHelpers
         UpdatedAt = session.UpdatedAt,
     };
 
-    public static ActionQueueItemResponse ToActionResponse(ActionRequest action) => new()
+    public static ActionQueueItemResponse ToActionResponse(ActionRequest action, bool isSkillCheckResponse = false) => new()
     {
         Id = action.Id,
         Sequence = action.Sequence,
+        IsSkillCheckResponse = isSkillCheckResponse,
         ActorName = action.ActorName,
+        ActorCharacterId = action.ActorCharacterId,
+        ActorNpcId = action.ActorNpcId,
         ActionKey = action.ActionKey,
         ActionText = action.ActionText,
         TargetName = action.TargetName,
@@ -116,10 +119,33 @@ public static partial class ControllerHelpers
         ResolutionText = action.Resolution?.ResolutionText,
         RollSummary = action.Resolution?.RollSummary,
         AdditionalActions = action.Resolution?.AdditionalActions,
+        Outcome = action.Resolution?.Outcome?.ToString(),
         StatChangesJson = action.Resolution?.StatChangesJson ?? "[]",
+        FollowUpRolls = action.RollPrompts
+            .Where(p => p.Status == RollPromptStatus.Completed)
+            .OrderBy(p => p.CreatedAt)
+            .Select(p => ToRollPromptResponse(p, action)),
+        CombatEncounterId = action.CombatEncounterId,
+        CombatEncounterSequence = action.CombatEncounter?.Sequence,
+        SkillCheckBatchId = action.SkillCheckBatchId,
+        SkillCheckGroupLabel = action.SkillCheckGroupLabel,
         SubmittedAt = action.SubmittedAt,
         PublishedAt = action.PublishedAt,
     };
+
+    public static CombatEncounterResponse ToCombatEncounterResponse(CombatEncounter encounter, Guid? activeEncounterId) => new()
+    {
+        Id = encounter.Id,
+        Sequence = encounter.Sequence,
+        StartedAt = encounter.StartedAt,
+        EndedAt = encounter.EndedAt,
+        IsActive = encounter.Id == activeEncounterId && encounter.EndedAt is null,
+    };
+
+    public static IEnumerable<CombatEncounterResponse> SelectCombatEncounters(GameSession session) =>
+        session.CombatEncounters
+            .OrderBy(e => e.Sequence)
+            .Select(e => ToCombatEncounterResponse(e, session.ActiveCombatEncounterId));
 
     public static InitiativeEntryResponse ToInitiativeResponse(InitiativeEntry entry) => new()
     {
@@ -129,5 +155,86 @@ public static partial class ControllerHelpers
         CombatantName = entry.CombatantName,
         SortOrder = entry.SortOrder,
         IsCurrentTurn = entry.IsCurrentTurn,
+    };
+
+    public static IEnumerable<RollPromptResponse> SelectRollPrompts(GameSession session, Guid? playerCharacterId = null)
+    {
+        foreach (var action in session.Actions.Where(a => a.Status == ActionStatus.Pending).OrderBy(a => a.Sequence))
+        {
+            var prompts = action.RollPrompts.AsEnumerable();
+            if (playerCharacterId.HasValue)
+            {
+                prompts = prompts.Where(p =>
+                    p.TargetCharacterId == playerCharacterId.Value
+                    && p.Status == RollPromptStatus.Pending);
+            }
+            else
+            {
+                prompts = prompts.Where(p => p.Status != RollPromptStatus.Cancelled);
+            }
+
+            foreach (var prompt in prompts.OrderBy(p => p.CreatedAt))
+            {
+                yield return ToRollPromptResponse(prompt, action);
+            }
+        }
+
+        var sessionPrompts = session.SessionRollPrompts.AsEnumerable();
+        if (playerCharacterId.HasValue)
+        {
+            sessionPrompts = sessionPrompts.Where(p =>
+                p.TargetCharacterId == playerCharacterId.Value
+                && p.Status == RollPromptStatus.Pending);
+        }
+        else
+        {
+            sessionPrompts = sessionPrompts.Where(p => p.Status == RollPromptStatus.Pending);
+        }
+
+        foreach (var prompt in sessionPrompts.OrderBy(p => p.CreatedAt))
+        {
+            yield return ToSessionRollPromptResponse(prompt);
+        }
+    }
+
+    public static RollPromptResponse ToRollPromptResponse(ActionRollPrompt prompt, ActionRequest? action = null) => new()
+    {
+        Id = prompt.Id,
+        IsSessionPrompt = false,
+        ActionRequestId = prompt.ActionRequestId,
+        ActionSequence = action?.Sequence ?? prompt.ActionRequest?.Sequence ?? 0,
+        TargetCharacterId = prompt.TargetCharacterId,
+        TargetCharacterName = prompt.TargetCharacter?.Name ?? string.Empty,
+        PromptLabel = prompt.PromptLabel,
+        CheckMode = prompt.CheckMode,
+        ActionKey = prompt.ActionKey,
+        SkillKey = prompt.SkillKey,
+        AttributeKey = prompt.AttributeKey,
+        CustomCheckText = prompt.CustomCheckText,
+        Status = prompt.Status.ToString(),
+        RollSummary = prompt.RollSummary,
+        CreatedAt = prompt.CreatedAt,
+        CompletedAt = prompt.CompletedAt,
+    };
+
+    public static RollPromptResponse ToSessionRollPromptResponse(SessionRollPrompt prompt) => new()
+    {
+        Id = prompt.Id,
+        IsSessionPrompt = true,
+        ActionRequestId = null,
+        ActionSequence = null,
+        TargetCharacterId = prompt.TargetCharacterId,
+        TargetCharacterName = prompt.TargetCharacter?.Name ?? string.Empty,
+        PromptLabel = prompt.PromptLabel,
+        CheckMode = prompt.CheckMode,
+        ActionKey = prompt.ActionKey,
+        SkillKey = prompt.SkillKey,
+        AttributeKey = prompt.AttributeKey,
+        CustomCheckText = prompt.CustomCheckText,
+        Status = prompt.Status.ToString(),
+        RollSummary = prompt.RollSummary,
+        ResultActionRequestId = prompt.ActionRequestId,
+        CreatedAt = prompt.CreatedAt,
+        CompletedAt = prompt.CompletedAt,
     };
 }

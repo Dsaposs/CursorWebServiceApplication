@@ -1,0 +1,116 @@
+import type { CharacterResponse, RollPromptResponse, RulesetDefinition } from '~/types/api';
+import type { DiceRollContext, DiceRollMode } from '~/dice-rollers/types';
+import { buildDiceRollContext } from '~/dice-rollers/buildRollContext';
+import { resolveDiceRollerKey } from '~/dice-rollers/registry';
+import { parseStatMap } from '~/utils/dice';
+import {
+  describeRulesetAction,
+  findRulesetAction,
+  findRulesetAttribute,
+  findRulesetSkill,
+} from '~/utils/rulesets';
+
+function parseDiceSides(notation: string): number {
+  const match = notation.trim().match(/(\d+)d(\d+)/i);
+  return match ? parseInt(match[2], 10) : 20;
+}
+
+function defaultDiceSides(definition: RulesetDefinition): number {
+  const notation = definition.dice[0]?.notation ?? '1d20';
+  return parseDiceSides(notation);
+}
+
+export function rollPromptCheckLabel(
+  prompt: RollPromptResponse,
+  definition: RulesetDefinition | null,
+): string {
+  if (prompt.promptLabel?.trim()) return prompt.promptLabel.trim();
+  if (!definition) return prompt.customCheckText ?? 'Roll';
+
+  switch (prompt.checkMode) {
+    case 'Action': {
+      const action = findRulesetAction(definition, prompt.actionKey ?? '');
+      return action?.label ?? prompt.customCheckText ?? 'Action roll';
+    }
+    case 'Skill': {
+      const skill = findRulesetSkill(definition, prompt.skillKey ?? '');
+      return skill ? `${skill.label} check` : 'Skill check';
+    }
+    case 'Attribute': {
+      const attr = findRulesetAttribute(definition, prompt.attributeKey ?? '');
+      return attr ? `${attr.label} check` : 'Attribute check';
+    }
+    default:
+      return prompt.customCheckText ?? 'Custom roll';
+  }
+}
+
+export function buildRollPromptContext(
+  prompt: RollPromptResponse,
+  definition: RulesetDefinition,
+  character: CharacterResponse,
+): DiceRollContext | null {
+  const attributes = parseStatMap(character.attributesJson);
+  const skills = parseStatMap(character.skillsJson);
+  const gameValues = parseStatMap(character.rulesetDataJson);
+
+  if (prompt.checkMode === 'Custom') {
+    const label = rollPromptCheckLabel(prompt, definition);
+    const rollerKey = resolveDiceRollerKey(definition);
+    if (rollerKey === 'd20-check') {
+      return {
+        rollerKey,
+        label,
+        poolBreakdown: [label],
+        config: { kind: 'd20-check', sides: defaultDiceSides(definition) },
+      };
+    }
+
+    const successTarget = definition.dice.find(d => d.successTarget)?.successTarget ?? 6;
+    return {
+      rollerKey: 'd6-pool',
+      label,
+      poolBreakdown: [label],
+      successRule: `Each die showing ${successTarget}+ is a success.`,
+      config: {
+        kind: 'd6-pool',
+        baseDiceCount: 1,
+        stressDiceCount: 0,
+        sides: 6,
+        successTarget,
+      },
+    };
+  }
+
+  const mode = prompt.checkMode.toLowerCase() as DiceRollMode;
+  const context = buildDiceRollContext({
+    definition,
+    mode,
+    actionKey: prompt.actionKey ?? '',
+    skillKey: prompt.skillKey ?? '',
+    attributeKey: prompt.attributeKey ?? '',
+    attributes,
+    skills,
+    gameValues,
+  });
+
+  if (!context) return null;
+
+  if (prompt.checkMode === 'Action' && prompt.actionKey) {
+    const action = findRulesetAction(definition, prompt.actionKey);
+    if (action) {
+      const detail = describeRulesetAction(action, definition);
+      return {
+        ...context,
+        label: rollPromptCheckLabel(prompt, definition),
+        poolBreakdown: context.poolBreakdown.length ? context.poolBreakdown : [`${detail.attribute} + ${detail.skill}`],
+      };
+    }
+  }
+
+  return { ...context, label: rollPromptCheckLabel(prompt, definition) };
+}
+
+export function toApiCheckMode(mode: string): string {
+  return mode.charAt(0).toUpperCase() + mode.slice(1);
+}

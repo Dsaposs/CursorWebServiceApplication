@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "diceRollerKey": "d20-check",
+  "code": "pathfinder-2e",
+  "displayName": "Pathfinder",
+  "description": "Placeholder for a tactical fantasy d20 ruleset.",
+  "diceNotation": "d20",
+  "dice": [
+    {
+      "key": "d20",
+      "label": "D20",
+      "notation": "1d20"
+    }
+  ],
+  "character": {
+    "vitals": {},
+    "attributes": [
+      { "key": "strength", "label": "Strength", "default": 10 },
+      { "key": "dexterity", "label": "Dexterity", "default": 10 },
+      { "key": "constitution", "label": "Constitution", "default": 10 },
+      { "key": "intelligence", "label": "Intelligence", "default": 10 },
+      { "key": "wisdom", "label": "Wisdom", "default": 10 },
+      { "key": "charisma", "label": "Charisma", "default": 10 }
+    ],
+    "gameValues": [],
+    "classes": [],
+    "skills": []
+  },
+  "actions": [],
+  "npcTemplates": []
+}

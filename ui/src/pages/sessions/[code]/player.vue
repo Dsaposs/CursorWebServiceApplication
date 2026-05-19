@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
 import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
+import { parseStatMap } from '~/utils/dice';
 import { parseRulesetDefinition } from '~/utils/rulesets';
+import { useDiceRollContext } from '~/composables/useDiceRollContext';
+import PlayerRollPromptOverlay from '~/components/PlayerRollPromptOverlay.vue';
 
 const route = useRoute();
 const { api } = useApi();
@@ -13,7 +16,9 @@ const ruleset = ref<RulesetResponse | null>(null);
 const showCharacterSheet = ref(true);
 const targetName = ref('');
 const description = ref('');
+const rollResult = ref('');
 const isSubmitting = ref(false);
+const isSubmittingRollPrompt = ref(false);
 const showActionForm = ref(false);
 
 async function loadState() {
@@ -27,7 +32,24 @@ async function loadState() {
   return nextState;
 }
 
-const { state, pollingError, connectionStatus, refresh, start } = useSessionPolling(loadState, 3000);
+const { state, pollingError, fatalError, connectionStatus, refresh, start } = useSessionPolling(loadState, 3000);
+
+watch(
+  () => state.value?.isActive,
+  (isActive) => {
+    if (isActive === false && state.value?.id) {
+      navigateTo(`/sessions/${state.value.id}/summary`);
+    }
+  },
+);
+
+watch(fatalError, (err) => {
+  if (!err) return;
+  // Session gone or forbidden — redirect to the ended page.
+  // Players don't hold a JWT so 401 here means the player token is invalid;
+  // returning to the join flow is the right recovery.
+  navigateTo('/sessions/ended');
+});
 
 const currentTurn = computed<InitiativeEntryResponse | null>(
   () => state.value?.initiative.find(e => e.isCurrentTurn) ?? null,
@@ -60,8 +82,84 @@ const {
 } = useRulesetActionChooser(rulesetDefinition, actingClassKey);
 const pendingPlayerActions = computed(() =>
   state.value?.actions.filter(action =>
-    action.status === 'Pending' && action.actorName === state.value?.character?.name,
+    action.status === 'Pending'
+    && action.actorCharacterId === state.value?.character?.id,
   ) ?? [],
+);
+
+const expandedPendingPlayerActions = ref<Set<string>>(new Set());
+
+const activeRollPrompt = computed(() =>
+  (state.value?.rollPrompts ?? []).find(prompt => prompt.status === 'Pending') ?? null,
+);
+
+const publishedFeedActions = computed(() =>
+  state.value?.actions.filter(action =>
+    action.status === 'Published' || action.status === 'Rejected',
+  ) ?? [],
+);
+
+const expandedFeedActions = ref<Set<string>>(new Set());
+const feedCombatEncounters = computed(() => state.value?.combatEncounters ?? []);
+
+const {
+  expandedGroups: expandedFeedGroups,
+  toggleGroup: toggleFeedGroup,
+  expandAllGroups: expandAllFeedGroups,
+  collapseAllGroups: collapseAllFeedGroups,
+} = useActionLogGroupExpansion(publishedFeedActions, feedCombatEncounters);
+
+function toggleFeedAction(id: string) {
+  if (expandedFeedActions.value.has(id)) expandedFeedActions.value.delete(id);
+  else expandedFeedActions.value.add(id);
+}
+
+function togglePendingPlayerAction(id: string) {
+  if (expandedPendingPlayerActions.value.has(id)) expandedPendingPlayerActions.value.delete(id);
+  else expandedPendingPlayerActions.value.add(id);
+}
+
+function expandAllFeed() {
+  expandAllFeedGroups();
+  expandedFeedActions.value = new Set(publishedFeedActions.value.map(action => action.id));
+}
+
+function collapseAllFeed() {
+  collapseAllFeedGroups();
+  expandedFeedActions.value = new Set();
+}
+
+async function withdrawAction(actionId: string) {
+  if (!playerToken.value) return;
+  isSubmitting.value = true;
+  try {
+    await api(`/api/actions/${actionId}`, {
+      method: 'DELETE',
+      playerToken: playerToken.value,
+    });
+    expandedPendingPlayerActions.value.delete(actionId);
+    await refresh();
+    toastSuccess('Action withdrawn.');
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSubmitting.value = false;
+  }
+}
+
+const playerAttributes = computed(() => parseStatMap(state.value?.character?.attributesJson));
+const playerSkills = computed(() => parseStatMap(state.value?.character?.skillsJson));
+const playerGameValues = computed(() => parseStatMap(state.value?.character?.rulesetDataJson));
+
+const rollContext = useDiceRollContext(
+  rulesetDefinition,
+  actionMode,
+  selectedActionKey,
+  selectedSkillKey,
+  selectedAttributeKey,
+  playerAttributes,
+  playerSkills,
+  playerGameValues,
 );
 
 onMounted(async () => {
@@ -85,6 +183,25 @@ onMounted(async () => {
   start();
 });
 
+async function submitRollPrompt(rollSummary: string) {
+  if (!playerToken.value || !activeRollPrompt.value) return;
+
+  isSubmittingRollPrompt.value = true;
+  try {
+    await api(`/api/roll-prompts/${activeRollPrompt.value.id}/submit`, {
+      method: 'PUT',
+      playerToken: playerToken.value,
+      body: { rollSummary },
+    });
+    await refresh();
+    toastSuccess('Roll sent to the DM.');
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSubmittingRollPrompt.value = false;
+  }
+}
+
 async function submitAction() {
   if (!playerToken.value || !state.value) return;
   const payload = buildSubmitPayload(description.value);
@@ -92,6 +209,12 @@ async function submitAction() {
     toastError('Choose or describe an action first.');
     return;
   }
+
+  // Prepend the dice roll result to the description if the player rolled
+  const fullDescription = [
+    rollResult.value ? `🎲 Roll: ${rollResult.value}` : '',
+    payload.description ?? '',
+  ].filter(Boolean).join('\n');
 
   isSubmitting.value = true;
   try {
@@ -102,12 +225,13 @@ async function submitAction() {
         actionKey: payload.actionKey,
         actionText: payload.actionText,
         targetName: targetName.value || undefined,
-        description: payload.description,
+        description: fullDescription || undefined,
       },
     });
     resetActionSelection();
     targetName.value = '';
     description.value = '';
+    rollResult.value = '';
     await refresh();
     showActionForm.value = false;
     toastSuccess('Action sent to DM!');
@@ -120,6 +244,15 @@ async function submitAction() {
 </script>
 
 <template>
+  <PlayerRollPromptOverlay
+    v-if="state?.character && activeRollPrompt"
+    :prompt="activeRollPrompt"
+    :character="state.character"
+    :ruleset-definition="rulesetDefinition"
+    :is-submitting="isSubmittingRollPrompt"
+    @submit="submitRollPrompt"
+  />
+
   <section class="app-shell">
     <!-- Topbar -->
     <header class="topbar">
@@ -283,6 +416,13 @@ async function submitAction() {
               </p>
             </div>
           </div>
+
+          <RulesetDiceRoller
+            v-if="rollContext"
+            v-model="rollResult"
+            :context="rollContext"
+          />
+
           <label>
             Target
             <input v-model.trim="targetName" placeholder="Orc, door, ally… (optional)" />
@@ -302,20 +442,86 @@ async function submitAction() {
         </form>
       </div>
 
+      <!-- Pending actions (withdraw) -->
+      <div v-if="pendingPlayerActions.length" class="panel">
+        <div class="panel-title">
+          <div>
+            <h2>Your Pending Actions</h2>
+            <p class="text-sm">Waiting for the DM. You can withdraw an action before it is resolved.</p>
+          </div>
+        </div>
+        <div class="pending-player-actions">
+          <article
+            v-for="action in pendingPlayerActions"
+            :key="action.id"
+            class="action-card pending-card"
+          >
+            <button
+              type="button"
+              class="action-card-header action-card-toggle"
+              :aria-expanded="expandedPendingPlayerActions.has(action.id)"
+              @click="togglePendingPlayerAction(action.id)"
+            >
+              <div>
+                <div class="action-card-actor">{{ action.actorName }}</div>
+                <div class="action-card-target">
+                  <strong>{{ action.actionText }}</strong>
+                  <span v-if="action.targetName"> on {{ action.targetName }}</span>
+                </div>
+              </div>
+              <span class="badge pending">{{ expandedPendingPlayerActions.has(action.id) ? 'Hide' : 'Show' }}</span>
+            </button>
+            <div v-show="expandedPendingPlayerActions.has(action.id)" class="pending-player-action-body">
+              <ActionCard
+                :action="action"
+                :game="state.game"
+                :ruleset-definition="rulesetDefinition"
+                prefix=""
+                :collapsible="false"
+                :expanded="true"
+              />
+              <button
+                class="btn danger ghost sm"
+                type="button"
+                :disabled="isSubmitting"
+                @click="withdrawAction(action.id)"
+              >
+                Withdraw action
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
+
       <!-- Action feed -->
       <div class="panel">
-        <h2>Action Feed</h2>
-        <div v-if="state.actions.length === 0" class="empty-state" style="padding: 1rem 0;">
-          <p class="text-sm">No actions yet this session.</p>
+        <div class="panel-title">
+          <div>
+            <h2>Action Feed</h2>
+            <p v-if="publishedFeedActions.length" class="text-sm">
+              Grouped by combat encounter. Expand actions to see full details.
+            </p>
+          </div>
+          <div v-if="publishedFeedActions.length" class="btn-row">
+            <button class="btn ghost sm" type="button" @click="expandAllFeed">Expand all</button>
+            <button class="btn ghost sm" type="button" @click="collapseAllFeed">Collapse all</button>
+          </div>
         </div>
-        <div style="display: grid; gap: 0.5rem;">
-          <ActionCard
-            v-for="action in [...state.actions].reverse()"
-            :key="action.id"
-            :action="action"
-            prefix=""
-          />
+        <div v-if="publishedFeedActions.length === 0" class="empty-state" style="padding: 1rem 0;">
+          <p class="text-sm">No resolved actions yet this session.</p>
         </div>
+        <ActionLogGrouped
+          v-else
+          :actions="publishedFeedActions"
+          :combat-encounters="state.combatEncounters ?? []"
+          :expanded-actions="expandedFeedActions"
+          :expanded-groups="expandedFeedGroups"
+          :game="state.game"
+          :ruleset-definition="rulesetDefinition"
+          action-prefix=""
+          @toggle-action="toggleFeedAction"
+          @toggle-group="toggleFeedGroup"
+        />
       </div>
 
       <div v-if="pollingError" class="alert error">{{ pollingError }}</div>

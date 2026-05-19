@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ttrpg-table.local/schemas/ruleset-definition.v1.schema.json",
+  "title": "Ruleset Definition (schema version 1)",
+  "description": "Base ruleset definition for fixed-dice systems (e.g. d20 placeholders).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "diceRollerKey",
+    "code",
+    "displayName",
+    "description",
+    "diceNotation",
+    "dice",
+    "character",
+    "actions",
+    "npcTemplates"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "diceRollerKey": { "type": "string", "enum": ["d20-check", "d6-pool"] },
+    "code": { "type": "string", "minLength": 1, "maxLength": 50 },
+    "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "description": { "type": "string" },
+    "diceNotation": { "type": "string", "minLength": 1 },
+    "dice": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dice" }
+    },
+    "character": { "$ref": "#/$defs/character" },
+    "actions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/action" }
+    },
+    "npcTemplates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/npcTemplate" }
+    }
+  },
+  "$defs": {
+    "dice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "notation"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "notation": { "type": "string", "minLength": 1 }
+      }
+    },
+    "character": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vitals", "attributes", "gameValues", "classes", "skills"],
+      "properties": {
+        "vitals": { "type": "object" },
+        "attributes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/attribute" }
+        },
+        "gameValues": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/gameValue" }
+        },
+        "classes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/class" }
+        },
+        "skills": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/skill" }
+        }
+      }
+    },
+    "attribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "default"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "default": { "type": "integer" },
+        "min": { "type": "integer" },
+        "max": { "type": "integer" }
+      }
+    },
+    "gameValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "type"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "default": {},
+        "min": { "type": "integer" }
+      }
+    },
+    "class": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "availableSkills", "startingSkillPoints"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "availableSkills": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "startingSkillPoints": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "attribute", "default"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "attribute": { "type": "string", "minLength": 1 },
+        "default": { "type": "integer" }
+      }
+    },
+    "modifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "key"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "key": { "type": "string", "minLength": 1 },
+        "dicePerPoint": { "type": "integer" }
+      }
+    },
+    "roll": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dice", "attribute", "skill", "modifiers", "successRule"],
+      "properties": {
+        "dice": { "type": "string", "minLength": 1 },
+        "attribute": { "type": "string", "minLength": 1 },
+        "skill": { "type": "string", "minLength": 1 },
+        "modifiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modifier" }
+        },
+        "successRule": { "type": "string", "minLength": 1 }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "roll"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "allowedClasses": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "roll": { "$ref": "#/$defs/roll" }
+      }
+    },
+    "npcTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "defaultStats"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "defaultStats": { "type": "object" }
+      }
+    }
+  }
+}

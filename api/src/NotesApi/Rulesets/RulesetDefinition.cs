@@ -7,6 +7,10 @@ public class RulesetDefinition
     [JsonPropertyName("schemaVersion")]
     public int SchemaVersion { get; set; }
 
+    /// <summary>Key of the shared dice roller (e.g. d6-pool, d20-check).</summary>
+    [JsonPropertyName("diceRollerKey")]
+    public string? DiceRollerKey { get; set; }
+
     [JsonPropertyName("code")]
     public string Code { get; set; } = string.Empty;
 
@@ -30,6 +34,13 @@ public class RulesetDefinition
 
     [JsonPropertyName("npcTemplates")]
     public IEnumerable<RulesetNpcTemplateDefinition> NpcTemplates { get; set; } = Array.Empty<RulesetNpcTemplateDefinition>();
+
+    /// <summary>
+    /// Describes how skill checks and attribute checks are resolved in this ruleset.
+    /// When absent, skill/attribute checks fall back to a single generic die roll.
+    /// </summary>
+    [JsonPropertyName("rollMechanics")]
+    public RulesetRollMechanicsDefinition? RollMechanics { get; set; }
 }
 
 public class RulesetDiceDefinition
@@ -42,6 +53,13 @@ public class RulesetDiceDefinition
 
     [JsonPropertyName("notation")]
     public string Notation { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When set, each die meeting or exceeding this value counts as one success
+    /// instead of summing all die values. Used for dice-pool systems like Alien RPG (target = 6).
+    /// </summary>
+    [JsonPropertyName("successTarget")]
+    public int? SuccessTarget { get; set; }
 }
 
 public class RulesetCharacterDefinition
@@ -154,6 +172,13 @@ public class RulesetRollDefinition
     [JsonPropertyName("dice")]
     public string Dice { get; set; } = string.Empty;
 
+    /// <summary>
+    /// "attribute+skill" — dice count equals attribute value + skill value.
+    /// Omit (or null) for fixed-dice systems like d20.
+    /// </summary>
+    [JsonPropertyName("dicePoolMode")]
+    public string? DicePoolMode { get; set; }
+
     [JsonPropertyName("attribute")]
     public string Attribute { get; set; } = string.Empty;
 
@@ -165,7 +190,12 @@ public class RulesetRollDefinition
 
     [JsonPropertyName("successRule")]
     public string SuccessRule { get; set; } = string.Empty;
+
+    /// <summary>Default DC for this action when the success rule does not specify one.</summary>
+    [JsonPropertyName("difficultyClass")]
+    public int? DifficultyClass { get; set; }
 }
+
 
 public class RulesetModifierDefinition
 {
@@ -177,6 +207,52 @@ public class RulesetModifierDefinition
 
     [JsonPropertyName("dicePerPoint")]
     public int? DicePerPoint { get; set; }
+
+    /// <summary>
+    /// When true, dice from this modifier are treated as stress dice (e.g. Alien RPG).
+    /// A roll of 1 on a stress die triggers a panic check.
+    /// </summary>
+    [JsonPropertyName("isStressDice")]
+    public bool IsStressDice { get; set; }
+}
+
+/// <summary>Defines how free-form skill and attribute checks are resolved for this ruleset.</summary>
+public class RulesetRollMechanicsDefinition
+{
+    /// <summary>How to roll when a player/NPC makes a skill check (not from a predefined action).</summary>
+    [JsonPropertyName("skillCheck")]
+    public RulesetCheckDefinition? SkillCheck { get; set; }
+
+    /// <summary>How to roll when a player/NPC makes a raw attribute check.</summary>
+    [JsonPropertyName("attributeCheck")]
+    public RulesetCheckDefinition? AttributeCheck { get; set; }
+}
+
+public class RulesetCheckDefinition
+{
+    /// <summary>Key into the dice array that defines which die type and successTarget to use.</summary>
+    [JsonPropertyName("diceKey")]
+    public string DiceKey { get; set; } = string.Empty;
+
+    /// <summary>
+    /// "attribute+skill" — pool = attribute value + skill value.
+    /// "attribute"       — pool = attribute value only.
+    /// "fixed"           — pool uses the diceKey notation as-is.
+    /// </summary>
+    [JsonPropertyName("poolMode")]
+    public string PoolMode { get; set; } = "fixed";
+
+    /// <summary>Extra modifiers applied on top of the base pool (e.g. stress dice).</summary>
+    [JsonPropertyName("modifiers")]
+    public IEnumerable<RulesetModifierDefinition> Modifiers { get; set; } = Array.Empty<RulesetModifierDefinition>();
+
+    /// <summary>Human-readable description of what constitutes success and failure.</summary>
+    [JsonPropertyName("successRule")]
+    public string? SuccessRule { get; set; }
+
+    /// <summary>Default DC for d20 checks when the success rule does not specify one.</summary>
+    [JsonPropertyName("difficultyClass")]
+    public int? DifficultyClass { get; set; }
 }
 
 public class RulesetNpcTemplateDefinition

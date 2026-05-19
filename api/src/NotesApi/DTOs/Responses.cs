@@ -123,6 +123,38 @@ public class SessionStateResponse : SessionSummaryResponse
     public CharacterResponse? Character { get; set; }
     public IEnumerable<ActionQueueItemResponse> Actions { get; set; } = Array.Empty<ActionQueueItemResponse>();
     public IEnumerable<InitiativeEntryResponse> Initiative { get; set; } = Array.Empty<InitiativeEntryResponse>();
+    public IEnumerable<RollPromptResponse> RollPrompts { get; set; } = Array.Empty<RollPromptResponse>();
+    public IEnumerable<CombatEncounterResponse> CombatEncounters { get; set; } = Array.Empty<CombatEncounterResponse>();
+}
+
+public class CombatEncounterResponse
+{
+    public Guid Id { get; set; }
+    public int Sequence { get; set; }
+    public DateTime StartedAt { get; set; }
+    public DateTime? EndedAt { get; set; }
+    public bool IsActive { get; set; }
+}
+
+public class RollPromptResponse
+{
+    public Guid Id { get; set; }
+    public bool IsSessionPrompt { get; set; }
+    public Guid? ActionRequestId { get; set; }
+    public int? ActionSequence { get; set; }
+    public Guid TargetCharacterId { get; set; }
+    public string TargetCharacterName { get; set; } = string.Empty;
+    public string? PromptLabel { get; set; }
+    public string CheckMode { get; set; } = string.Empty;
+    public string? ActionKey { get; set; }
+    public string? SkillKey { get; set; }
+    public string? AttributeKey { get; set; }
+    public string? CustomCheckText { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string? RollSummary { get; set; }
+    public Guid? ResultActionRequestId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
 }
 
 public class ActionQueueItemResponse
@@ -130,6 +162,8 @@ public class ActionQueueItemResponse
     public Guid Id { get; set; }
     public int Sequence { get; set; }
     public string ActorName { get; set; } = string.Empty;
+    public Guid? ActorCharacterId { get; set; }
+    public Guid? ActorNpcId { get; set; }
     public string? ActionKey { get; set; }
     public string ActionText { get; set; } = string.Empty;
     public string? TargetName { get; set; }
@@ -138,7 +172,14 @@ public class ActionQueueItemResponse
     public string? ResolutionText { get; set; }
     public string? RollSummary { get; set; }
     public string? AdditionalActions { get; set; }
+    public string? Outcome { get; set; }
     public string StatChangesJson { get; set; } = "[]";
+    public IEnumerable<RollPromptResponse> FollowUpRolls { get; set; } = Array.Empty<RollPromptResponse>();
+    public Guid? CombatEncounterId { get; set; }
+    public int? CombatEncounterSequence { get; set; }
+    public bool IsSkillCheckResponse { get; set; }
+    public Guid? SkillCheckBatchId { get; set; }
+    public string? SkillCheckGroupLabel { get; set; }
     public DateTime SubmittedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
 }

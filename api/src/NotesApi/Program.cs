@@ -73,6 +73,7 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddSingleton<RulesetDefinitionValidator>();
+builder.Services.AddHostedService<SessionTimeoutService>();
 builder.Services.AddHealthChecks();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -281,6 +282,233 @@ static async Task ApplySchemaUpdatesAsync(ApplicationDbContext db)
         await alter.ExecuteNonQueryAsync();
     }
 
+    var hasRollPromptsTable = false;
+    using (var tables = connection.CreateCommand())
+    {
+        tables.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='ActionRollPrompts'";
+        hasRollPromptsTable = await tables.ExecuteScalarAsync() is not null;
+    }
+
+    var hasCombatEncountersTable = false;
+    using (var tables = connection.CreateCommand())
+    {
+        tables.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='CombatEncounters'";
+        hasCombatEncountersTable = await tables.ExecuteScalarAsync() is not null;
+    }
+
+    if (!hasCombatEncountersTable)
+    {
+        using var create = connection.CreateCommand();
+        create.CommandText = """
+            CREATE TABLE "CombatEncounters" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_CombatEncounters" PRIMARY KEY,
+                "SessionId" TEXT NOT NULL,
+                "Sequence" INTEGER NOT NULL,
+                "StartedAt" TEXT NOT NULL,
+                "EndedAt" TEXT NULL,
+                CONSTRAINT "FK_CombatEncounters_GameSessions_SessionId" FOREIGN KEY ("SessionId") REFERENCES "GameSessions" ("Id") ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX "IX_CombatEncounters_SessionId_Sequence" ON "CombatEncounters" ("SessionId", "Sequence");
+            """;
+        await create.ExecuteNonQueryAsync();
+    }
+
+    var hasActiveCombatEncounterId = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('GameSessions')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "ActiveCombatEncounterId")
+            {
+                hasActiveCombatEncounterId = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasActiveCombatEncounterId)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"GameSessions\" ADD COLUMN \"ActiveCombatEncounterId\" TEXT NULL";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    var hasCombatEncounterIdOnActions = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('ActionRequests')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "CombatEncounterId")
+            {
+                hasCombatEncounterIdOnActions = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasCombatEncounterIdOnActions)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"ActionRequests\" ADD COLUMN \"CombatEncounterId\" TEXT NULL";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    if (!hasRollPromptsTable)
+    {
+        using var create = connection.CreateCommand();
+        create.CommandText = """
+            CREATE TABLE "ActionRollPrompts" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_ActionRollPrompts" PRIMARY KEY,
+                "ActionRequestId" TEXT NOT NULL,
+                "TargetCharacterId" TEXT NOT NULL,
+                "PromptLabel" TEXT NULL,
+                "CheckMode" TEXT NOT NULL,
+                "ActionKey" TEXT NULL,
+                "SkillKey" TEXT NULL,
+                "AttributeKey" TEXT NULL,
+                "CustomCheckText" TEXT NULL,
+                "Status" INTEGER NOT NULL,
+                "RollSummary" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "CompletedAt" TEXT NULL,
+                CONSTRAINT "FK_ActionRollPrompts_ActionRequests_ActionRequestId" FOREIGN KEY ("ActionRequestId") REFERENCES "ActionRequests" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_ActionRollPrompts_Characters_TargetCharacterId" FOREIGN KEY ("TargetCharacterId") REFERENCES "Characters" ("Id") ON DELETE CASCADE
+            );
+            CREATE INDEX "IX_ActionRollPrompts_ActionRequestId_Status" ON "ActionRollPrompts" ("ActionRequestId", "Status");
+            """;
+        await create.ExecuteNonQueryAsync();
+    }
+
+    var hasResolutionOutcome = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('ActionResolutions')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "Outcome")
+            {
+                hasResolutionOutcome = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasResolutionOutcome)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"ActionResolutions\" ADD COLUMN \"Outcome\" INTEGER NULL";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    var hasSessionRollPromptsTable = false;
+    using (var tables = connection.CreateCommand())
+    {
+        tables.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='SessionRollPrompts'";
+        hasSessionRollPromptsTable = await tables.ExecuteScalarAsync() is not null;
+    }
+
+    if (!hasSessionRollPromptsTable)
+    {
+        using var create = connection.CreateCommand();
+        create.CommandText = """
+            CREATE TABLE "SessionRollPrompts" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SessionRollPrompts" PRIMARY KEY,
+                "SessionId" TEXT NOT NULL,
+                "TargetCharacterId" TEXT NOT NULL,
+                "PromptLabel" TEXT NULL,
+                "CheckMode" TEXT NOT NULL,
+                "ActionKey" TEXT NULL,
+                "SkillKey" TEXT NULL,
+                "AttributeKey" TEXT NULL,
+                "CustomCheckText" TEXT NULL,
+                "Status" INTEGER NOT NULL,
+                "RollSummary" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "CompletedAt" TEXT NULL,
+                "ActionRequestId" TEXT NULL,
+                "SkillCheckBatchId" TEXT NULL,
+                CONSTRAINT "FK_SessionRollPrompts_GameSessions_SessionId" FOREIGN KEY ("SessionId") REFERENCES "GameSessions" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_SessionRollPrompts_Characters_TargetCharacterId" FOREIGN KEY ("TargetCharacterId") REFERENCES "Characters" ("Id") ON DELETE CASCADE
+            );
+            CREATE INDEX "IX_SessionRollPrompts_SessionId_Status" ON "SessionRollPrompts" ("SessionId", "Status");
+            """;
+        await create.ExecuteNonQueryAsync();
+    }
+
+    var hasSessionPromptActionRequestId = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('SessionRollPrompts')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "ActionRequestId")
+            {
+                hasSessionPromptActionRequestId = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasSessionPromptActionRequestId)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"SessionRollPrompts\" ADD COLUMN \"ActionRequestId\" TEXT NULL";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    var hasSessionPromptBatchId = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('SessionRollPrompts')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "SkillCheckBatchId")
+            {
+                hasSessionPromptBatchId = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasSessionPromptBatchId)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"SessionRollPrompts\" ADD COLUMN \"SkillCheckBatchId\" TEXT NULL";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    var hasActionSkillCheckBatchId = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('ActionRequests')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "SkillCheckBatchId")
+            {
+                hasActionSkillCheckBatchId = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasActionSkillCheckBatchId)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = """
+            ALTER TABLE "ActionRequests" ADD COLUMN "SkillCheckBatchId" TEXT NULL;
+            ALTER TABLE "ActionRequests" ADD COLUMN "SkillCheckGroupLabel" TEXT NULL;
+            """;
+        await alter.ExecuteNonQueryAsync();
+    }
+
     if (!wasOpen)
         await connection.CloseAsync();
 }
@@ -345,196 +573,25 @@ static async Task SeedDefaultUsersAsync(RoleManager<IdentityRole> roleManager, U
 
 static async Task SeedRulesetsAsync(ApplicationDbContext db)
 {
-    var rulesets = new[]
-    {
-        new Ruleset
-        {
-            Code = "alien-rpg",
-            DisplayName = "Alien RPG",
-            Description = "A horror sci-fi ruleset using attributes, skills, stress, and d6 dice pools.",
-            DiceNotation = "d6 dice pool",
-            IsPlaceholder = false,
-            CharacterTemplateJson = """
-                {
-                  "attributes": { "strength": 2, "agility": 2, "wits": 2, "empathy": 2 },
-                  "skills": { "closeCombat": 0, "rangedCombat": 0, "mobility": 0, "observation": 0, "survival": 0, "medicalAid": 0 },
-                  "gameValues": { "stress": 0 },
-                  "experience": 0
-                }
-                """,
-            DefinitionJson = """
-                {
-                  "schemaVersion": 1,
-                  "code": "alien-rpg",
-                  "displayName": "Alien RPG",
-                  "description": "A horror sci-fi ruleset using attributes, skills, stress, and d6 dice pools.",
-                  "diceNotation": "d6 dice pool",
-                  "dice": [
-                    { "key": "d6Pool", "label": "D6 Dice Pool", "notation": "attribute + skill + modifiers d6" }
-                  ],
-                  "character": {
-                    "vitals": {
-                      "health": { "label": "Health", "defaultMax": 10 },
-                      "armor": { "label": "Armor", "default": 0 },
-                      "experience": { "label": "Experience", "default": 0 }
-                    },
-                    "attributes": [
-                      { "key": "strength", "label": "Strength", "default": 2, "min": 1, "max": 5 },
-                      { "key": "agility", "label": "Agility", "default": 2, "min": 1, "max": 5 },
-                      { "key": "wits", "label": "Wits", "default": 2, "min": 1, "max": 5 },
-                      { "key": "empathy", "label": "Empathy", "default": 2, "min": 1, "max": 5 }
-                    ],
-                    "gameValues": [
-                      { "key": "stress", "label": "Stress Level", "type": "number", "default": 0, "min": 0 }
-                    ],
-                    "classes": [
-                      {
-                        "key": "colonialMarine",
-                        "label": "Colonial Marine",
-                        "description": "Combat-trained military specialist.",
-                        "availableSkills": [ "closeCombat", "rangedCombat", "mobility", "stamina" ],
-                        "startingSkillPoints": 10
-                      },
-                      {
-                        "key": "scientist",
-                        "label": "Scientist",
-                        "description": "Research and technical expert.",
-                        "availableSkills": [ "observation", "survival", "comtech", "medicalAid" ],
-                        "startingSkillPoints": 10
-                      }
-                    ],
-                    "skills": [
-                      { "key": "closeCombat", "label": "Close Combat", "attribute": "strength", "default": 0 },
-                      { "key": "rangedCombat", "label": "Ranged Combat", "attribute": "agility", "default": 0 },
-                      { "key": "mobility", "label": "Mobility", "attribute": "agility", "default": 0 },
-                      { "key": "stamina", "label": "Stamina", "attribute": "strength", "default": 0 },
-                      { "key": "observation", "label": "Observation", "attribute": "wits", "default": 0 },
-                      { "key": "survival", "label": "Survival", "attribute": "wits", "default": 0 },
-                      { "key": "comtech", "label": "Comtech", "attribute": "wits", "default": 0 },
-                      { "key": "medicalAid", "label": "Medical Aid", "attribute": "empathy", "default": 0 }
-                    ]
-                  },
-                  "actions": [
-                    {
-                      "key": "rangedAttack",
-                      "label": "Ranged Attack",
-                      "description": "Fire a ranged weapon at a target.",
-                      "allowedClasses": [ "colonialMarine" ],
-                      "roll": {
-                        "dice": "d6Pool",
-                        "attribute": "agility",
-                        "skill": "rangedCombat",
-                        "modifiers": [
-                          { "source": "gameValue", "key": "stress", "dicePerPoint": 1 },
-                          { "source": "equipment", "key": "gearBonus", "dicePerPoint": 1 }
-                        ],
-                        "successRule": "Each 6 is a success. Any 1 on stress dice may trigger panic."
-                      }
-                    },
-                    {
-                      "key": "observeThreat",
-                      "label": "Observe Threat",
-                      "description": "Spot danger, hidden motion, or environmental clues.",
-                      "allowedClasses": [],
-                      "roll": {
-                        "dice": "d6Pool",
-                        "attribute": "wits",
-                        "skill": "observation",
-                        "modifiers": [],
-                        "successRule": "Each 6 is a success. Extra successes reveal more detail."
-                      }
-                    }
-                  ],
-                  "npcTemplates": []
-                }
-                """,
-        },
-        new Ruleset
-        {
-            Code = "dnd-5e",
-            DisplayName = "Dungeons & Dragons",
-            Description = "Placeholder for a fantasy d20 ruleset.",
-            DiceNotation = "d20",
-            IsPlaceholder = true,
-            CharacterTemplateJson = """
-                {
-                  "attributes": { "strength": 10, "dexterity": 10, "constitution": 10, "intelligence": 10, "wisdom": 10, "charisma": 10 },
-                  "skills": {},
-                  "level": 1
-                }
-                """,
-            DefinitionJson = """
-                {
-                  "schemaVersion": 1,
-                  "code": "dnd-5e",
-                  "displayName": "Dungeons & Dragons",
-                  "description": "Placeholder for a fantasy d20 ruleset.",
-                  "diceNotation": "d20",
-                  "dice": [{ "key": "d20", "label": "D20", "notation": "1d20 + modifiers" }],
-                  "character": {
-                    "vitals": {},
-                    "attributes": [
-                      { "key": "strength", "label": "Strength", "default": 10 },
-                      { "key": "dexterity", "label": "Dexterity", "default": 10 },
-                      { "key": "constitution", "label": "Constitution", "default": 10 },
-                      { "key": "intelligence", "label": "Intelligence", "default": 10 },
-                      { "key": "wisdom", "label": "Wisdom", "default": 10 },
-                      { "key": "charisma", "label": "Charisma", "default": 10 }
-                    ],
-                    "gameValues": [],
-                    "classes": [],
-                    "skills": []
-                  },
-                  "actions": [],
-                  "npcTemplates": []
-                }
-                """,
-        },
-        new Ruleset
-        {
-            Code = "pathfinder-2e",
-            DisplayName = "Pathfinder",
-            Description = "Placeholder for a tactical fantasy d20 ruleset.",
-            DiceNotation = "d20",
-            IsPlaceholder = true,
-            CharacterTemplateJson = """
-                {
-                  "attributes": { "strength": 10, "dexterity": 10, "constitution": 10, "intelligence": 10, "wisdom": 10, "charisma": 10 },
-                  "skills": {},
-                  "level": 1
-                }
-                """,
-            DefinitionJson = """
-                {
-                  "schemaVersion": 1,
-                  "code": "pathfinder-2e",
-                  "displayName": "Pathfinder",
-                  "description": "Placeholder for a tactical fantasy d20 ruleset.",
-                  "diceNotation": "d20",
-                  "dice": [{ "key": "d20", "label": "D20", "notation": "1d20 + modifiers" }],
-                  "character": {
-                    "vitals": {},
-                    "attributes": [
-                      { "key": "strength", "label": "Strength", "default": 10 },
-                      { "key": "dexterity", "label": "Dexterity", "default": 10 },
-                      { "key": "constitution", "label": "Constitution", "default": 10 },
-                      { "key": "intelligence", "label": "Intelligence", "default": 10 },
-                      { "key": "wisdom", "label": "Wisdom", "default": 10 },
-                      { "key": "charisma", "label": "Charisma", "default": 10 }
-                    ],
-                    "gameValues": [],
-                    "classes": [],
-                    "skills": []
-                  },
-                  "actions": [],
-                  "npcTemplates": []
-                }
-                """,
-        },
-    };
+    var jsonOptions = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
 
-    foreach (var ruleset in rulesets)
+    foreach (var code in RulesetSeedCatalog.Codes)
     {
+        var definitionJson = RulesetDefinitionLoader.LoadLatestDefinition(code);
+        var definition = System.Text.Json.JsonSerializer.Deserialize<RulesetDefinition>(definitionJson, jsonOptions)
+            ?? throw new InvalidOperationException($"Could not deserialize ruleset definition for '{code}'.");
+
+        var ruleset = new Ruleset
+        {
+            Code = definition.Code,
+            DisplayName = definition.DisplayName,
+            Description = definition.Description,
+            DiceNotation = definition.DiceNotation,
+            IsPlaceholder = RulesetSeedCatalog.IsPlaceholder(code),
+            CharacterTemplateJson = RulesetDefinitionLoader.LoadCharacterTemplate(code),
+            DefinitionJson = definitionJson,
+        };
+
         var existing = await db.Rulesets.FindAsync(ruleset.Code);
         if (existing is null)
         {

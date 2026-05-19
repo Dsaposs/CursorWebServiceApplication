@@ -1,0 +1,20 @@
+{
+  "attributes": {
+    "strength": 2,
+    "agility": 2,
+    "wits": 2,
+    "empathy": 2
+  },
+  "skills": {
+    "closeCombat": 0,
+    "rangedCombat": 0,
+    "mobility": 0,
+    "observation": 0,
+    "survival": 0,
+    "medicalAid": 0
+  },
+  "gameValues": {
+    "stress": 0
+  },
+  "experience": 0
+}
