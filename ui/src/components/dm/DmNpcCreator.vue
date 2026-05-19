@@ -5,6 +5,7 @@ import type {
   RulesetDefinition,
   RulesetSkillDefinition,
 } from '~/types/api';
+import { parseNpcInventory, type InventoryEntry } from '~/utils/inventory';
 
 export interface NpcFormPayload {
   name: string;
@@ -18,15 +19,18 @@ export interface NpcFormPayload {
 interface Props {
   gameId: string;
   rulesetDefinition: RulesetDefinition | null;
+  npc?: NpcResponse | null;
   isBusy?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  npc: null,
   isBusy: false,
 });
 
 const emit = defineEmits<{
   created: [npc: NpcResponse];
+  updated: [npc: NpcResponse];
   cancel: [];
 }>();
 
@@ -41,6 +45,9 @@ const localHealth = ref(10);
 const localArmor = ref(0);
 const localAttrs = ref<Record<string, number>>({});
 const localSkills = ref<Record<string, number>>({});
+const localInventory = ref<InventoryEntry[]>([]);
+
+const isEditMode = computed(() => Boolean(props.npc));
 
 const attributes = computed<RulesetAttributeDefinition[]>(
   () => props.rulesetDefinition?.character.attributes ?? [],
@@ -65,24 +72,63 @@ function resetForm() {
   localArmor.value = 0;
   localAttrs.value = defaultAttrs();
   localSkills.value = defaultSkills();
+  localInventory.value = [];
 }
+
+function populateFromNpc(npc: NpcResponse) {
+  localName.value = npc.name;
+  localKind.value = npc.kind || 'NPC';
+  localMaxHealth.value = npc.maxHealth;
+  localHealth.value = npc.health;
+  localArmor.value = npc.armor;
+  try {
+    const block = JSON.parse(npc.statBlockJson) as {
+      attributes?: Record<string, number>;
+      skills?: Record<string, number>;
+    };
+    localAttrs.value = { ...defaultAttrs(), ...(block.attributes ?? {}) };
+    localSkills.value = { ...defaultSkills(), ...(block.skills ?? {}) };
+    localInventory.value = parseNpcInventory(npc.statBlockJson).map(entry => ({ ...entry }));
+  } catch {
+    localAttrs.value = defaultAttrs();
+    localSkills.value = defaultSkills();
+    localInventory.value = [];
+  }
+}
+
+watch(
+  () => props.npc,
+  (npc) => {
+    if (npc) populateFromNpc(npc);
+    else resetForm();
+  },
+  { immediate: true },
+);
 
 watch(
   () => props.rulesetDefinition,
   () => {
-    localAttrs.value = defaultAttrs();
-    localSkills.value = defaultSkills();
+    if (!props.npc) {
+      localAttrs.value = defaultAttrs();
+      localSkills.value = defaultSkills();
+    }
   },
-  { immediate: true },
 );
 
 function buildStatBlockJson(): string {
   const hasAttrs = attributes.value.length > 0;
   const hasSkills = skills.value.length > 0;
-  if (!hasAttrs && !hasSkills) return '{}';
+  const hasInventory = localInventory.value.length > 0;
+  if (!hasAttrs && !hasSkills && !hasInventory) return '{}';
   const block: Record<string, unknown> = {};
   if (hasAttrs) block.attributes = { ...localAttrs.value };
   if (hasSkills) block.skills = { ...localSkills.value };
+  if (hasInventory) {
+    block.inventory = localInventory.value.map(entry => ({
+      itemKey: entry.itemKey,
+      quantity: entry.quantity,
+    }));
+  }
   return JSON.stringify(block);
 }
 
@@ -97,6 +143,17 @@ function buildPayload(): NpcFormPayload {
   };
 }
 
+const localInventoryJson = computed(() =>
+  JSON.stringify(localInventory.value.map(entry => ({
+    itemKey: entry.itemKey,
+    quantity: entry.quantity,
+  }))),
+);
+
+function onInventorySave(inventory: InventoryEntry[]) {
+  localInventory.value = inventory.map(entry => ({ ...entry }));
+}
+
 const formBusy = computed(() => props.isBusy || isSubmitting.value);
 
 async function submit() {
@@ -107,13 +164,23 @@ async function submit() {
 
   isSubmitting.value = true;
   try {
-    const npc = await api<NpcResponse>(`/api/games/${props.gameId}/npcs`, {
-      method: 'POST',
-      body: buildPayload(),
-    });
-    toastSuccess(`${npc.name} added.`);
-    emit('created', npc);
-    resetForm();
+    const payload = buildPayload();
+    if (isEditMode.value && props.npc) {
+      const npc = await api<NpcResponse>(`/api/games/${props.gameId}/npcs/${props.npc.id}`, {
+        method: 'PUT',
+        body: payload,
+      });
+      toastSuccess(`${npc.name} updated.`);
+      emit('updated', npc);
+    } else {
+      const npc = await api<NpcResponse>(`/api/games/${props.gameId}/npcs`, {
+        method: 'POST',
+        body: payload,
+      });
+      toastSuccess(`${npc.name} added.`);
+      emit('created', npc);
+      resetForm();
+    }
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
@@ -122,13 +189,21 @@ async function submit() {
 }
 
 function cancel() {
+  if (isEditMode.value) {
+    emit('cancel');
+    return;
+  }
   resetForm();
   emit('cancel');
 }
 </script>
 
 <template>
-  <form class="dm-npc-create-form" @submit.prevent="submit">
+  <form class="dm-npc-form" @submit.prevent="submit">
+    <p v-if="isEditMode" class="text-sm muted" style="margin: 0 0 0.75rem;">
+      Editing <strong>{{ npc?.name }}</strong>
+    </p>
+
     <label>
       Name
       <input v-model.trim="localName" placeholder="Xenomorph, Goblin, Guard…" required :disabled="formBusy" />
@@ -183,9 +258,18 @@ function cancel() {
       </div>
     </template>
 
+    <InventoryEditor
+      v-if="rulesetDefinition"
+      embedded
+      :inventory-json="localInventoryJson"
+      :ruleset-definition="rulesetDefinition"
+      style="margin-top: 1rem;"
+      @save="onInventorySave"
+    />
+
     <div class="btn-row" style="margin-top: 0.75rem;">
       <button class="btn" type="submit" :disabled="formBusy">
-        {{ formBusy ? 'Saving…' : 'Create NPC' }}
+        {{ formBusy ? 'Saving…' : isEditMode ? 'Save Changes' : 'Create NPC' }}
       </button>
       <button class="btn ghost" type="button" :disabled="formBusy" @click="cancel">
         Cancel
@@ -195,7 +279,7 @@ function cancel() {
 </template>
 
 <style scoped>
-.dm-npc-create-form {
+.dm-npc-form {
   margin-bottom: 1rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border);

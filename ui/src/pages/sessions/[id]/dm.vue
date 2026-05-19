@@ -500,6 +500,10 @@ async function onNpcCreated() {
   await refresh();
 }
 
+async function onNpcUpdated() {
+  await refresh();
+}
+
 async function copyJoinLink() {
   if (!state.value) return;
   if (import.meta.client && navigator.clipboard) {
@@ -830,6 +834,7 @@ const npcRollContext = computed(() => {
             :is-busy="isSaving"
             @cycle-npc-visibility="cycleNpcVisibility"
             @npc-created="onNpcCreated"
+            @npc-updated="onNpcUpdated"
           />
           </div>
         </div>

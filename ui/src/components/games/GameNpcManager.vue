@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { NpcResponse, RulesetAttributeDefinition, RulesetDefinition, RulesetSkillDefinition } from '~/types/api';
 import { parseNpcInventory, type InventoryEntry } from '~/utils/inventory';
+import { npcAttributeValue, npcHasStructuredStats, npcSkillValue } from '~/utils/npcStats';
 
 export interface NpcFormPayload {
   name: string;
+  kind: string;
   maxHealth: number;
   health: number;
   armor: number;
@@ -28,6 +30,7 @@ const emit = defineEmits<{
 
 // ── Internal form state ───────────────────────────────────────
 const localName = ref('');
+const localKind = ref('NPC');
 const localMaxHealth = ref(10);
 const localHealth = ref(10);
 const localArmor = ref(0);
@@ -48,6 +51,7 @@ function defaultSkills(): Record<string, number> {
 
 function resetForm() {
   localName.value = '';
+  localKind.value = 'NPC';
   localMaxHealth.value = 10;
   localHealth.value = 10;
   localArmor.value = 0;
@@ -58,6 +62,7 @@ function resetForm() {
 
 function populateFromNpc(npc: NpcResponse) {
   localName.value = npc.name;
+  localKind.value = npc.kind || 'NPC';
   localMaxHealth.value = npc.maxHealth;
   localHealth.value = npc.health;
   localArmor.value = npc.armor;
@@ -133,6 +138,7 @@ const localInventoryJson = computed(() =>
 function handleSubmit() {
   emit('submit', {
     name: localName.value.trim(),
+    kind: localKind.value,
     maxHealth: localMaxHealth.value,
     health: localHealth.value,
     armor: localArmor.value,
@@ -140,33 +146,8 @@ function handleSubmit() {
   });
 }
 
-// ── Card display helpers ──────────────────────────────────────
-interface ParsedStatBlock {
-  attributes?: Record<string, number>;
-  skills?: Record<string, number>;
-}
-
-function parsedBlock(npc: NpcResponse): ParsedStatBlock | null {
-  try {
-    const b = JSON.parse(npc.statBlockJson) as ParsedStatBlock;
-    if (b && typeof b === 'object') return b;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function hasStats(npc: NpcResponse): boolean {
-  const b = parsedBlock(npc);
-  return Boolean(b?.attributes || b?.skills);
-}
-
-function attrVal(npc: NpcResponse, key: string): number | null {
-  return parsedBlock(npc)?.attributes?.[key] ?? null;
-}
-
-function skillVal(npc: NpcResponse, key: string): number | null {
-  return parsedBlock(npc)?.skills?.[key] ?? null;
+function npcInventoryJson(npc: NpcResponse): string {
+  return JSON.stringify(parseNpcInventory(npc.statBlockJson));
 }
 </script>
 
@@ -179,6 +160,14 @@ function skillVal(npc: NpcResponse, key: string): number | null {
         <label>
           Name
           <input v-model.trim="localName" placeholder="Xenomorph, Goblin, Guard…" required />
+        </label>
+
+        <label>
+          Type
+          <select v-model="localKind">
+            <option value="NPC">NPC</option>
+            <option value="Monster">Monster</option>
+          </select>
         </label>
 
         <div class="inline-fields">
@@ -281,14 +270,13 @@ function skillVal(npc: NpcResponse, key: string): number | null {
         <div class="npc-card-body">
           <HealthBar :current="npc.health" :max="npc.maxHealth" />
 
-          <!-- Structured stat display when definition is available -->
-          <template v-if="hasStats(npc) && (attributes.length || skills.length)">
+          <template v-if="npcHasStructuredStats(npc.statBlockJson) && (attributes.length || skills.length)">
             <div v-if="attributes.length" class="npc-stats-section">
               <p class="text-xs muted" style="margin-bottom: 0.35rem;">Attributes</p>
               <div class="stat-grid">
                 <div v-for="attr in attributes" :key="attr.key" class="stat-cell">
                   <dt>{{ attr.label }}</dt>
-                  <dd>{{ attrVal(npc, attr.key) ?? '–' }}</dd>
+                  <dd>{{ npcAttributeValue(npc.statBlockJson, attr.key) ?? '–' }}</dd>
                 </div>
               </div>
             </div>
@@ -297,13 +285,27 @@ function skillVal(npc: NpcResponse, key: string): number | null {
               <div class="stat-grid">
                 <div v-for="skill in skills" :key="skill.key" class="stat-cell">
                   <dt>{{ skill.label }}</dt>
-                  <dd>{{ skillVal(npc, skill.key) ?? '–' }}</dd>
+                  <dd>{{ npcSkillValue(npc.statBlockJson, skill.key) ?? '–' }}</dd>
                 </div>
               </div>
             </div>
           </template>
 
-          <p v-else class="text-sm muted" style="margin-top: 0.5rem;">No stats recorded.</p>
+          <section v-if="definition" class="npc-stats-section">
+            <p class="text-xs muted" style="margin-bottom: 0.35rem;">Inventory</p>
+            <CharacterInventoryList
+              :inventory-json="npcInventoryJson(npc)"
+              :ruleset-definition="definition"
+            />
+          </section>
+
+          <p
+            v-if="!npcHasStructuredStats(npc.statBlockJson) && !parseNpcInventory(npc.statBlockJson).length"
+            class="text-sm muted"
+            style="margin-top: 0.5rem;"
+          >
+            No stats recorded.
+          </p>
         </div>
       </details>
     </div>
@@ -327,7 +329,8 @@ function skillVal(npc: NpcResponse, key: string): number | null {
   gap: 0.6rem;
   max-height: calc(100vh - 10rem);
   overflow-y: auto;
-  padding-right: 2px; /* prevent outline clipping */
+  overflow-x: visible;
+  padding-right: 2px;
 }
 
 .panel-editing {
@@ -336,7 +339,7 @@ function skillVal(npc: NpcResponse, key: string): number | null {
 
 /* ── Collapsible NPC card ───────────────────────── */
 .npc-card {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .npc-card-summary {

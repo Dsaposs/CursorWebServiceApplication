@@ -15,13 +15,29 @@ withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   cycleNpcVisibility: [npcId: string, currentVisibility: string];
   npcCreated: [npc: NpcResponse];
+  npcUpdated: [npc: NpcResponse];
 }>();
 
 const showNpcForm = ref(false);
+const editingNpc = ref<NpcResponse | null>(null);
 
 function onNpcCreated(npc: NpcResponse) {
   showNpcForm.value = false;
   emit('npcCreated', npc);
+}
+
+function onNpcUpdated(npc: NpcResponse) {
+  editingNpc.value = null;
+  emit('npcUpdated', npc);
+}
+
+function startEditNpc(npc: NpcResponse) {
+  editingNpc.value = npc;
+  showNpcForm.value = false;
+}
+
+function cancelNpcEdit() {
+  editingNpc.value = null;
 }
 </script>
 
@@ -48,7 +64,7 @@ function onNpcCreated(npc: NpcResponse) {
           </span>
           <span class="entity-stat-summary">HP {{ ch.health }}/{{ ch.maxHealth }} · AC {{ ch.armor }}</span>
         </summary>
-        <CharacterSheet :character="ch" />
+        <CharacterSheet :character="ch" :ruleset-definition="rulesetDefinition" />
       </details>
     </div>
   </div>
@@ -57,12 +73,12 @@ function onNpcCreated(npc: NpcResponse) {
     <div class="panel-title">
       <div>
         <h2>NPCs / Monsters</h2>
-        <p class="text-sm">Open an NPC to review health, armor, and stat block details.</p>
+        <p class="text-sm">Open an NPC to review stats and inventory, or edit during the session.</p>
       </div>
       <div class="btn-row" style="flex-shrink: 0;">
         <span v-if="game.npcsAndMonsters.length" class="badge active">{{ game.npcsAndMonsters.length }}</span>
         <button
-          v-if="!showNpcForm"
+          v-if="!showNpcForm && !editingNpc"
           class="btn sm"
           type="button"
           :disabled="isBusy"
@@ -82,18 +98,41 @@ function onNpcCreated(npc: NpcResponse) {
       @cancel="showNpcForm = false"
     />
 
-    <div v-if="game.npcsAndMonsters.length === 0 && !showNpcForm" class="empty-state" style="padding: 1rem 0;">
+    <DmNpcCreator
+      v-if="editingNpc"
+      :game-id="gameId"
+      :ruleset-definition="rulesetDefinition"
+      :npc="editingNpc"
+      :is-busy="isBusy"
+      @updated="onNpcUpdated"
+      @cancel="cancelNpcEdit"
+    />
+
+    <div v-if="game.npcsAndMonsters.length === 0 && !showNpcForm && !editingNpc" class="empty-state" style="padding: 1rem 0;">
       <p class="text-sm">No NPCs or monsters yet.</p>
     </div>
 
     <div v-if="game.npcsAndMonsters.length" class="entity-stat-list">
-      <details v-for="npc in game.npcsAndMonsters" :key="npc.id" class="entity-stat-details">
+      <details
+        v-for="npc in game.npcsAndMonsters"
+        :key="npc.id"
+        class="entity-stat-details"
+        :open="editingNpc?.id === npc.id"
+      >
         <summary>
           <span>
             <strong>{{ npc.name }}</strong>
             <small>{{ npc.kind }}</small>
           </span>
           <span class="entity-stat-actions">
+            <button
+              class="btn ghost sm"
+              type="button"
+              :disabled="isBusy || Boolean(editingNpc && editingNpc.id !== npc.id)"
+              @click.stop="startEditNpc(npc)"
+            >
+              Edit
+            </button>
             <button
               class="npc-visibility-btn"
               :class="`visibility-${(npc.visibility ?? 'Hidden').toLowerCase()}`"
@@ -106,7 +145,7 @@ function onNpcCreated(npc: NpcResponse) {
             <span class="entity-stat-summary">HP {{ npc.health }}/{{ npc.maxHealth }} · AC {{ npc.armor }}</span>
           </span>
         </summary>
-        <NpcSheet :npc="npc" />
+        <NpcSheet :npc="npc" :ruleset-definition="rulesetDefinition" />
       </details>
     </div>
   </div>

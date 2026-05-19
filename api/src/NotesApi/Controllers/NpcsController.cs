@@ -83,6 +83,15 @@ public class NpcsController : ControllerBase
         npc.StatBlockJson = request.StatBlockJson;
         npc.UpdatedAt = DateTime.UtcNow;
         game.UpdatedAt = npc.UpdatedAt;
+
+        var activeSession = await _db.GameSessions
+            .FirstOrDefaultAsync(s => s.GameId == game.Id && s.IsActive);
+        if (activeSession is not null)
+        {
+            activeSession.Version++;
+            activeSession.UpdatedAt = npc.UpdatedAt;
+        }
+
         await _db.SaveChangesAsync();
 
         return Ok(ControllerHelpers.ToNpcResponse(npc));
