@@ -2242,9 +2242,20 @@ tr:hover td { background: var(--panel-alt); }
 
 /* Portrait / narrow: one column, equal gap between every session panel */
 @media (max-width: 1023px), (orientation: portrait) {
+  /* Let the page grow with content instead of locking main to viewport height */
+  .dm-app-shell,
+  .app-shell:has(> .session-screen-main) {
+    grid-template-rows: auto auto;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
   .dm-screen-main {
     display: grid;
     grid-template-rows: auto auto minmax(0, auto);
+    min-height: auto;
+    height: auto;
     max-height: none;
     overflow: visible;
   }
@@ -2252,6 +2263,8 @@ tr:hover td { background: var(--panel-alt); }
   .session-screen-main {
     display: grid;
     grid-template-rows: auto minmax(0, auto);
+    min-height: auto;
+    height: auto;
     max-height: none;
     overflow: visible;
   }
@@ -2259,7 +2272,8 @@ tr:hover td { background: var(--panel-alt); }
   .dm-screen-main > .session-dashboard-grid,
   .session-screen-main > .session-dashboard-grid {
     overflow: visible;
-    min-height: 0;
+    min-height: auto;
+    height: auto;
   }
 
   .session-dashboard-grid {
