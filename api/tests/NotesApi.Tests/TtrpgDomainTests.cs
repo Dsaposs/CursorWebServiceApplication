@@ -221,6 +221,74 @@ public class TtrpgDomainTests
         Assert.Equal(statBlockJson, savedNpc.StatBlockJson);
     }
 
+    [Theory]
+    [InlineData(null, "")]
+    [InlineData("  The xenomorph is driven back.  ", "The xenomorph is driven back.")]
+    public async Task ResolveAction_AllowsOptionalResolutionTextAndClearsLegacyAdditionalActions(string? resolutionText, string expectedResolutionText)
+    {
+        await using var db = CreateDbContext();
+        await SeedRulesetAsync(db);
+        await SeedUsersAsync(db);
+        var timestamp = DateTime.UtcNow.AddMinutes(-5);
+        var game = new Game
+        {
+            Id = Guid.NewGuid(),
+            DmUserId = "dm-1",
+            RulesetCode = "alien-rpg",
+            Name = $"Resolution Regression {Guid.NewGuid():N}",
+            InviteCode = $"resolve-{Guid.NewGuid():N}"[..32],
+            CreatedAt = timestamp,
+            UpdatedAt = timestamp,
+        };
+        var session = new GameSession
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            JoinCode = $"resolve-{Guid.NewGuid():N}"[..32],
+            IsActive = true,
+            State = SessionMode.Exploration,
+            StartedAt = timestamp,
+            UpdatedAt = timestamp,
+        };
+        var actionId = Guid.NewGuid();
+        var action = new ActionRequest
+        {
+            Id = actionId,
+            SessionId = session.Id,
+            ActorName = "Ripley",
+            ActionText = "holds the door",
+            Status = ActionStatus.Pending,
+            Sequence = 1,
+            SubmittedAt = timestamp,
+            Resolution = new ActionResolution
+            {
+                Id = Guid.NewGuid(),
+                ActionRequestId = actionId,
+                ResolutionText = "Legacy draft",
+                AdditionalActions = "Legacy follow-up prompt",
+                PublishedAt = timestamp,
+            },
+        };
+        db.AddRange(game, session, action);
+        await db.SaveChangesAsync();
+        var controller = CreateActionsController(db, "dm-1");
+
+        var result = await controller.Resolve(action.Id, new ResolveActionRequest
+        {
+            ResolutionText = resolutionText,
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ActionQueueItemResponse>(ok.Value);
+        var saved = await db.ActionRequests.Include(a => a.Resolution).SingleAsync(a => a.Id == action.Id);
+        Assert.Equal("Published", response.Status);
+        Assert.Equal(expectedResolutionText, response.ResolutionText);
+        Assert.Null(response.AdditionalActions);
+        Assert.Equal(ActionStatus.Published, saved.Status);
+        Assert.Equal(expectedResolutionText, saved.Resolution!.ResolutionText);
+        Assert.Null(saved.Resolution.AdditionalActions);
+    }
+
     [Fact]
     public async Task PlayerJoinToken_IsScopedToOneGameCharacter()
     {
@@ -426,6 +494,22 @@ public class TtrpgDomainTests
     private static NpcsController CreateNpcsController(ApplicationDbContext db, string userId)
     {
         return new NpcsController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                        new[] { new Claim(ClaimTypes.NameIdentifier, userId) },
+                        "TestAuth")),
+                },
+            },
+        };
+    }
+
+    private static ActionsController CreateActionsController(ApplicationDbContext db, string userId)
+    {
+        return new ActionsController(db)
         {
             ControllerContext = new ControllerContext
             {
