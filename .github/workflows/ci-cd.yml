@@ -115,7 +115,10 @@ jobs:
     name: Deploy to production
     runs-on: ubuntu-latest
     needs: docker
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: >
+      github.event_name == 'push'
+      && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      && vars.PRODUCTION_DEPLOY_ENABLED == 'true'
     environment: production
 
     env:
@@ -139,7 +142,7 @@ jobs:
           missing=0
           for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_SSH_PRIVATE_KEY TTRPG_JWT_KEY TTRPG_SEED_ADMIN_PASSWORD; do
             if [ -z "${!name}" ]; then
-              echo "::error::Repository secret ${name} is required for production deployment."
+              echo "::error::GitHub Actions secret ${name} is required for production deployment."
               missing=1
             fi
           done
