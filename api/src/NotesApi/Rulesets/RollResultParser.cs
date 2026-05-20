@@ -19,6 +19,10 @@ public static class RollResultParser
         @"→\s*total\s+(\d+)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    private static readonly Regex BareTotalRegex = new(
+        @"^\s*(\d+)\s*$",
+        RegexOptions.CultureInvariant);
+
     public static RollResultData? TryParseJson(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -95,6 +99,28 @@ public static class RollResultParser
             : ParseSuccesses(rollSummary);
     }
 
+    public static int? GetThresholdValue(string? rollResultJson, string rollSummary, string? resultKind)
+    {
+        var structured = TryParseJson(rollResultJson);
+        if (structured is not null)
+        {
+            return GetPrimaryValue(structured, resultKind, rollSummary);
+        }
+
+        if (string.Equals(resultKind, "Total", StringComparison.OrdinalIgnoreCase))
+        {
+            return ParseTotal(rollSummary);
+        }
+
+        var successMatches = SuccessCountRegex.Matches(rollSummary);
+        if (successMatches.Count > 0)
+        {
+            return int.Parse(successMatches[^1].Groups[1].Value);
+        }
+
+        return ParseTotal(rollSummary);
+    }
+
     private static int ParseSuccesses(string rollSummary)
     {
         var matches = SuccessCountRegex.Matches(rollSummary);
@@ -118,6 +144,12 @@ public static class RollResultParser
         if (arrowMatch.Success)
         {
             return int.Parse(arrowMatch.Groups[1].Value);
+        }
+
+        var bareMatch = BareTotalRegex.Match(rollSummary);
+        if (bareMatch.Success)
+        {
+            return int.Parse(bareMatch.Groups[1].Value);
         }
 
         return null;

@@ -11,6 +11,7 @@ using NotesApi.Models;
 using NotesApi.DTOs;
 using NotesApi.Rulesets;
 using System.Security.Claims;
+using System.Text.Json;
 
 public class TtrpgDomainTests
 {
@@ -40,6 +41,63 @@ public class TtrpgDomainTests
               "modifiers": [{ "source": "gameValue", "key": "stress", "dicePerPoint": 1 }],
               "successRule": "Each 6 is a success."
             }
+          }],
+          "npcTemplates": []
+        }
+        """;
+
+    private const string RollChainRulesetJson = """
+        {
+          "schemaVersion": 1,
+          "code": "chain-rules",
+          "displayName": "Chain Rules",
+          "description": "Rules for roll-chain testing.",
+          "diceRollerKey": "d6-pool",
+          "diceNotation": "d6 pool",
+          "dice": [{ "key": "d6Pool", "label": "D6 Pool", "notation": "attribute + skill d6", "successTarget": 6 }],
+          "character": {
+            "vitals": {},
+            "attributes": [{ "key": "agility", "label": "Agility", "default": 2 }],
+            "gameValues": [{ "key": "stress", "label": "Stress", "type": "number", "default": 0 }],
+            "classes": [{ "key": "marine", "label": "Marine", "availableSkills": ["rangedCombat"], "startingSkillPoints": 10 }],
+            "skills": [{ "key": "rangedCombat", "label": "Ranged Combat", "attribute": "agility", "default": 0 }]
+          },
+          "actions": [{
+            "key": "shoot",
+            "label": "Shoot",
+            "allowedClasses": ["marine"],
+            "roll": {
+              "dice": "d6Pool",
+              "attribute": "agility",
+              "skill": "rangedCombat",
+              "successRule": "One or more successes."
+            },
+            "rollChain": [
+              {
+                "step": "attack",
+                "label": "Attack roll",
+                "checkMode": "Action",
+                "resultKind": "PassFail",
+                "autoResolve": { "condition": "successes >= 1", "fallback": "dm_input" },
+                "onSuccess": "damage",
+                "onFailure": "end"
+              },
+              {
+                "step": "damage",
+                "label": "Damage roll",
+                "checkMode": "Custom",
+                "resultKind": "Total",
+                "customCheckText": "Roll damage",
+                "onComplete": "end",
+                "applyEffects": [{
+                  "target": "action.target",
+                  "stat": "health",
+                  "operation": "subtract",
+                  "value": "roll.total",
+                  "minResult": 1
+                }]
+              }
+            ]
           }],
           "npcTemplates": []
         }
@@ -269,6 +327,79 @@ public class TtrpgDomainTests
     }
 
     [Fact]
+    public async Task DmRollForAction_AutoResolvesBareTotalAgainstDc()
+    {
+        await using var db = CreateDbContext();
+        await SeedRulesetAsync(db);
+        await SeedUsersAsync(db);
+        var now = DateTime.UtcNow;
+        var game = new Game
+        {
+            Id = Guid.NewGuid(),
+            DmUserId = "dm-1",
+            RulesetCode = "alien-rpg",
+            Name = "DM Roll Regression",
+            InviteCode = "dm-roll",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var character = new Character
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            Name = "Ripley",
+            PlayerName = "Dan",
+            Health = 10,
+            MaxHealth = 10,
+            ClassKey = "marine",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var session = new GameSession
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            JoinCode = "dm-roll-session",
+            IsActive = true,
+            State = SessionMode.Exploration,
+            StartedAt = now,
+            UpdatedAt = now,
+        };
+        var action = new ActionRequest
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            ActorCharacterId = character.Id,
+            ActorName = character.Name,
+            ActionKey = "shoot",
+            ActionText = "Shoot",
+            Status = ActionStatus.Pending,
+            Sequence = 1,
+            SubmittedAt = now,
+        };
+        db.AddRange(game, character, session, action);
+        await db.SaveChangesAsync();
+        var controller = CreateActionsController(db, "dm-1");
+
+        var result = await controller.DmRollForAction(action.Id, new DmRollRequest
+        {
+            RollSummary = "14",
+            Dc = 12,
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<RollPromptResponse>(ok.Value);
+        Assert.True(response.DmRolled);
+        Assert.Equal("Completed", response.Status);
+        Assert.Equal(RollChainOutcomes.Success, response.AutoResolveOutcome);
+
+        var savedPrompt = await db.ActionRollPrompts.SingleAsync(p => p.ActionRequestId == action.Id);
+        Assert.True(savedPrompt.DmRolled);
+        Assert.Equal(RollPromptStatus.Completed, savedPrompt.Status);
+        Assert.Equal(RollChainOutcomes.Success, savedPrompt.AutoResolveOutcome);
+    }
+
+    [Fact]
     public async Task CombatInitiative_CanTrackExactlyOneCurrentTurn()
     {
         await using var db = CreateDbContext();
@@ -319,6 +450,212 @@ public class TtrpgDomainTests
         var currentTurns = await db.InitiativeEntries.CountAsync(i => i.SessionId == session.Id && i.IsCurrentTurn);
 
         Assert.Equal(1, currentTurns);
+    }
+
+    [Fact]
+    public async Task CombatSetup_PreservesCurrentTurnAndPersistsInitiativeScores()
+    {
+        await using var db = CreateDbContext();
+        await SeedRulesetAsync(db);
+        await SeedUsersAsync(db);
+        var now = DateTime.UtcNow;
+        var game = new Game
+        {
+            Id = Guid.NewGuid(),
+            DmUserId = "dm-1",
+            RulesetCode = "alien-rpg",
+            Name = "Initiative Regression",
+            InviteCode = "initiative-regression",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var firstCharacter = new Character
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            Name = "Hicks",
+            PlayerName = "Dan",
+            Health = 10,
+            MaxHealth = 10,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var currentCharacter = new Character
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            Name = "Ripley",
+            PlayerName = "Alex",
+            Health = 10,
+            MaxHealth = 10,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var session = new GameSession
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            JoinCode = "initiative-session",
+            IsActive = true,
+            State = SessionMode.Combat,
+            Version = 4,
+            StartedAt = now,
+            UpdatedAt = now,
+        };
+        session.InitiativeEntries.Add(new InitiativeEntry
+        {
+            Id = Guid.NewGuid(),
+            CombatantType = CombatantType.Character,
+            CombatantId = firstCharacter.Id,
+            CombatantName = firstCharacter.Name,
+            SortOrder = 1,
+            InitiativeScore = 8,
+            CreatedAt = now,
+        });
+        session.InitiativeEntries.Add(new InitiativeEntry
+        {
+            Id = Guid.NewGuid(),
+            CombatantType = CombatantType.Character,
+            CombatantId = currentCharacter.Id,
+            CombatantName = currentCharacter.Name,
+            SortOrder = 2,
+            InitiativeScore = 7,
+            IsCurrentTurn = true,
+            CreatedAt = now,
+        });
+        db.AddRange(game, firstCharacter, currentCharacter, session);
+        await db.SaveChangesAsync();
+        var controller = CreateCombatController(db, "dm-1");
+
+        var result = await controller.Setup(session.Id, new SetupCombatRequest
+        {
+            Combatants = new[]
+            {
+                new CombatantRequest { Type = "Character", Id = firstCharacter.Id, Initiative = 20 },
+                new CombatantRequest { Type = "Character", Id = currentCharacter.Id, Initiative = 5 },
+            },
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var entries = Assert.IsAssignableFrom<IEnumerable<InitiativeEntryResponse>>(ok.Value).ToList();
+        Assert.Equal(new[] { firstCharacter.Id, currentCharacter.Id }, entries.Select(e => e.CombatantId));
+        Assert.Equal(new[] { 20, 5 }, entries.Select(e => e.InitiativeScore));
+        Assert.False(entries[0].IsCurrentTurn);
+        Assert.True(entries[1].IsCurrentTurn);
+
+        var savedEntries = await db.InitiativeEntries
+            .Where(i => i.SessionId == session.Id)
+            .OrderBy(i => i.SortOrder)
+            .ToListAsync();
+        Assert.Equal(new[] { 20, 5 }, savedEntries.Select(e => e.InitiativeScore));
+        Assert.Equal(currentCharacter.Id, Assert.Single(savedEntries.Where(e => e.IsCurrentTurn)).CombatantId);
+    }
+
+    [Fact]
+    public async Task RollChainOrchestrator_QueuesDamagePromptAndStoresPendingDamage()
+    {
+        await using var db = CreateDbContext();
+        var now = DateTime.UtcNow;
+        var actor = new Character
+        {
+            Id = Guid.NewGuid(),
+            Name = "Ripley",
+            PlayerName = "Dan",
+            Health = 10,
+            MaxHealth = 10,
+            ClassKey = "marine",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var target = new NpcOrMonster
+        {
+            Id = Guid.NewGuid(),
+            Name = "Drone",
+            Kind = "Monster",
+            Health = 8,
+            MaxHealth = 8,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var game = new Game
+        {
+            Id = Guid.NewGuid(),
+            DmUserId = "dm-1",
+            RulesetCode = "chain-rules",
+            Name = "Roll Chain Regression",
+            InviteCode = "roll-chain",
+            Ruleset = new Ruleset
+            {
+                Code = "chain-rules",
+                DisplayName = "Chain Rules",
+                Description = "Roll chain test rules",
+                DiceNotation = "d6 pool",
+                DefinitionJson = RollChainRulesetJson,
+            },
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        game.Characters.Add(actor);
+        game.NpcsAndMonsters.Add(target);
+        var action = new ActionRequest
+        {
+            Id = Guid.NewGuid(),
+            ActorCharacterId = actor.Id,
+            ActorName = actor.Name,
+            ActionKey = "shoot",
+            ActionText = "Shoot",
+            TargetNpcId = target.Id,
+            TargetName = target.Name,
+            Status = ActionStatus.Pending,
+            Sequence = 1,
+            SubmittedAt = now,
+        };
+
+        var attackPrompt = RollChainOrchestrator.TryCreateFirstPrompt(action, game, RollChainRulesetJson, now);
+
+        Assert.NotNull(attackPrompt);
+        Assert.Equal("attack", attackPrompt.ChainStepKey);
+        Assert.Equal("Attack roll", attackPrompt.PromptLabel);
+
+        var hitResult = await RollChainOrchestrator.ProcessCompletedPromptAsync(
+            db,
+            attackPrompt,
+            action,
+            game,
+            RollChainRulesetJson,
+            "1 success",
+            RollResultParser.Serialize(new RollResultData { Successes = 1 }),
+            now);
+
+        Assert.Equal(RollChainOutcomes.Success, hitResult.AutoResolveOutcome);
+        Assert.NotNull(hitResult.QueuedNextPrompt);
+        Assert.Equal("damage", hitResult.QueuedNextPrompt.ChainStepKey);
+        var chainState = RollChainCatalog.ParseState(action.RollChainStateJson);
+        Assert.NotNull(chainState);
+        Assert.Equal(1, chainState.StepIndex);
+        Assert.Equal(RollChainOutcomes.Success, chainState.LastOutcome);
+
+        var damageResult = await RollChainOrchestrator.ProcessCompletedPromptAsync(
+            db,
+            hitResult.QueuedNextPrompt,
+            action,
+            game,
+            RollChainRulesetJson,
+            "Damage total = 5",
+            RollResultParser.Serialize(new RollResultData { Total = 5 }),
+            now);
+
+        var statChange = Assert.Single(damageResult.SuggestedStatChanges);
+        Assert.Equal("NpcOrMonster", statChange.TargetType);
+        Assert.Equal(target.Id, statChange.TargetId);
+        Assert.Equal(-5, statChange.HealthDelta);
+
+        var pending = JsonSerializer.Deserialize<List<StatChangeRequest>>(
+            action.PendingChainEffectsJson,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var pendingChange = Assert.Single(pending!);
+        Assert.Equal(target.Id, pendingChange.TargetId);
+        Assert.Equal(-5, pendingChange.HealthDelta);
     }
 
     [Fact]
@@ -435,6 +772,35 @@ public class TtrpgDomainTests
                         new[] { new Claim(ClaimTypes.NameIdentifier, userId) },
                         "TestAuth")),
                 },
+            },
+        };
+    }
+
+    private static ActionsController CreateActionsController(ApplicationDbContext db, string userId)
+    {
+        return new ActionsController(db)
+        {
+            ControllerContext = CreateAuthenticatedControllerContext(userId),
+        };
+    }
+
+    private static CombatController CreateCombatController(ApplicationDbContext db, string userId)
+    {
+        return new CombatController(db)
+        {
+            ControllerContext = CreateAuthenticatedControllerContext(userId),
+        };
+    }
+
+    private static ControllerContext CreateAuthenticatedControllerContext(string userId)
+    {
+        return new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    new[] { new Claim(ClaimTypes.NameIdentifier, userId) },
+                    "TestAuth")),
             },
         };
     }

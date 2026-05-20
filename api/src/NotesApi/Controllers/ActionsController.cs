@@ -536,9 +536,10 @@ public class ActionsController : ControllerBase
         string? autoResolveOutcome = null;
         if (request.Dc.HasValue)
         {
-            var rollData = RollResultParser.TryParseJson(request.RollResultJson)
-                ?? RollResultParser.ParseFromSummary(rollSummary, null, RollPromptResultKind.PassFail);
-            var primary = RollResultParser.GetPrimaryValue(rollData, RollPromptResultKind.PassFail, rollSummary);
+            var primary = RollResultParser.GetThresholdValue(
+                request.RollResultJson,
+                rollSummary,
+                RollPromptResultKind.PassFail);
             if (primary.HasValue)
             {
                 autoResolveOutcome = primary.Value >= request.Dc.Value
@@ -631,9 +632,10 @@ public class ActionsController : ControllerBase
             if (actionPrompt.Dc.HasValue && string.IsNullOrWhiteSpace(actionPrompt.ChainStepKey)
                 && actionPrompt.AutoResolveOutcome is null)
             {
-                var rollData = RollResultParser.TryParseJson(actionPrompt.RollResultJson)
-                    ?? RollResultParser.ParseFromSummary(rollSummary, null, actionPrompt.ResultKind);
-                var primary = RollResultParser.GetPrimaryValue(rollData, actionPrompt.ResultKind, rollSummary);
+                var primary = RollResultParser.GetThresholdValue(
+                    actionPrompt.RollResultJson,
+                    rollSummary,
+                    actionPrompt.ResultKind);
                 if (primary.HasValue)
                 {
                     actionPrompt.AutoResolveOutcome = primary.Value >= actionPrompt.Dc.Value
