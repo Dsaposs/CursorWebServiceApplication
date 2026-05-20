@@ -222,6 +222,7 @@ onMounted(async () => {
   loadSession();
   if (!token.value) { await navigateTo('/login'); return; }
   start();
+  if (import.meta.client) startIdleWatcher();
 });
 
 
@@ -853,6 +854,53 @@ const npcRollContext = computed(() => {
     gameValues: npcStats.value.gameValues,
   });
 });
+
+// ─── Browser inactivity auto-end (15 min) ────────────────────────────────────
+const BROWSER_IDLE_MS = 15 * 60 * 1000;
+const IDLE_WARN_MS = 60 * 1000; // show warning 1 min before auto-end
+
+const lastActivityAt = ref(Date.now());
+const idleWarningVisible = ref(false);
+const idleSecondsRemaining = ref(0);
+
+function onUserActivity() {
+  lastActivityAt.value = Date.now();
+  idleWarningVisible.value = false;
+}
+
+let idleIntervalId: ReturnType<typeof setInterval> | null = null;
+
+function startIdleWatcher() {
+  const EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'] as const;
+  EVENTS.forEach(e => window.addEventListener(e, onUserActivity, { passive: true }));
+
+  idleIntervalId = setInterval(() => {
+    if (!state.value?.isActive) return;
+    const idleMs = Date.now() - lastActivityAt.value;
+    const remaining = BROWSER_IDLE_MS - idleMs;
+    if (remaining <= 0) {
+      stopSession();
+    } else if (remaining <= IDLE_WARN_MS) {
+      idleSecondsRemaining.value = Math.ceil(remaining / 1000);
+      idleWarningVisible.value = true;
+    } else {
+      idleWarningVisible.value = false;
+    }
+  }, 5000);
+}
+
+function stopIdleWatcher() {
+  const EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'] as const;
+  EVENTS.forEach(e => window.removeEventListener(e, onUserActivity));
+  if (idleIntervalId !== null) {
+    clearInterval(idleIntervalId);
+    idleIntervalId = null;
+  }
+}
+
+onUnmounted(() => {
+  if (import.meta.client) stopIdleWatcher();
+});
 </script>
 
 <template>
@@ -1349,4 +1397,18 @@ const npcRollContext = computed(() => {
     :is-busy="isSaving"
     @confirm="stopSession"
   />
+
+  <!-- Browser inactivity warning -->
+  <Teleport to="body">
+    <div v-if="idleWarningVisible && state?.isActive" class="idle-warning-overlay" role="alertdialog" aria-live="assertive">
+      <div class="idle-warning-box">
+        <p class="idle-warning-title">Session ending due to inactivity</p>
+        <p class="idle-warning-body">
+          No activity detected. The session will automatically end in
+          <strong>{{ idleSecondsRemaining }}s</strong>.
+        </p>
+        <button class="btn primary" type="button" @click="onUserActivity">Stay Active</button>
+      </div>
+    </div>
+  </Teleport>
 </template>

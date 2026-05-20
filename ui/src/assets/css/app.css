@@ -3111,3 +3111,42 @@ details[open] .inventory-item-chevron {
 .inventory-quick-add select {
   width: 100%;
 }
+
+/* ─── Browser inactivity warning overlay ──────────────────────────────────── */
+
+.idle-warning-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.idle-warning-box {
+  width: min(26rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border: 2px solid var(--color-danger, #e53e3e);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.idle-warning-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-danger, #e53e3e);
+}
+
+.idle-warning-body {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.5;
+}
