@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CharacterResponse, RollPromptResponse, RulesetDefinition } from '~/types/api';
 import { buildRollPromptContext, rollPromptCheckLabel, rollPromptResultKindLabel, normalizeRollResultKind } from '~/utils/rollPrompt';
+import { buildRollResultJson } from '~/utils/rollResult';
 
 interface Props {
   prompt: RollPromptResponse;
@@ -14,14 +15,24 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  submit: [rollSummary: string];
+  submit: [payload: { rollSummary: string; rollResultJson?: string; pushed?: boolean }];
 }>();
 
 const rollResult = ref('');
+const pushRoll = ref(false);
+const canPush = computed(() => props.rulesetDefinition?.diceRollerKey === 'd6-pool');
 
 const rollContext = computed(() => {
   if (!props.rulesetDefinition) return null;
-  return buildRollPromptContext(props.prompt, props.rulesetDefinition, props.character);
+  const base = buildRollPromptContext(props.prompt, props.rulesetDefinition, props.character);
+  if (!base || !pushRoll.value || base.config.kind !== 'd6-pool') return base;
+  return {
+    ...base,
+    config: {
+      ...base.config,
+      stressDiceCount: (base.config.stressDiceCount ?? 0) + 1,
+    },
+  };
 });
 
 const heading = computed(() => rollPromptCheckLabel(props.prompt, props.rulesetDefinition));
@@ -34,14 +45,26 @@ const queueHint = computed(() => {
 });
 
 function submitRoll() {
-  if (!rollResult.value.trim()) return;
-  emit('submit', rollResult.value.trim());
+  if (!rollResult.value.trim() || !rollContext.value) return;
+  const summary = rollResult.value.trim();
+  const rollResultJson = buildRollResultJson(
+    summary,
+    rollContext.value.rollerKey,
+    normalizeRollResultKind(props.prompt.resultKind),
+    { pushed: pushRoll.value, stressGained: pushRoll.value ? 1 : 0 },
+  );
+  emit('submit', {
+    rollSummary: summary,
+    rollResultJson,
+    pushed: pushRoll.value || undefined,
+  });
 }
 
 watch(
   () => props.prompt.id,
   () => {
     rollResult.value = '';
+    pushRoll.value = false;
   },
 );
 </script>
@@ -54,10 +77,16 @@ watch(
           <span class="roll-prompt-badge">DM roll request</span>
           <h2>{{ heading }}</h2>
           <p class="text-sm roll-prompt-sub">{{ queueHint }}</p>
+          <p v-if="prompt.guidanceText" class="roll-prompt-guidance">{{ prompt.guidanceText }}</p>
           <p v-if="!prompt.isSessionPrompt && prompt.actionSequence" class="text-sm" style="color: var(--muted-light);">
             Related to action #{{ prompt.actionSequence }}
           </p>
         </div>
+
+        <label v-if="canPush" class="roll-prompt-push">
+          <input v-model="pushRoll" type="checkbox" :disabled="isSubmitting" />
+          <span>Push the roll (+1 stress die, +1 Stress)</span>
+        </label>
 
         <RulesetDiceRoller
           v-if="rollContext"

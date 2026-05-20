@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import type { ActionQueueItemResponse, CharacterResponse, RollPromptResponse, RulesetDefinition } from '~/types/api';
-import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
-import { parseInventory } from '~/utils/inventory';
-import { normalizeRollResultKind, rollPromptCheckLabel, rollPromptResultKindLabel, toApiCheckMode } from '~/utils/rollPrompt';
-import type { RollResultKind } from '~/dice-rollers/types';
+import {
+  actionNeedsPlayerRoll,
+  actionRollFlowBadgeClass,
+  actionRollFlowLabel,
+  formatRollFlowHint,
+  getActionRollFlowStatus,
+  rollPromptsForAction,
+} from '~/utils/actionRolls';
+import { normalizeRollResultKind, rollPromptCheckLabel, rollPromptResultKindLabel } from '~/utils/rollPrompt';
+import { findRulesetAction } from '~/utils/rulesets';
+import { formatAutoResolveLabel } from '~/utils/rollResult';
 
 interface Props {
   action: ActionQueueItemResponse;
@@ -18,99 +25,81 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  send: [payload: {
-    prompts: Array<{
-      targetCharacterId: string;
-      checkMode: string;
-      actionKey?: string;
-      skillKey?: string;
-      attributeKey?: string;
-      customCheckText?: string;
-      promptLabel?: string;
-      resultKind: string;
-    }>;
-  }];
-  cancel: [promptId: string];
+  (e: 'startChain'): void;
+  (e: 'send', payload: { prompts: Array<{ targetCharacterId: string; checkMode: string; actionKey?: string; resultKind: string; dc?: number | null }> }): void;
+  (e: 'cancel', promptId: string): void;
+  (e: 'dmRoll', payload: { actionId: string; rollSummary: string; dc?: number | null }): void;
 }>();
 
-const selectedCharacterIds = ref<string[]>([]);
-const promptLabel = ref('');
-const resultKind = ref<RollResultKind>('PassFail');
-
-const promptClassKey = computed(() => {
-  const firstId = selectedCharacterIds.value[0];
-  return props.characters.find(c => c.id === firstId)?.classKey ?? '';
-});
-
-const isChooserEnabled = computed(() => selectedCharacterIds.value.length > 0);
-
-const promptInventory = computed(() => {
-  const firstId = selectedCharacterIds.value[0];
-  const character = props.characters.find(c => c.id === firstId);
-  return parseInventory(character?.inventoryJson);
-});
-
-const {
-  actionMode,
-  selectedActionKey,
-  selectedSkillKey,
-  selectedAttributeKey,
-  customActionText,
-  availableActions,
-  availableSkills,
-  availableAttributes,
-  selectedActionDetail,
-  selectedSkillDetail,
-  selectedAttributeDetail,
-} = useRulesetActionChooser(
-  computed(() => props.rulesetDefinition),
-  promptClassKey,
-  promptInventory,
-  isChooserEnabled,
-);
-
 const actionPrompts = computed(() =>
-  props.rollPrompts.filter(p => p.actionRequestId === props.action.id),
+  rollPromptsForAction(props.action.id, props.rollPrompts),
 );
 
-function toggleCharacter(characterId: string) {
-  const set = new Set(selectedCharacterIds.value);
-  if (set.has(characterId)) set.delete(characterId);
-  else set.add(characterId);
-  selectedCharacterIds.value = [...set];
-}
+const rollFlowStatus = computed(() =>
+  getActionRollFlowStatus(props.action, props.rollPrompts, props.rulesetDefinition),
+);
 
-function canSend(): boolean {
-  if (!selectedCharacterIds.value.length) return false;
-  switch (actionMode.value) {
-    case 'action':
-      return Boolean(selectedActionKey.value);
-    case 'skill':
-      return Boolean(selectedSkillKey.value);
-    case 'attribute':
-      return Boolean(selectedAttributeKey.value);
-    case 'custom':
-      return Boolean(customActionText.value.trim());
-    default:
-      return false;
-  }
-}
+const rollFlowHint = computed(() =>
+  formatRollFlowHint(rollFlowStatus.value, props.action.actorName),
+);
 
-function sendPrompts() {
-  if (!canSend()) return;
+const needsPlayerRoll = computed(() =>
+  actionNeedsPlayerRoll(props.action, props.rulesetDefinition),
+);
+
+const actorCharacter = computed(() =>
+  props.characters.find(c => c.id === props.action.actorCharacterId) ?? null,
+);
+
+const hasRollChain = computed(() => {
+  if (!props.rulesetDefinition || !props.action.actionKey) return false;
+  const actionDef = findRulesetAction(props.rulesetDefinition, props.action.actionKey);
+  return Boolean(actionDef?.rollChain?.length);
+});
+
+const hasPendingPrompt = computed(() =>
+  actionPrompts.value.some(p => p.status === 'Pending'),
+);
+
+const canRequestActorRoll = computed(() =>
+  Boolean(actorCharacter.value)
+  && props.action.actionKey
+  && !hasPendingPrompt.value
+  && !hasRollChain.value,
+);
+
+const showStartChain = computed(() =>
+  hasRollChain.value && !hasPendingPrompt.value && Boolean(actorCharacter.value),
+);
+
+// DC + DM roll state
+const dc = ref<number | null>(null);
+const showDmRollForm = ref(false);
+const dmRollInput = ref('');
+
+function requestActorRoll() {
+  if (!actorCharacter.value || !props.action.actionKey) return;
 
   emit('send', {
-    prompts: selectedCharacterIds.value.map(targetCharacterId => ({
-      targetCharacterId,
-      checkMode: toApiCheckMode(actionMode.value),
-      actionKey: actionMode.value === 'action' ? selectedActionKey.value : undefined,
-      skillKey: actionMode.value === 'skill' ? selectedSkillKey.value : undefined,
-      attributeKey: actionMode.value === 'attribute' ? selectedAttributeKey.value : undefined,
-      customCheckText: actionMode.value === 'custom' ? customActionText.value.trim() : undefined,
-      promptLabel: promptLabel.value.trim() || undefined,
-      resultKind: resultKind.value,
-    })),
+    prompts: [{
+      targetCharacterId: actorCharacter.value.id,
+      checkMode: 'Action',
+      actionKey: props.action.actionKey,
+      resultKind: 'PassFail',
+      dc: dc.value,
+    }],
   });
+}
+
+function submitDmRoll() {
+  if (!dmRollInput.value.trim()) return;
+  emit('dmRoll', {
+    actionId: props.action.id,
+    rollSummary: dmRollInput.value.trim(),
+    dc: dc.value,
+  });
+  dmRollInput.value = '';
+  showDmRollForm.value = false;
 }
 
 function promptSummary(prompt: RollPromptResponse) {
@@ -119,15 +108,82 @@ function promptSummary(prompt: RollPromptResponse) {
 </script>
 
 <template>
-  <details class="dm-resolve-optional-card follow-up-roll-panel">
-    <summary>
-      Request follow-up roll
-      <span class="optional-tag">optional</span>
-    </summary>
-    <div class="dm-resolve-optional-body">
-    <p class="text-sm follow-up-roll-hint">
-      Prompt one or more players to roll before you publish the resolution. You can send multiple prompts.
-    </p>
+  <section v-if="needsPlayerRoll || actionPrompts.length" class="dm-action-roll-panel panel nested">
+    <div class="dm-action-roll-header">
+      <div>
+        <h3>Player rolls</h3>
+        <p v-if="rollFlowHint" class="text-sm dm-action-roll-hint">{{ rollFlowHint }}</p>
+      </div>
+      <span
+        v-if="actionRollFlowLabel(rollFlowStatus)"
+        class="badge"
+        :class="actionRollFlowBadgeClass(rollFlowStatus)"
+      >
+        {{ actionRollFlowLabel(rollFlowStatus) }}
+      </span>
+    </div>
+
+    <!-- DC row — shown whenever the DM can send a roll or roll directly -->
+    <div v-if="(showStartChain || canRequestActorRoll) && !hasPendingPrompt" class="dm-action-roll-dc-row">
+      <label class="text-sm" for="dm-roll-dc">DC (optional)</label>
+      <input
+        id="dm-roll-dc"
+        v-model.number="dc"
+        type="number"
+        min="1"
+        max="100"
+        placeholder="—"
+        class="input-small"
+      />
+      <span class="text-sm muted">Pass if roll ≥ DC. Leave blank for manual adjudication.</span>
+    </div>
+
+    <div v-if="showStartChain" class="dm-action-roll-primary">
+      <button type="button" class="btn" :disabled="isBusy" @click="emit('startChain')">
+        Request attack roll from {{ action.actorName }}
+      </button>
+      <p class="text-sm muted">Starts the attack → damage chain for this action.</p>
+    </div>
+
+    <div v-else-if="canRequestActorRoll" class="dm-action-roll-primary">
+      <div class="dm-roll-actions">
+        <button type="button" class="btn" :disabled="isBusy" @click="requestActorRoll">
+          Send to {{ action.actorName }}
+        </button>
+        <button
+          type="button"
+          class="btn ghost"
+          :disabled="isBusy"
+          @click="showDmRollForm = !showDmRollForm"
+        >
+          Roll myself
+        </button>
+      </div>
+
+      <div v-if="showDmRollForm" class="dm-manual-roll-form">
+        <label class="text-sm" for="dm-roll-input">Roll result</label>
+        <input
+          id="dm-roll-input"
+          v-model="dmRollInput"
+          type="text"
+          placeholder="e.g. 3 successes or 14"
+          class="input"
+        />
+        <p class="text-sm muted">
+          Enter the dice result.
+          <span v-if="dc">DC {{ dc }} — {{ action.actorName }}'s roll will be checked against it automatically.</span>
+          <span v-else>No DC set — outcome will be marked for your interpretation.</span>
+        </p>
+        <div class="dm-manual-roll-btns">
+          <button type="button" class="btn sm" :disabled="isBusy || !dmRollInput.trim()" @click="submitDmRoll">
+            Submit roll
+          </button>
+          <button type="button" class="btn ghost sm" @click="showDmRollForm = false; dmRollInput = ''">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="actionPrompts.length" class="follow-up-roll-list">
       <div
@@ -138,13 +194,26 @@ function promptSummary(prompt: RollPromptResponse) {
         <div>
           <strong>{{ prompt.targetCharacterName }}</strong>
           <span class="text-sm"> — {{ promptSummary(prompt) }}</span>
+          <span v-if="prompt.dmRolled" class="badge" style="margin-left: 0.35rem;">DM rolled</span>
+          <span v-if="prompt.dc" class="badge" style="margin-left: 0.35rem;">DC {{ prompt.dc }}</span>
         </div>
         <div class="follow-up-roll-item-meta">
           <span class="badge" :class="prompt.status === 'Completed' ? 'active' : 'pending'">
-            {{ prompt.status }}
+            {{ prompt.status === 'Completed' ? 'Rolled' : 'Awaiting' }}
           </span>
-          <span class="badge" style="margin-left: 0.25rem;">{{ rollPromptResultKindLabel(normalizeRollResultKind(prompt.resultKind)) }}</span>
-          <span v-if="prompt.rollSummary" class="text-sm roll-result">{{ prompt.rollSummary }}</span>
+          <span class="badge" style="margin-left: 0.25rem;">
+            {{ rollPromptResultKindLabel(normalizeRollResultKind(prompt.resultKind)) }}
+          </span>
+          <span v-if="prompt.chainStepKey" class="badge">{{ prompt.chainStepKey }}</span>
+          <span
+            v-if="prompt.autoResolveOutcome"
+            class="badge"
+            :class="prompt.autoResolveOutcome === 'success' ? 'pass' : prompt.autoResolveOutcome === 'failure' ? 'fail' : 'pending'"
+          >
+            {{ formatAutoResolveLabel(prompt.autoResolveOutcome) }}
+          </span>
+          <span v-if="prompt.rollSummary" class="text-sm roll-result">🎲 {{ prompt.rollSummary }}</span>
+          <DmRollBreakdown v-if="prompt.status === 'Completed' && prompt.rollResultJson" :prompt="prompt" />
           <button
             v-if="prompt.status === 'Pending'"
             type="button"
@@ -157,103 +226,5 @@ function promptSummary(prompt: RollPromptResponse) {
         </div>
       </div>
     </div>
-
-    <fieldset class="follow-up-roll-players">
-      <legend>Players</legend>
-      <div class="follow-up-roll-checkboxes">
-        <label
-          v-for="character in characters"
-          :key="character.id"
-          class="follow-up-roll-player"
-        >
-          <input
-            type="checkbox"
-            :checked="selectedCharacterIds.includes(character.id)"
-            :disabled="isBusy"
-            @change="toggleCharacter(character.id)"
-          />
-          <span>{{ character.name }}</span>
-          <span v-if="character.playerName" class="text-sm">({{ character.playerName }})</span>
-        </label>
-      </div>
-    </fieldset>
-
-    <label>
-      Short note for players (optional)
-      <input v-model.trim="promptLabel" placeholder="e.g. Roll damage, Attack of opportunity…" :disabled="isBusy" />
-    </label>
-
-    <label>
-      Result type
-      <select v-model="resultKind" :disabled="isBusy">
-        <option value="PassFail">Pass / fail (successes or vs DC)</option>
-        <option value="Total">Dice total (sum values, e.g. damage)</option>
-      </select>
-    </label>
-
-    <label>
-      Roll type
-      <select v-model="actionMode" :disabled="isBusy || !isChooserEnabled">
-        <option v-if="availableActions.length" value="action">Predefined action</option>
-        <option v-if="availableSkills.length" value="skill">Skill check</option>
-        <option v-if="availableAttributes.length" value="attribute">Attribute check</option>
-        <option value="custom">Custom check</option>
-      </select>
-    </label>
-
-    <label v-if="actionMode === 'action' && availableActions.length">
-      Action
-      <select v-model="selectedActionKey" :disabled="isBusy">
-        <option value="">Choose an action</option>
-        <option v-for="actionOption in availableActions" :key="actionOption.key" :value="actionOption.key">
-          {{ actionOption.label }}
-        </option>
-      </select>
-    </label>
-
-    <label v-else-if="actionMode === 'skill' && availableSkills.length">
-      Skill
-      <select v-model="selectedSkillKey" :disabled="isBusy">
-        <option value="">Choose a skill</option>
-        <option v-for="skill in availableSkills" :key="skill.key" :value="skill.key">
-          {{ skill.label }}
-        </option>
-      </select>
-    </label>
-
-    <label v-else-if="actionMode === 'attribute' && availableAttributes.length">
-      Attribute
-      <select v-model="selectedAttributeKey" :disabled="isBusy">
-        <option value="">Choose an attribute</option>
-        <option v-for="attribute in availableAttributes" :key="attribute.key" :value="attribute.key">
-          {{ attribute.label }}
-        </option>
-      </select>
-    </label>
-
-    <label v-else-if="actionMode === 'custom'">
-      Custom check description
-      <input v-model.trim="customActionText" placeholder="Damage roll, saving throw…" :disabled="isBusy" />
-    </label>
-
-    <div v-if="selectedActionDetail" class="alert info">
-      <strong>{{ selectedActionDetail.dice }}</strong>
-      <p class="text-sm">{{ selectedActionDetail.successRule }}</p>
-    </div>
-    <div v-else-if="selectedSkillDetail || selectedAttributeDetail" class="alert info">
-      <p class="text-sm">
-        {{ selectedSkillDetail?.rollSummary ?? selectedAttributeDetail?.rollSummary }}
-      </p>
-    </div>
-
-    <button
-      type="button"
-      class="btn"
-      :disabled="isBusy || !canSend()"
-      @click="sendPrompts"
-    >
-      Send roll prompt{{ selectedCharacterIds.length > 1 ? 's' : '' }}
-    </button>
-    </div>
-  </details>
+  </section>
 </template>

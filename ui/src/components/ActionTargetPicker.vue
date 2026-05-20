@@ -11,6 +11,8 @@ const props = withDefaults(
   { npcs: () => [], disabled: false },
 );
 
+const emit = defineEmits<{ change: [isValid: boolean] }>();
+
 const {
   selection,
   otherText,
@@ -22,6 +24,9 @@ const {
   reset,
   toSubmitFields,
 } = useActionTarget(() => props.characters, () => props.npcs);
+
+watch(selection, () => emit('change', isValid.value));
+watch(otherText, () => emit('change', isValid.value));
 
 defineExpose({ isValid, reset, toSubmitFields });
 </script>

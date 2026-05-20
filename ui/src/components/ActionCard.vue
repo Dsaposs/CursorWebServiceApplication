@@ -60,7 +60,7 @@ const outcomeBadge = computed(() => {
 });
 
 const hasSubmissionDetails = computed(() =>
-  Boolean(submission.value.playerRoll || submission.value.body),
+  Boolean(submission.value.body),
 );
 
 const hasResolutionDetails = computed(() =>
@@ -121,11 +121,17 @@ function toggle() {
       v-if="hasSubmissionDetails && (!collapsible || expanded || !isResolved)"
       class="action-detail-block"
     >
-      <div v-if="submission.playerRoll" class="action-detail-row">
-        <span class="action-detail-label">Player roll</span>
+      <p v-if="submission.body" class="action-card-desc">{{ submission.body }}</p>
+    </div>
+
+    <div
+      v-if="submission.playerRoll && (!collapsible || expanded || !isResolved)"
+      class="action-detail-block"
+    >
+      <div class="action-detail-row">
+        <span class="action-detail-label">Roll (recorded on submit)</span>
         <span class="roll-summary">🎲 {{ submission.playerRoll }}</span>
       </div>
-      <p v-if="submission.body" class="action-card-desc">{{ submission.body }}</p>
     </div>
 
     <template v-if="isResolved && (!collapsible || expanded)">
@@ -136,7 +142,7 @@ function toggle() {
         </div>
 
         <div v-if="followUpRolls.length" class="action-detail-section">
-          <span class="action-detail-label">Follow-up rolls</span>
+          <span class="action-detail-label">Player rolls</span>
           <ul class="action-detail-list">
             <li v-for="roll in followUpRolls" :key="roll.id" class="action-follow-up-item">
               <strong>{{ roll.targetCharacterName }}</strong>
@@ -167,6 +173,6 @@ function toggle() {
       </div>
     </template>
 
-    <p v-else-if="!isResolved" class="text-xs muted">Waiting for DM to resolve…</p>
+    <p v-else-if="!isResolved" class="text-xs muted">Waiting for DM review — you may be prompted to roll.</p>
   </component>
 </template>

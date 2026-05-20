@@ -12,6 +12,14 @@ const props = defineProps<Props>();
 const sections = computed<SheetSection[]>(() => [
   buildSheetSection('ruleset', 'Ruleset Data', props.character.rulesetDataJson),
 ].filter(section => !section.isEmpty));
+
+const activeStatuses = computed<string[]>(() => {
+  try { return JSON.parse(props.character.statusEffectsJson ?? '[]') as string[]; } catch { return []; }
+});
+
+function statusDef(key: string) {
+  return props.rulesetDefinition?.statusEffects?.find(s => s.key.toLowerCase() === key.toLowerCase());
+}
 </script>
 
 <template>
@@ -23,6 +31,22 @@ const sections = computed<SheetSection[]>(() => [
         <dd>{{ character.armor }}</dd>
       </div>
     </div>
+
+    <!-- Active status effects -->
+    <section v-if="activeStatuses.length" class="sheet-section">
+      <h3>Status Effects</h3>
+      <div class="status-effects-list">
+        <span
+          v-for="key in activeStatuses"
+          :key="key"
+          class="status-badge"
+          :class="(statusDef(key)?.isNegative ?? true) ? 'negative' : 'positive'"
+          :title="statusDef(key)?.description ?? undefined"
+        >
+          {{ statusDef(key)?.label ?? key }}
+        </span>
+      </div>
+    </section>
 
     <section class="sheet-section">
       <h3>Inventory</h3>

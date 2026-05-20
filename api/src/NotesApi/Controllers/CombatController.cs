@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Models;
+using NotesApi.Rulesets;
 using NotesApi.Services;
 
 namespace NotesApi.Controllers;
@@ -20,6 +21,48 @@ public class CombatController : ControllerBase
         _db = db;
     }
 
+    [HttpPost("start")]
+    public async Task<ActionResult<CombatStartResponse>> Start(Guid sessionId)
+    {
+        var session = await GetOwnedSessionAsync(sessionId);
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        var characters = await _db.Characters.Where(c => c.GameId == session.GameId).ToListAsync();
+        var npcs = await _db.NpcsAndMonsters.Where(n => n.GameId == session.GameId).ToListAsync();
+        var rolls = CombatInitiativeRoller
+            .RollForGame(session.Game.Ruleset.DefinitionJson, characters, npcs)
+            .OrderByDescending(r => r.Score)
+            .ThenBy(r => r.Type)
+            .ToList();
+
+        var combatants = rolls.Select(r => new CombatantRequest
+        {
+            Type = r.Type == CombatantType.Character ? "Character" : "NpcOrMonster",
+            Id = r.Id,
+            Initiative = r.Score,
+        });
+
+        var entries = await ApplyInitiativeOrderAsync(session, combatants, preserveCurrentTurn: false);
+        var initiativeDef = CombatInitiativeRoller.ResolveInitiativeDefinition(session.Game.Ruleset.DefinitionJson);
+
+        return Ok(new CombatStartResponse
+        {
+            Initiative = entries ?? Enumerable.Empty<InitiativeEntryResponse>(),
+            Rolls = rolls.Select(r => new InitiativeRollSummaryResponse
+            {
+                CombatantType = r.Type.ToString(),
+                CombatantId = r.Id,
+                CombatantName = r.Name,
+                Score = r.Score,
+                Summary = r.Summary,
+            }),
+            GuidanceText = initiativeDef.GuidanceText,
+        });
+    }
+
     [HttpPost]
     public async Task<ActionResult<IEnumerable<InitiativeEntryResponse>>> Setup(Guid sessionId, SetupCombatRequest request)
     {
@@ -29,29 +72,72 @@ public class CombatController : ControllerBase
             return NotFound();
         }
 
-        var enteringCombat = session.State != SessionMode.Combat;
-        var currentCombatantId = session.InitiativeEntries.FirstOrDefault(i => i.IsCurrentTurn)?.CombatantId;
+        var entries = await ApplyInitiativeOrderAsync(session, request.Combatants, preserveCurrentTurn: true);
+        if (entries is null)
+        {
+            return BadRequest(new { errors = new[] { "One or more combatants were not found in this game." } });
+        }
 
-        // Delete all existing entries for this session with a direct SQL statement.
-        // Using the navigation collection risks EF Core relationship fixup re-attaching
-        // stale tracked entities as "Modified" instead of inserting new ones as "Added",
-        // which causes DbUpdateConcurrencyException when SaveChangesAsync runs.
+        return Ok(entries);
+    }
+
+    [HttpPost("advance")]
+    public async Task<ActionResult<IEnumerable<InitiativeEntryResponse>>> Advance(Guid sessionId)
+    {
+        var session = await GetOwnedSessionAsync(sessionId);
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        var entries = await _db.InitiativeEntries
+            .Where(i => i.SessionId == sessionId)
+            .OrderBy(i => i.SortOrder)
+            .ToListAsync();
+
+        if (entries.Count == 0)
+        {
+            return BadRequest(new { errors = new[] { "Set up initiative before advancing turns." } });
+        }
+
+        CombatTurnAdvanceService.AdvanceTurn(entries);
+        Touch(session);
+        await _db.SaveChangesAsync();
+
+        return Ok(entries.Select(ControllerHelpers.ToInitiativeResponse));
+    }
+
+    private async Task<IEnumerable<InitiativeEntryResponse>?> ApplyInitiativeOrderAsync(
+        GameSession session,
+        IEnumerable<CombatantRequest> combatants,
+        bool preserveCurrentTurn)
+    {
+        var sessionId = session.Id;
+        var enteringCombat = session.State != SessionMode.Combat;
+        var currentCombatantId = preserveCurrentTurn
+            ? session.InitiativeEntries.FirstOrDefault(i => i.IsCurrentTurn)?.CombatantId
+            : null;
+
         await _db.InitiativeEntries
             .Where(i => i.SessionId == sessionId)
             .ExecuteDeleteAsync();
 
-        // Detach stale tracker entries so EF Core doesn't attempt a second DELETE.
         foreach (var e in _db.ChangeTracker.Entries<InitiativeEntry>().ToList())
+        {
             e.State = EntityState.Detached;
+        }
 
         var characters = await _db.Characters.Where(c => c.GameId == session.GameId).ToListAsync();
         var npcs = await _db.NpcsAndMonsters.Where(n => n.GameId == session.GameId).ToListAsync();
         var now = DateTime.UtcNow;
-        var ordered = request.Combatants
+        var ordered = combatants
             .OrderByDescending(c => c.Initiative)
             .ThenBy(c => c.Type)
             .ToList();
-        var hasCurrentCombatant = currentCombatantId.HasValue && ordered.Any(c => c.Id == currentCombatantId.Value);
+
+        var hasCurrentCombatant = preserveCurrentTurn
+            && currentCombatantId.HasValue
+            && ordered.Any(c => c.Id == currentCombatantId.Value);
         var currentId = currentCombatantId.GetValueOrDefault();
 
         var newEntries = new List<InitiativeEntry>();
@@ -60,7 +146,7 @@ public class CombatController : ControllerBase
             var combatant = ordered[index];
             if (!TryResolveCombatant(combatant, characters, npcs, out var type, out var name))
             {
-                return BadRequest(new { errors = new[] { $"Combatant {combatant.Id} was not found in this game." } });
+                return null;
             }
 
             newEntries.Add(new InitiativeEntry
@@ -71,16 +157,15 @@ public class CombatController : ControllerBase
                 CombatantId = combatant.Id,
                 CombatantName = name,
                 SortOrder = index + 1,
+                InitiativeScore = combatant.Initiative,
                 IsCurrentTurn = hasCurrentCombatant ? combatant.Id == currentId : index == 0,
                 CreatedAt = now,
             });
         }
 
-        // Add directly to the DbSet — NOT to session.InitiativeEntries — so EF Core
-        // tracks these as "Added" (INSERT) rather than triggering relationship fixup
-        // that would re-attach stale entities and generate UPDATE statements instead.
         _db.InitiativeEntries.AddRange(newEntries);
         session.State = SessionMode.Combat;
+
         if (enteringCombat)
         {
             await CombatEncounterLifecycle.BeginEncounterAsync(_db, session);
@@ -93,43 +178,14 @@ public class CombatController : ControllerBase
         Touch(session);
         await _db.SaveChangesAsync();
 
-        return Ok(newEntries.OrderBy(i => i.SortOrder).Select(ControllerHelpers.ToInitiativeResponse));
-    }
-
-    [HttpPost("advance")]
-    public async Task<ActionResult<IEnumerable<InitiativeEntryResponse>>> Advance(Guid sessionId)
-    {
-        var session = await GetOwnedSessionAsync(sessionId);
-        if (session is null)
-        {
-            return NotFound();
-        }
-
-        var entries = session.InitiativeEntries.OrderBy(i => i.SortOrder).ToList();
-        if (entries.Count == 0)
-        {
-            return BadRequest(new { errors = new[] { "Set up initiative before advancing turns." } });
-        }
-
-        var currentIndex = entries.FindIndex(i => i.IsCurrentTurn);
-        if (currentIndex < 0)
-        {
-            currentIndex = 0;
-        }
-
-        entries[currentIndex].IsCurrentTurn = false;
-        entries[(currentIndex + 1) % entries.Count].IsCurrentTurn = true;
-        Touch(session);
-        await _db.SaveChangesAsync();
-
-        return Ok(entries.Select(ControllerHelpers.ToInitiativeResponse));
+        return newEntries.OrderBy(i => i.SortOrder).Select(ControllerHelpers.ToInitiativeResponse);
     }
 
     private async Task<GameSession?> GetOwnedSessionAsync(Guid sessionId)
     {
         var userId = this.UserId();
         return await _db.GameSessions
-            .Include(s => s.Game)
+            .Include(s => s.Game).ThenInclude(g => g.Ruleset)
             .Include(s => s.InitiativeEntries)
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.Game.DmUserId == userId);
     }

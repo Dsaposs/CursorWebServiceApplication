@@ -167,6 +167,7 @@ public class SessionsController : ControllerBase
                 TargetCharacterId = character.Id,
                 TargetCharacter = character,
                 PromptLabel = string.IsNullOrWhiteSpace(item.PromptLabel) ? null : item.PromptLabel.Trim(),
+                GuidanceText = string.IsNullOrWhiteSpace(item.GuidanceText) ? null : item.GuidanceText.Trim(),
                 CheckMode = checkMode,
                 ResultKind = resultKind,
                 ActionKey = string.IsNullOrWhiteSpace(item.ActionKey) ? null : item.ActionKey.Trim(),

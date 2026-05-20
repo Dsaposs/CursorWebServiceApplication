@@ -139,6 +139,9 @@ public class Character
 
     public string RulesetDataJson { get; set; } = "{}";
 
+    /// <summary>JSON array of status effect keys currently applied (e.g. ["stunned","panicking"]).</summary>
+    public string StatusEffectsJson { get; set; } = "[]";
+
     [MaxLength(80)]
     public string ClassKey { get; set; } = string.Empty;
 
@@ -170,6 +173,9 @@ public class NpcOrMonster
     public int Armor { get; set; }
 
     public string StatBlockJson { get; set; } = "{}";
+
+    /// <summary>JSON array of status effect keys currently applied (e.g. ["stunned","burning"]).</summary>
+    public string StatusEffectsJson { get; set; } = "[]";
 
     public DateTime CreatedAt { get; set; }
 
@@ -260,6 +266,10 @@ public class SessionRollPrompt
     [MaxLength(200)]
     public string? PromptLabel { get; set; }
 
+    /// <summary>Contextual guidance shown to the player explaining why they are rolling.</summary>
+    [MaxLength(500)]
+    public string? GuidanceText { get; set; }
+
     /// <summary>Action, Skill, Attribute, or Custom.</summary>
     [Required, MaxLength(20)]
     public string CheckMode { get; set; } = "Skill";
@@ -284,6 +294,9 @@ public class SessionRollPrompt
 
     [MaxLength(500)]
     public string? RollSummary { get; set; }
+
+    /// <summary>Structured dice breakdown (groups, total, successes).</summary>
+    public string? RollResultJson { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
@@ -359,6 +372,12 @@ public class ActionRequest
     [MaxLength(200)]
     public string? SkillCheckGroupLabel { get; set; }
 
+    /// <summary>Tracks progress through a ruleset rollChain ({ "stepIndex": 0, "lastOutcome": "success" }).</summary>
+    public string? RollChainStateJson { get; set; }
+
+    /// <summary>Stat changes suggested by completed roll-chain steps, pending DM confirmation on resolve.</summary>
+    public string PendingChainEffectsJson { get; set; } = "[]";
+
     public DateTime SubmittedAt { get; set; }
 
     public DateTime? PublishedAt { get; set; }
@@ -382,6 +401,10 @@ public class ActionRollPrompt
 
     [MaxLength(200)]
     public string? PromptLabel { get; set; }
+
+    /// <summary>Contextual guidance shown to the player explaining why they are rolling.</summary>
+    [MaxLength(500)]
+    public string? GuidanceText { get; set; }
 
     /// <summary>Action, Skill, Attribute, or Custom.</summary>
     [Required, MaxLength(20)]
@@ -407,6 +430,27 @@ public class ActionRollPrompt
 
     [MaxLength(500)]
     public string? RollSummary { get; set; }
+
+    /// <summary>Structured dice breakdown (groups, total, successes).</summary>
+    public string? RollResultJson { get; set; }
+
+    /// <summary>Key of the rollChain step this prompt belongs to.</summary>
+    [MaxLength(80)]
+    public string? ChainStepKey { get; set; }
+
+    /// <summary>Outcome from auto-resolve: success, failure, or needs_dm.</summary>
+    [MaxLength(20)]
+    public string? AutoResolveOutcome { get; set; }
+
+    /// <summary>
+    /// Optional difficulty class set by the DM. When the player submits their roll,
+    /// pass/fail is automatically resolved by comparing the roll's primary value against this threshold.
+    /// Also used when the DM rolls directly on behalf of the player.
+    /// </summary>
+    public int? Dc { get; set; }
+
+    /// <summary>True when this prompt was rolled by the DM on behalf of the player.</summary>
+    public bool DmRolled { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
@@ -451,6 +495,9 @@ public class InitiativeEntry
     public string CombatantName { get; set; } = string.Empty;
 
     public int SortOrder { get; set; }
+
+    /// <summary>Rolled initiative value used to sort turn order (higher acts first).</summary>
+    public int InitiativeScore { get; set; }
 
     public bool IsCurrentTurn { get; set; }
 

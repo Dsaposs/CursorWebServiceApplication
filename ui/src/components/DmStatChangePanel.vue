@@ -3,6 +3,11 @@ import type { CharacterResponse, NpcResponse, RulesetDefinition } from '~/types/
 import { parseNestedStatSection } from '~/utils/dice';
 import { inventoryQuantity, parseInventory } from '~/utils/inventory';
 
+interface StatusChangeModel {
+  addKeys: string[];
+  removeKeys: string[];
+}
+
 interface Props {
   characters: CharacterResponse[];
   npcs: NpcResponse[];
@@ -14,6 +19,7 @@ interface Props {
   gvDeltas?: Record<string, string>;
   attrDeltas?: Record<string, string>;
   inventoryDeltas?: Record<string, string>;
+  statusChanges?: StatusChangeModel;
 }
 
 const props = defineProps<Props>();
@@ -26,6 +32,7 @@ const emit = defineEmits<{
   'update:gvDeltas': [value: Record<string, string>];
   'update:attrDeltas': [value: Record<string, string>];
   'update:inventoryDeltas': [value: Record<string, string>];
+  'update:statusChanges': [value: StatusChangeModel];
 }>();
 
 const targetModel = computed({
@@ -63,7 +70,13 @@ const inventoryDeltasModel = computed({
   set: (value: Record<string, string>) => emit('update:inventoryDeltas', value),
 });
 
+const statusChangesModel = computed({
+  get: () => props.statusChanges ?? { addKeys: [], removeKeys: [] },
+  set: (value: StatusChangeModel) => emit('update:statusChanges', value),
+});
+
 const rulesetItems = computed(() => props.rulesetDefinition?.items ?? []);
+const rulesetStatuses = computed(() => props.rulesetDefinition?.statusEffects ?? []);
 
 const targetCharacter = computed(() => {
   const target = targetModel.value;
@@ -72,14 +85,64 @@ const targetCharacter = computed(() => {
   return props.characters.find(c => c.id === charId) ?? null;
 });
 
+const targetNpc = computed(() => {
+  const target = targetModel.value;
+  if (!target?.startsWith('NpcOrMonster:')) return null;
+  const npcId = target.split(':')[1];
+  return props.npcs.find(n => n.id === npcId) ?? null;
+});
+
 const targetInventory = computed(() =>
   targetCharacter.value ? parseInventory(targetCharacter.value.inventoryJson) : [],
 );
+
+/** Current active statuses on the target (from the character/NPC data, plus pending additions). */
+const currentTargetStatuses = computed<string[]>(() => {
+  const raw = targetCharacter.value?.statusEffectsJson ?? targetNpc.value?.statusEffectsJson ?? '[]';
+  try { return JSON.parse(raw) as string[]; } catch { return []; }
+});
+
+/** Preview: statuses that will be active after applying pending changes. */
+const previewStatuses = computed<string[]>(() => {
+  const base = new Set(currentTargetStatuses.value.map(k => k.toLowerCase()));
+  for (const k of statusChangesModel.value.removeKeys) base.delete(k.toLowerCase());
+  for (const k of statusChangesModel.value.addKeys) base.add(k.toLowerCase());
+  return [...base];
+});
+
+function toggleStatusAdd(key: string) {
+  const current = { ...statusChangesModel.value };
+  current.removeKeys = current.removeKeys.filter(k => k !== key);
+  if (current.addKeys.includes(key)) {
+    current.addKeys = current.addKeys.filter(k => k !== key);
+  } else {
+    current.addKeys = [...current.addKeys, key];
+  }
+  statusChangesModel.value = current;
+}
+
+function toggleStatusRemove(key: string) {
+  const current = { ...statusChangesModel.value };
+  current.addKeys = current.addKeys.filter(k => k !== key);
+  if (current.removeKeys.includes(key)) {
+    current.removeKeys = current.removeKeys.filter(k => k !== key);
+  } else {
+    current.removeKeys = [...current.removeKeys, key];
+  }
+  statusChangesModel.value = current;
+}
+
+function statusChangeAction(key: string): 'add' | 'remove' | null {
+  if (statusChangesModel.value.addKeys.includes(key)) return 'add';
+  if (statusChangesModel.value.removeKeys.includes(key)) return 'remove';
+  return null;
+}
 
 function onTargetChange() {
   emit('update:gvDeltas', {});
   emit('update:attrDeltas', {});
   emit('update:inventoryDeltas', {});
+  emit('update:statusChanges', { addKeys: [], removeKeys: [] });
 }
 
 function stepInventoryDelta(itemKey: string, delta: number, currentQty: number) {
@@ -148,6 +211,62 @@ function previewValue(current: number, deltaStr: string | undefined) {
         <label>Set HP<input v-model="setHealthModel" type="number" min="0" /></label>
         <label>Set AC<input v-model="setArmorModel" type="number" min="0" /></label>
       </div>
+
+      <!-- Status effects section (shown for both characters and NPCs) -->
+      <template v-if="targetCharacter || targetNpc">
+        <div v-if="rulesetStatuses.length" class="stat-delta-group">
+          <span class="stat-delta-group-label">Status effects</span>
+          <div class="status-effects-grid">
+            <div
+              v-for="status in rulesetStatuses"
+              :key="status.key"
+              class="status-effect-row"
+            >
+              <span class="status-effect-name" :title="status.description ?? undefined">
+                {{ status.label }}
+              </span>
+              <span
+                v-if="currentTargetStatuses.map(k => k.toLowerCase()).includes(status.key.toLowerCase())"
+                class="badge"
+                :class="status.isNegative ? 'fail' : 'pass'"
+                style="font-size: 0.7rem;"
+              >active</span>
+              <div class="status-effect-actions">
+                <button
+                  type="button"
+                  class="btn sm"
+                  :class="statusChangeAction(status.key) === 'add' ? 'success' : 'ghost'"
+                  :title="`Apply ${status.label}`"
+                  @click="toggleStatusAdd(status.key)"
+                >+ Add</button>
+                <button
+                  type="button"
+                  class="btn sm"
+                  :class="statusChangeAction(status.key) === 'remove' ? 'danger' : 'ghost'"
+                  :title="`Remove ${status.label}`"
+                  @click="toggleStatusRemove(status.key)"
+                >− Remove</button>
+              </div>
+            </div>
+          </div>
+          <div v-if="previewStatuses.length" class="status-preview">
+            <span class="stat-delta-group-label">After change</span>
+            <div class="status-badge-row">
+              <span
+                v-for="key in previewStatuses"
+                :key="key"
+                class="badge"
+                :class="(rulesetStatuses.find(s => s.key.toLowerCase() === key.toLowerCase())?.isNegative ?? true) ? 'fail' : 'pass'"
+              >
+                {{ rulesetStatuses.find(s => s.key.toLowerCase() === key.toLowerCase())?.label ?? key }}
+              </span>
+            </div>
+          </div>
+          <p v-else-if="statusChangesModel.removeKeys.length" class="text-sm muted" style="margin-top: 0.4rem;">
+            All statuses will be cleared.
+          </p>
+        </div>
+      </template>
 
       <template v-if="targetCharacter">
         <div

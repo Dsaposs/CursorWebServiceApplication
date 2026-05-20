@@ -8,11 +8,18 @@ import DmSessionInvite from '~/components/dm/DmSessionInvite.vue';
 import DmFollowUpRollPanel from '~/components/DmFollowUpRollPanel.vue';
 import DmStatChangePanel from '~/components/DmStatChangePanel.vue';
 import DmPlayerSkillCheckPanel from '~/components/DmPlayerSkillCheckPanel.vue';
+
 import SessionConnectionStatus from '~/components/SessionConnectionStatus.vue';
 import SkeletonBlock from '~/components/SkeletonBlock.vue';
 import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
 import type { ActionQueueItemResponse, GameResponse, InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
 import { evaluateActionOutcome } from '~/utils/actionOutcome';
+import {
+  actionRollFlowBadgeClass,
+  actionRollFlowLabel,
+  evaluateActionOutcomeFromRolls,
+  getActionRollFlowStatus,
+} from '~/utils/actionRolls';
 import { parseCharacterStats, parseStatMap } from '~/utils/dice';
 import { parseNpcInventory } from '~/utils/inventory';
 import { resolveEffectiveActionRoll } from '~/utils/items';
@@ -22,6 +29,7 @@ import {
   findRulesetAction,
   parseActorClassKey,
   parseRulesetDefinition,
+  type DiceRollMode,
 } from '~/utils/rulesets';
 import { useRulesetTheme } from '~/composables/useRulesetTheme';
 import { useThemePreference } from '~/composables/useThemePreference';
@@ -40,10 +48,12 @@ const statChangeSetHealth = ref<Record<string, string>>({});
 const statChangeSetArmor = ref<Record<string, string>>({});
 // Game-value absolute overrides (actor only, kept for backward compat but UI removed)
 const gameValueChanges = ref<Record<string, Record<string, string>>>({});
-// Stat-change section: per-action delta maps for game values and attributes
+// Stat-change section: per-action delta maps for game values, attributes, inventory
 const statChangeGvDeltas = ref<Record<string, Record<string, string>>>({});
 const statChangeAttrDeltas = ref<Record<string, Record<string, string>>>({});
 const statChangeInventoryDeltas = ref<Record<string, Record<string, string>>>({});
+// Status effect changes: per-action add/remove key lists
+const statChangeStatusChanges = ref<Record<string, { addKeys: string[]; removeKeys: string[] }>>({});
 const rejectReason = ref<Record<string, string>>({});
 
 // NPC action form
@@ -117,6 +127,49 @@ const currentTurnNpc = computed(() => {
   if (!game.value || currentTurn.value?.combatantType !== 'NpcOrMonster') return null;
   return game.value.npcsAndMonsters.find(npc => npc.id === currentTurn.value?.combatantId) ?? null;
 });
+
+// Which initiative entry has its inline form expanded (DM manually activates per-entry)
+const activeCombatEntryId = ref<string | null>(null);
+
+const activeCombatEntry = computed(() =>
+  displayedInitiative.value.find(e => e.id === activeCombatEntryId.value) ?? null,
+);
+
+// Pending action for whichever NPC is currently selected (drives the resolution form)
+const currentNpcPendingAction = computed(() => {
+  if (!selectedNpcId.value) return null;
+  return pendingActions.value.find(a => a.actorNpcId === selectedNpcId.value) ?? null;
+});
+
+const npcTurnActionQueued = computed(() => Boolean(currentNpcPendingAction.value));
+
+// Track whether the target picker has a valid target (gates dice rollers)
+const npcHasTarget = ref(false);
+
+// Inline NPC action-resolution form refs (combat only — create + resolve in a single submit)
+const npcInlineResolutionText = ref('');
+const npcInlineAdditionalActions = ref('');
+const npcInlineStatTarget = ref<string | undefined>(undefined);
+const npcInlineHealthDelta = ref<string | undefined>(undefined);
+const npcInlineSetHealth = ref<string | undefined>(undefined);
+const npcInlineSetArmor = ref<string | undefined>(undefined);
+const npcInlineGvDeltas = ref<Record<string, string>>({});
+const npcInlineAttrDeltas = ref<Record<string, string>>({});
+const npcInlineInventoryDeltas = ref<Record<string, string>>({});
+const npcInlineStatusChanges = ref<{ addKeys: string[]; removeKeys: string[] } | undefined>(undefined);
+
+function resetNpcInlineFields() {
+  npcInlineResolutionText.value = '';
+  npcInlineAdditionalActions.value = '';
+  npcInlineStatTarget.value = undefined;
+  npcInlineHealthDelta.value = undefined;
+  npcInlineSetHealth.value = undefined;
+  npcInlineSetArmor.value = undefined;
+  npcInlineGvDeltas.value = {};
+  npcInlineAttrDeltas.value = {};
+  npcInlineInventoryDeltas.value = {};
+  npcInlineStatusChanges.value = undefined;
+}
 const selectedNpc = computed(() => game.value?.npcsAndMonsters.find(npc => npc.id === selectedNpcId.value) ?? null);
 const selectedNpcClassKey = computed(() => parseActorClassKey(selectedNpc.value?.statBlockJson));
 const selectedNpcInventory = computed(() => parseNpcInventory(selectedNpc.value?.statBlockJson));
@@ -124,15 +177,14 @@ const isNpcActionActorSelected = computed(() => Boolean(selectedNpcId.value));
 const {
   actionMode: npcActionMode,
   selectedActionKey: selectedNpcActionKey,
-  selectedSkillKey: selectedNpcSkillKey,
-  selectedAttributeKey: selectedNpcAttributeKey,
+  selectedStatKey: selectedNpcStatKey,
+  selectedStatType: selectedNpcStatType,
+  selectedStatRawKey: selectedNpcStatRawKey,
   customActionText: npcAction,
   availableActions: availableNpcActions,
-  availableSkills: availableNpcSkills,
-  availableAttributes: availableNpcAttributes,
+  availableStatChecks: availableNpcStatChecks,
   selectedActionDetail: selectedNpcActionDetail,
-  selectedSkillDetail: selectedNpcSkillDetail,
-  selectedAttributeDetail: selectedNpcAttributeDetail,
+  selectedStatDetail: selectedNpcStatDetail,
   resetSelection: resetNpcActionSelection,
   buildSubmitPayload: buildNpcActionSubmitPayload,
 } = useRulesetActionChooser(rulesetDefinition, selectedNpcClassKey, selectedNpcInventory, isNpcActionActorSelected);
@@ -223,9 +275,97 @@ async function submitNpcAction() {
     npcActionTargetPickerRef.value?.reset();
     npcRollResult.value = '';
     npcDamageRollResult.value = '';
-    showNpcActionForm.value = false;
     await refresh();
-    toastSuccess('NPC action submitted.');
+    toastSuccess('NPC action queued. Resolve from the pending queue.');
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSaving.value = false;
+  }
+}
+
+/** Build stat-change payload from the inline NPC combat form refs. */
+function buildNpcInlineStatChanges() {
+  type StatChange = {
+    targetType: string; targetId: string;
+    healthDelta?: number; setHealth?: number; setArmor?: number;
+    gameValueDeltas?: Record<string, number>;
+    attributeDeltas?: Record<string, number>;
+    inventoryDeltas?: Record<string, number>;
+    addStatusKeys?: string[]; removeStatusKeys?: string[];
+  };
+  const changes: StatChange[] = [];
+  const target = npcInlineStatTarget.value;
+  if (target) {
+    const [targetType, targetId] = target.split(':');
+    const healthDelta = optNum(npcInlineHealthDelta.value);
+    const setHealth = optNum(npcInlineSetHealth.value);
+    const setArmor = optNum(npcInlineSetArmor.value);
+    let gameValueDeltas: Record<string, number> | undefined;
+    let attributeDeltas: Record<string, number> | undefined;
+    let inventoryDeltas: Record<string, number> | undefined;
+    if (targetType === 'Character') {
+      gameValueDeltas = toNonZeroIntMap(npcInlineGvDeltas.value);
+      attributeDeltas = toNonZeroIntMap(npcInlineAttrDeltas.value);
+      inventoryDeltas = toNonZeroIntMap(npcInlineInventoryDeltas.value);
+    }
+    const sc = npcInlineStatusChanges.value;
+    const addStatusKeys = sc?.addKeys?.length ? sc.addKeys : undefined;
+    const removeStatusKeys = sc?.removeKeys?.length ? sc.removeKeys : undefined;
+    const hasAny = healthDelta !== undefined || setHealth !== undefined || setArmor !== undefined
+      || (gameValueDeltas && Object.keys(gameValueDeltas).length > 0)
+      || (attributeDeltas && Object.keys(attributeDeltas).length > 0)
+      || (inventoryDeltas && Object.keys(inventoryDeltas).length > 0)
+      || addStatusKeys !== undefined || removeStatusKeys !== undefined;
+    if (hasAny)
+      changes.push({ targetType, targetId, healthDelta, setHealth, setArmor, gameValueDeltas, attributeDeltas, inventoryDeltas, addStatusKeys, removeStatusKeys });
+  }
+  return changes;
+}
+
+/** Create the NPC action and immediately resolve it — used by the inline combat form. */
+async function submitAndResolveNpcAction() {
+  if (!state.value || !selectedNpcId.value) return;
+  const payload = buildNpcActionSubmitPayload();
+  if (!payload) { toastError('Choose or describe an NPC action first.'); return; }
+  if (!npcActionTargetPickerRef.value?.isValid()) { toastError('Enter a target name for Other.'); return; }
+  if (!npcInlineResolutionText.value.trim()) { toastError('Resolution text is required.'); return; }
+
+  const npcDescription = [
+    npcRollResult.value ? `🎲 Roll: ${npcRollResult.value}` : '',
+    npcDamageRollResult.value || '',
+    payload.description ?? '',
+  ].filter(Boolean).join('\n');
+
+  isSaving.value = true;
+  try {
+    const created = await api<ActionQueueItemResponse>(`/api/sessions/${state.value.joinCode}/actions`, {
+      method: 'POST',
+      body: {
+        actorNpcId: selectedNpcId.value,
+        actionKey: payload.actionKey,
+        actionText: payload.actionText,
+        ...npcActionTargetPickerRef.value!.toSubmitFields(),
+        description: npcDescription || undefined,
+      },
+    });
+    await api(`/api/actions/${created.id}/resolve`, {
+      method: 'PUT',
+      body: {
+        resolutionText: npcInlineResolutionText.value,
+        additionalActions: npcInlineAdditionalActions.value || undefined,
+        statChanges: buildNpcInlineStatChanges(),
+      },
+    });
+    resetNpcActionSelection();
+    npcActionTargetPickerRef.value?.reset();
+    npcHasTarget.value = false;
+    npcRollResult.value = '';
+    npcDamageRollResult.value = '';
+    resetNpcInlineFields();
+    activeCombatEntryId.value = null;
+    await refresh();
+    toastSuccess('NPC action resolved.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
@@ -259,6 +399,40 @@ async function sendSessionRollPrompts(payload: {
   }
 }
 
+async function startRollChain(actionId: string) {
+  isSaving.value = true;
+  try {
+    await api(`/api/actions/${actionId}/roll-prompts/start-chain`, { method: 'POST' });
+    await refresh();
+    toastSuccess('Attack roll sent to player.');
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSaving.value = false;
+  }
+}
+
+function applyPendingChainEffects(action: ActionQueueItemResponse) {
+  const raw = action.pendingChainEffectsJson;
+  if (!raw || raw === '[]') return;
+  try {
+    const pending = JSON.parse(raw) as Array<{
+      targetType: string;
+      targetId: string;
+      healthDelta?: number;
+    }>;
+    if (!pending.length) return;
+    const first = pending[0];
+    statChangeTarget.value[action.id] = `${first.targetType}:${first.targetId}`;
+    const totalDamage = pending.reduce((sum, c) => sum + (c.healthDelta ?? 0), 0);
+    if (totalDamage < 0) {
+      statChangeHealthDelta.value[action.id] = String(totalDamage);
+    }
+  } catch {
+    // ignore malformed JSON
+  }
+}
+
 async function sendRollPrompts(
   actionId: string,
   payload: {
@@ -271,6 +445,7 @@ async function sendRollPrompts(
       customCheckText?: string;
       promptLabel?: string;
       resultKind: string;
+      dc?: number | null;
     }>;
   },
 ) {
@@ -279,6 +454,22 @@ async function sendRollPrompts(
     await api(`/api/actions/${actionId}/roll-prompts`, { method: 'POST', body: payload });
     await refresh();
     toastSuccess('Roll prompt sent to player(s).');
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSaving.value = false;
+  }
+}
+
+async function dmRollForPlayer(payload: { actionId: string; rollSummary: string; dc?: number | null }) {
+  isSaving.value = true;
+  try {
+    await api(`/api/actions/${payload.actionId}/roll-prompts/dm-roll`, {
+      method: 'POST',
+      body: { rollSummary: payload.rollSummary, dc: payload.dc ?? null },
+    });
+    await refresh();
+    toastSuccess('Roll recorded for player.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
@@ -300,7 +491,15 @@ async function cancelRollPrompt(promptId: string) {
 }
 
 function derivedActionOutcome(action: ActionQueueItemResponse): 'Pass' | 'Fail' | null {
-  return evaluateActionOutcome(rulesetDefinition.value, action.actionKey, action.description);
+  return evaluateActionOutcomeFromRolls(
+    rulesetDefinition.value,
+    action,
+    state.value?.rollPrompts ?? [],
+  );
+}
+
+function pendingRollFlowStatus(action: ActionQueueItemResponse) {
+  return getActionRollFlowStatus(action, state.value?.rollPrompts ?? [], rulesetDefinition.value);
 }
 
 async function rejectAction(action: ActionQueueItemResponse) {
@@ -312,7 +511,7 @@ async function rejectAction(action: ActionQueueItemResponse) {
         rejectionReason: rejectReason.value[action.id]?.trim() || undefined,
       },
     });
-    for (const map of [resolutionText, additionalActions, rejectReason, statChangeTarget, statChangeHealthDelta, statChangeSetHealth, statChangeSetArmor, gameValueChanges, statChangeGvDeltas, statChangeAttrDeltas, statChangeInventoryDeltas]) {
+    for (const map of [resolutionText, additionalActions, rejectReason, statChangeTarget, statChangeHealthDelta, statChangeSetHealth, statChangeSetArmor, gameValueChanges, statChangeGvDeltas, statChangeAttrDeltas, statChangeInventoryDeltas, statChangeStatusChanges]) {
       delete map.value[action.id];
     }
     expandedPendingActions.value.delete(action.id);
@@ -340,7 +539,7 @@ async function resolveAction(action: ActionQueueItemResponse) {
         statChanges: buildStatChanges(action),
       },
     });
-    for (const map of [resolutionText, additionalActions, rejectReason, statChangeTarget, statChangeHealthDelta, statChangeSetHealth, statChangeSetArmor, gameValueChanges, statChangeGvDeltas, statChangeAttrDeltas, statChangeInventoryDeltas]) {
+    for (const map of [resolutionText, additionalActions, rejectReason, statChangeTarget, statChangeHealthDelta, statChangeSetHealth, statChangeSetArmor, gameValueChanges, statChangeGvDeltas, statChangeAttrDeltas, statChangeInventoryDeltas, statChangeStatusChanges]) {
       delete map.value[action.id];
     }
     expandedPendingActions.value.delete(action.id);
@@ -365,10 +564,12 @@ function buildStatChanges(action: ActionQueueItemResponse) {
     gameValueDeltas?: Record<string, number>;
     attributeDeltas?: Record<string, number>;
     inventoryDeltas?: Record<string, number>;
+    addStatusKeys?: string[];
+    removeStatusKeys?: string[];
   };
   const changes: StatChange[] = [];
 
-  // Health / armor + stat deltas for the selected target
+  // Health / armor + stat deltas + status changes for the selected target
   const target = statChangeTarget.value[actionId];
   if (target) {
     const [targetType, targetId] = target.split(':');
@@ -376,7 +577,6 @@ function buildStatChanges(action: ActionQueueItemResponse) {
     const setHealth = optNum(statChangeSetHealth.value[actionId]);
     const setArmor = optNum(statChangeSetArmor.value[actionId]);
 
-    // Game value deltas (Character targets only)
     let gameValueDeltas: Record<string, number> | undefined;
     let attributeDeltas: Record<string, number> | undefined;
     let inventoryDeltas: Record<string, number> | undefined;
@@ -386,13 +586,19 @@ function buildStatChanges(action: ActionQueueItemResponse) {
       inventoryDeltas = toNonZeroIntMap(statChangeInventoryDeltas.value[actionId]);
     }
 
+    const statusChange = statChangeStatusChanges.value[actionId];
+    const addStatusKeys = statusChange?.addKeys?.length ? statusChange.addKeys : undefined;
+    const removeStatusKeys = statusChange?.removeKeys?.length ? statusChange.removeKeys : undefined;
+
     const hasAny = healthDelta !== undefined || setHealth !== undefined || setArmor !== undefined
       || (gameValueDeltas && Object.keys(gameValueDeltas).length > 0)
       || (attributeDeltas && Object.keys(attributeDeltas).length > 0)
-      || (inventoryDeltas && Object.keys(inventoryDeltas).length > 0);
+      || (inventoryDeltas && Object.keys(inventoryDeltas).length > 0)
+      || addStatusKeys !== undefined
+      || removeStatusKeys !== undefined;
 
     if (hasAny) {
-      changes.push({ targetType, targetId, healthDelta, setHealth, setArmor, gameValueDeltas, attributeDeltas, inventoryDeltas });
+      changes.push({ targetType, targetId, healthDelta, setHealth, setArmor, gameValueDeltas, attributeDeltas, inventoryDeltas, addStatusKeys, removeStatusKeys });
     }
   }
 
@@ -420,18 +626,12 @@ function optNum(v?: string | number) {
 async function setupCombat() {
   if (!state.value) return;
   isSaving.value = true;
-  const sourceEntries = displayedInitiative.value.length
-    ? displayedInitiative.value.map(entry => ({ type: entry.combatantType, id: entry.combatantId }))
-    : combatSetupEntries.value.map(entry => ({ type: entry.type, id: entry.id }));
-  const combatants = sourceEntries.map((entry, index) => ({
-    ...entry,
-    initiative: sourceEntries.length - index,
-  }));
 
   try {
-    await api(`/api/sessions/${route.params.id}/combat`, { method: 'POST', body: { combatants } });
+    const result = await api<{ guidanceText?: string | null }>(`/api/sessions/${route.params.id}/combat/start`, { method: 'POST' });
     await refresh();
-    toastSuccess('Combat started.');
+    const hint = result.guidanceText ? ` ${result.guidanceText}` : '';
+    toastSuccess(`Combat started — initiative rolled.${hint}`);
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
@@ -527,6 +727,8 @@ function togglePendingAction(id: string) {
     expandedPendingActions.value.delete(id);
   } else {
     expandedPendingActions.value.add(id);
+    const action = pendingActions.value.find(a => a.id === id);
+    if (action) applyPendingChainEffects(action);
   }
 }
 
@@ -548,12 +750,29 @@ function collapseAllActions() {
   expandedActions.value = new Set();
 }
 
-function takeCurrentNpcAction(npcId: string) {
-  selectedNpcId.value = npcId;
-  resetNpcActionSelection();
-  npcTarget.value = '';
-  showNpcActionForm.value = true;
+
+function handleActivateEntry(entry: InitiativeEntryResponse) {
+  // Toggle: clicking an already-expanded entry collapses it
+  if (activeCombatEntryId.value === entry.id) {
+    activeCombatEntryId.value = null;
+    return;
+  }
+  activeCombatEntryId.value = entry.id;
+
+  if (entry.combatantType === 'NpcOrMonster') {
+    // Pre-select this NPC and reset both the action form and inline resolution fields
+    selectedNpcId.value = entry.combatantId;
+    resetNpcActionSelection();
+    npcHasTarget.value = false;
+    npcRollResult.value = '';
+    npcDamageRollResult.value = '';
+    resetNpcInlineFields();
+  }
 }
+
+watch(currentNpcPendingAction, (action) => {
+  if (action) applyPendingChainEffects(action);
+});
 
 function rulesetActionDetail(action: ActionQueueItemResponse) {
   const rulesetAction = findRulesetAction(rulesetDefinition.value, action.actionKey);
@@ -616,12 +835,30 @@ const npcRollContext = computed(() => {
   const def = rulesetDefinition.value;
   if (!def || !selectedNpc.value) return null;
 
+  let mode: DiceRollMode;
+  let skillKey = '';
+  let attributeKey = '';
+
+  if (npcActionMode.value === 'action') {
+    mode = 'action';
+  } else if (npcActionMode.value === 'stat-check') {
+    if (selectedNpcStatType.value === 'attribute') {
+      mode = 'attribute';
+      attributeKey = selectedNpcStatRawKey.value;
+    } else {
+      mode = 'skill';
+      skillKey = selectedNpcStatRawKey.value;
+    }
+  } else {
+    return null;
+  }
+
   return buildDiceRollContext({
     definition: def,
-    mode: npcActionMode.value,
+    mode,
     actionKey: selectedNpcActionKey.value,
-    skillKey: selectedNpcSkillKey.value,
-    attributeKey: selectedNpcAttributeKey.value,
+    skillKey,
+    attributeKey,
     attributes: npcStats.value.attributes,
     skills: npcStats.value.skills,
     gameValues: npcStats.value.gameValues,
@@ -630,6 +867,7 @@ const npcRollContext = computed(() => {
 </script>
 
 <template>
+
   <section class="app-shell dm-app-shell" :style="rulesetThemeStyle">
     <!-- Topbar -->
     <header class="topbar" :class="{ 'combat-mode': isCombat }">
@@ -681,7 +919,10 @@ const npcRollContext = computed(() => {
       </div>
     </div>
 
-    <main v-else class="stack dm-screen-main">
+    <main
+      v-else
+      class="stack dm-screen-main"
+    >
       <DmSessionInvite
         :state="state"
         :join-link="joinLink"
@@ -704,14 +945,127 @@ const npcRollContext = computed(() => {
             :displayed-initiative="displayedInitiative"
             :dragged-initiative-id="draggedInitiativeId"
             :drag-over-id="dragOverId"
-            :current-turn-npc="currentTurnNpc"
+            :expanded-entry-id="activeCombatEntryId"
             @setup-combat="setupCombat"
             @advance-turn="advanceTurn"
             @end-combat="endCombat"
             @start-drag="startInitiativeDrag"
             @move-keyboard="moveInitiativeByKeyboard"
-            @take-current-npc-action="takeCurrentNpcAction"
-          />
+            @activate-entry="handleActivateEntry"
+          >
+            <template v-if="state" #entry-action="{ entry }">
+              <!-- Player card — waiting for them to act -->
+              <div v-if="entry.combatantType === 'Character'" class="turn-inline-body">
+                <p class="text-sm muted">
+                  Waiting for <strong>{{ entry.combatantName }}</strong> to act.
+                  Their turn prompt is open on their screen.
+                </p>
+                <button class="btn ghost sm" type="button" :disabled="isSaving" @click="advanceTurn">
+                  Skip turn →
+                </button>
+              </div>
+
+              <!-- NPC card — single combined action + resolution form -->
+              <form v-else class="turn-inline-body" @submit.prevent="submitAndResolveNpcAction">
+                <label>
+                  Action type
+                  <select v-model="npcActionMode" :disabled="!selectedNpcId">
+                    <option v-if="availableNpcActions.length" value="action">Action</option>
+                    <option value="stat-check">Stat check</option>
+                  </select>
+                </label>
+                <label v-if="npcActionMode === 'action'">
+                  Action
+                  <select v-model="selectedNpcActionKey" required>
+                    <option value="">Choose an action</option>
+                    <option v-for="action in availableNpcActions" :key="action.key" :value="action.key">
+                      {{ action.label }}
+                    </option>
+                  </select>
+                </label>
+                <label v-else>
+                  Stat
+                  <select v-model="selectedNpcStatKey" required>
+                    <option value="">Choose a stat</option>
+                    <optgroup label="Skills">
+                      <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'skill')" :key="stat.key" :value="stat.key">
+                        {{ stat.label }}
+                      </option>
+                    </optgroup>
+                    <optgroup label="Attributes">
+                      <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'attribute')" :key="stat.key" :value="stat.key">
+                        {{ stat.label }}
+                      </option>
+                    </optgroup>
+                  </select>
+                </label>
+                <div v-if="npcActionMode === 'action' && selectedNpcActionDetail" class="alert info">
+                  <strong>{{ selectedNpcActionDetail.dice }}</strong>
+                  <p class="text-sm muted">{{ selectedNpcActionDetail.attribute }} + {{ selectedNpcActionDetail.skill }} · {{ selectedNpcActionDetail.successRule }}</p>
+                </div>
+                <div v-else-if="npcActionMode === 'stat-check' && selectedNpcStatDetail" class="alert info">
+                  <p class="text-sm muted">{{ selectedNpcStatDetail.rollSummary }}</p>
+                </div>
+
+                <!-- Target must be set before dice rollers appear -->
+                <ActionTargetPicker
+                  ref="npcActionTargetPickerRef"
+                  :characters="state.game.characters"
+                  :npcs="state.game.npcsAndMonsters"
+                  :disabled="isSaving"
+                  @change="npcHasTarget = $event"
+                />
+
+                <template v-if="npcHasTarget">
+                  <p class="text-sm muted" style="margin: 0.25rem 0 0.25rem;">Roll on the table (optional).</p>
+                  <RulesetDiceRoller v-if="npcRollContext" v-model="npcRollResult" :context="npcRollContext" />
+                  <DamageRollRoller
+                    v-if="showNpcDamageRoll && effectiveNpcActionRoll?.damageRoll && rulesetDefinition"
+                    v-model="npcDamageRollResult"
+                    :damage-roll="effectiveNpcActionRoll.damageRoll"
+                    :definition="rulesetDefinition"
+                    :attributes="npcStats.attributes"
+                  />
+                </template>
+                <p v-else class="text-sm muted" style="margin: 0.25rem 0 0;">Select a target above to unlock dice rolls.</p>
+
+                <hr style="margin: 0.75rem 0; border-color: var(--border);" />
+
+                <label>
+                  Resolution <span style="color: var(--danger);">*</span>
+                  <textarea v-model="npcInlineResolutionText" placeholder="Describe what happens…" required style="min-height: 3rem;" />
+                </label>
+                <label>
+                  Additional actions / counter-actions
+                  <textarea v-model="npcInlineAdditionalActions" placeholder="The alien counter-attacks…" style="min-height: 2rem;" />
+                </label>
+                <DmStatChangePanel
+                  :characters="state.game.characters"
+                  :npcs="state.game.npcsAndMonsters"
+                  :ruleset-definition="rulesetDefinition"
+                  :target="npcInlineStatTarget"
+                  :health-delta="npcInlineHealthDelta"
+                  :set-health="npcInlineSetHealth"
+                  :set-armor="npcInlineSetArmor"
+                  :gv-deltas="npcInlineGvDeltas"
+                  :attr-deltas="npcInlineAttrDeltas"
+                  :inventory-deltas="npcInlineInventoryDeltas"
+                  :status-changes="npcInlineStatusChanges"
+                  @update:target="npcInlineStatTarget = $event"
+                  @update:health-delta="npcInlineHealthDelta = $event"
+                  @update:set-health="npcInlineSetHealth = $event"
+                  @update:set-armor="npcInlineSetArmor = $event"
+                  @update:gv-deltas="npcInlineGvDeltas = $event"
+                  @update:attr-deltas="npcInlineAttrDeltas = $event"
+                  @update:inventory-deltas="npcInlineInventoryDeltas = $event"
+                  @update:status-changes="npcInlineStatusChanges = $event"
+                />
+                <button class="btn success" type="submit" :disabled="isSaving" style="margin-top: 0.75rem;">
+                  {{ isSaving ? 'Resolving…' : 'Resolve NPC action' }}
+                </button>
+              </form>
+            </template>
+          </DmCombatWorkflow>
 
           <DmPlayerSkillCheckPanel
             v-if="game?.characters.length"
@@ -723,8 +1077,8 @@ const npcRollContext = computed(() => {
             @cancel="cancelRollPrompt"
           />
 
-          <!-- NPC quick action -->
-          <div v-if="game?.npcsAndMonsters.length" class="panel">
+          <!-- NPC quick action — exploration only; combat drives this through the turn overlay -->
+          <div v-if="game?.npcsAndMonsters.length && !isCombat" class="panel">
             <div class="panel-title">
               <div>
                 <h2>NPC Actions</h2>
@@ -750,49 +1104,36 @@ const npcRollContext = computed(() => {
               <label>
                 Action type
                 <select v-model="npcActionMode" :disabled="!selectedNpcId">
-                  <option v-if="availableNpcActions.length" value="action">Predefined action</option>
-                  <option v-if="availableNpcSkills.length" value="skill">Skill check</option>
-                  <option v-if="availableNpcAttributes.length" value="attribute">Attribute check</option>
-                  <option value="custom">Custom action</option>
+                  <option v-if="availableNpcActions.length" value="action">Action</option>
+                  <option value="stat-check">Stat check</option>
                 </select>
               </label>
-              <label v-if="npcActionMode === 'action' && availableNpcActions.length">
-                Predefined action
+              <label v-if="npcActionMode === 'action'">
+                Action
                 <select v-model="selectedNpcActionKey" required>
-                  <option value="">Choose a predefined action</option>
+                  <option value="">Choose an action</option>
                   <option v-for="action in availableNpcActions" :key="action.key" :value="action.key">
                     {{ action.label }}
                   </option>
                 </select>
               </label>
-              <label v-else-if="npcActionMode === 'skill' && availableNpcSkills.length">
-                Skill
-                <select v-model="selectedNpcSkillKey" required>
-                  <option value="">Choose a skill</option>
-                  <option v-for="skill in availableNpcSkills" :key="skill.key" :value="skill.key">
-                    {{ skill.label }}
-                  </option>
-                </select>
-              </label>
-              <label v-else-if="npcActionMode === 'attribute' && availableNpcAttributes.length">
-                Attribute
-                <select v-model="selectedNpcAttributeKey" required>
-                  <option value="">Choose an attribute</option>
-                  <option v-for="attribute in availableNpcAttributes" :key="attribute.key" :value="attribute.key">
-                    {{ attribute.label }}
-                  </option>
-                </select>
-              </label>
               <label v-else>
-                Custom action
-                <input
-                  v-model.trim="npcAction"
-                  :disabled="!selectedNpcId"
-                  :placeholder="selectedNpcId ? 'Describe a custom action' : 'Choose an NPC first'"
-                  required
-                />
+                Stat
+                <select v-model="selectedNpcStatKey" required>
+                  <option value="">Choose a stat</option>
+                  <optgroup label="Skills">
+                    <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'skill')" :key="stat.key" :value="stat.key">
+                      {{ stat.label }}
+                    </option>
+                  </optgroup>
+                  <optgroup label="Attributes">
+                    <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'attribute')" :key="stat.key" :value="stat.key">
+                      {{ stat.label }}
+                    </option>
+                  </optgroup>
+                </select>
               </label>
-              <div v-if="selectedNpcActionDetail" class="alert info">
+              <div v-if="npcActionMode === 'action' && selectedNpcActionDetail" class="alert info">
                 <div>
                   <strong>{{ selectedNpcActionDetail.dice }}</strong>
                   <p class="text-sm">
@@ -802,14 +1143,15 @@ const npcRollContext = computed(() => {
                   <p class="text-sm">{{ selectedNpcActionDetail.successRule }}</p>
                 </div>
               </div>
-              <div v-else-if="selectedNpcSkillDetail || selectedNpcAttributeDetail" class="alert info">
+              <div v-else-if="npcActionMode === 'stat-check' && selectedNpcStatDetail" class="alert info">
                 <div>
-                  <strong>{{ selectedNpcSkillDetail?.actionText ?? selectedNpcAttributeDetail?.actionText }}</strong>
-                  <p class="text-sm">
-                    Suggested roll: {{ selectedNpcSkillDetail?.rollSummary ?? selectedNpcAttributeDetail?.rollSummary }}.
-                  </p>
+                  <strong>{{ selectedNpcStatDetail.actionText }}</strong>
+                  <p class="text-sm">Suggested roll: {{ selectedNpcStatDetail.rollSummary }}.</p>
                 </div>
               </div>
+              <p class="text-sm muted" style="margin: 0 0 0.75rem;">
+                Roll on the table (optional) — NPC actions are resolved by you; dice here are recorded in the queue, not sent to players.
+              </p>
               <RulesetDiceRoller
                 v-if="npcRollContext"
                 v-model="npcRollResult"
@@ -863,7 +1205,7 @@ const npcRollContext = computed(() => {
                   Pending Actions
                   <span v-if="pendingActions.length" class="badge pending" style="margin-left: 0.4rem;">{{ pendingActions.length }}</span>
                 </h2>
-                <p class="text-sm">Review player actions, skill check responses, and NPC actions. Resolve each entry individually.</p>
+                <p class="text-sm">Review submissions, request player rolls, then publish outcomes. Rolls happen after you prompt — not on submit.</p>
               </div>
               <div v-if="pendingActions.length" class="btn-row">
                 <button class="btn ghost sm" type="button" @click="expandAllPendingActions">Expand</button>
@@ -894,12 +1236,12 @@ const npcRollContext = computed(() => {
                     </div>
                     <div v-if="action.description" class="action-card-desc">{{ action.description }}</div>
                     <span
-                      v-if="derivedActionOutcome(action)"
+                      v-if="pendingRollFlowStatus(action) !== 'not-applicable'"
                       class="badge"
-                      :class="derivedActionOutcome(action) === 'Pass' ? 'pass' : 'fail'"
+                      :class="actionRollFlowBadgeClass(pendingRollFlowStatus(action))"
                       style="margin-top: 0.35rem;"
                     >
-                      Roll: {{ derivedActionOutcome(action) }}
+                      {{ actionRollFlowLabel(pendingRollFlowStatus(action)) }}
                     </span>
                   </div>
                   <span class="badge pending">{{ expandedPendingActions.has(action.id) ? 'Hide' : 'Resolve' }}</span>
@@ -909,9 +1251,8 @@ const npcRollContext = computed(() => {
                   <div v-if="rulesetActionDetail(action)" class="alert info">
                     <div>
                       <strong>{{ rulesetActionDetail(action)?.dice }}</strong>
-                      <p class="text-sm">
-                        Roll {{ rulesetActionDetail(action)?.attribute }} + {{ rulesetActionDetail(action)?.skill }}.
-                        Modifiers: {{ rulesetActionDetail(action)?.modifiers }}.
+                      <p class="text-sm muted">
+                        Reference — prompt the player to roll: {{ rulesetActionDetail(action)?.attribute }} + {{ rulesetActionDetail(action)?.skill }}.
                       </p>
                       <p class="text-sm">{{ rulesetActionDetail(action)?.successRule }}</p>
                     </div>
@@ -924,16 +1265,21 @@ const npcRollContext = computed(() => {
                     :roll-prompts="state.rollPrompts ?? []"
                     :ruleset-definition="rulesetDefinition"
                     :is-busy="isSaving"
+                    @start-chain="startRollChain(action.id)"
                     @send="payload => sendRollPrompts(action.id, payload)"
                     @cancel="cancelRollPrompt"
+                    @dm-roll="dmRollForPlayer"
                   />
 
-                  <p v-if="derivedActionOutcome(action)" class="text-sm" style="margin: 0.5rem 0;">
-                    Initial roll result:
+                  <p
+                    v-if="derivedActionOutcome(action)"
+                    class="text-sm"
+                    style="margin: 0.5rem 0;"
+                  >
+                    Roll outcome:
                     <span class="badge" :class="derivedActionOutcome(action) === 'Pass' ? 'pass' : 'fail'">
                       {{ derivedActionOutcome(action) }}
                     </span>
-                    <span style="color: var(--muted-light);"> (from player roll, set on publish)</span>
                   </p>
 
                   <label>
@@ -956,6 +1302,7 @@ const npcRollContext = computed(() => {
                     :gv-deltas="statChangeGvDeltas[action.id]"
                     :attr-deltas="statChangeAttrDeltas[action.id]"
                     :inventory-deltas="statChangeInventoryDeltas[action.id]"
+                    :status-changes="statChangeStatusChanges[action.id]"
                     @update:target="statChangeTarget[action.id] = $event"
                     @update:health-delta="statChangeHealthDelta[action.id] = $event"
                     @update:set-health="statChangeSetHealth[action.id] = $event"
@@ -963,6 +1310,7 @@ const npcRollContext = computed(() => {
                     @update:gv-deltas="statChangeGvDeltas[action.id] = $event"
                     @update:attr-deltas="statChangeAttrDeltas[action.id] = $event"
                     @update:inventory-deltas="statChangeInventoryDeltas[action.id] = $event"
+                    @update:status-changes="statChangeStatusChanges[action.id] = $event"
                   />
 
                   <div class="btn-row">

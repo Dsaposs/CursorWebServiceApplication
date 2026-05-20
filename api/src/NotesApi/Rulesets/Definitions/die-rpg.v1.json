@@ -294,7 +294,37 @@
         "skill": "fight",
         "modifiers": [],
         "successRule": "Roll 1d10 + Body + Fight vs DC 8. Beat the DC to land the blow; describe what you do."
-      }
+      },
+      "rollChain": [
+        {
+          "step": "attack",
+          "label": "Melee attack",
+          "checkMode": "Action",
+          "resultKind": "Total",
+          "guidanceText": "Roll your class die + Body + Fight. Meet or beat the target's Armour to hit.",
+          "autoResolve": { "condition": "total >= target.armor", "fallback": "dm_input" },
+          "onSuccess": "damage",
+          "onFailure": "end"
+        },
+        {
+          "step": "damage",
+          "label": "Weapon damage",
+          "checkMode": "Custom",
+          "resultKind": "Total",
+          "diceSource": "equippedWeapon",
+          "guidanceText": "You hit. Roll weapon damage.",
+          "applyEffects": [
+            {
+              "target": "action.target",
+              "stat": "health",
+              "operation": "subtract",
+              "value": "roll.total",
+              "minResult": 0
+            }
+          ],
+          "onComplete": "end"
+        }
+      ]
     },
     {
       "key": "socialInfluence",
@@ -362,7 +392,37 @@
         ],
         "successRule": "Roll 1d4 + Body + Fight + Grief dice (one d4 per Grief) vs DC 8. Your grief makes you dangerous.",
         "difficultyClass": 8
-      }
+      },
+      "rollChain": [
+        {
+          "step": "attack",
+          "label": "Grief Strike — attack",
+          "checkMode": "Action",
+          "resultKind": "Total",
+          "guidanceText": "Roll your d4 + Body + Fight + one d4 per Grief. Meet or beat the target's Armour to hit.",
+          "autoResolve": { "condition": "total >= target.armor", "fallback": "dm_input" },
+          "onSuccess": "damage",
+          "onFailure": "end"
+        },
+        {
+          "step": "damage",
+          "label": "Grief damage",
+          "checkMode": "Custom",
+          "resultKind": "Total",
+          "diceSource": "equippedWeapon",
+          "guidanceText": "Your blow lands. Roll your weapon's damage dice.",
+          "applyEffects": [
+            {
+              "target": "action.target",
+              "stat": "health",
+              "operation": "subtract",
+              "value": "roll.total",
+              "minResult": 0
+            }
+          ],
+          "onComplete": "end"
+        }
+      ]
     },
     {
       "key": "channelSorrow",
@@ -608,6 +668,70 @@
     }
   ],
   "npcTemplates": [],
+  "statusEffects": [
+    {
+      "key": "broken",
+      "label": "Broken",
+      "description": "HP has reached 0. Cannot fight back; may be captured or killed by the GM.",
+      "isNegative": true,
+      "autoApplyAtHpThreshold": 0
+    },
+    {
+      "key": "grief-stricken",
+      "label": "Grief-Stricken",
+      "description": "Overwhelmed by grief. Grief dice count is at maximum; emotional decisions are impaired.",
+      "isNegative": true,
+      "autoApplyAtHpThreshold": null
+    },
+    {
+      "key": "dominated",
+      "label": "Dominated",
+      "description": "Under the control of a Die character. Actions are directed by the Die holder.",
+      "isNegative": true,
+      "autoApplyAtHpThreshold": null
+    },
+    {
+      "key": "exalted",
+      "label": "Exalted",
+      "description": "Raised to a higher state of being. Gains special narrative authority in the scene.",
+      "isNegative": false,
+      "autoApplyAtHpThreshold": null
+    },
+    {
+      "key": "enraged",
+      "label": "Enraged",
+      "description": "Consumed by fury. Attacks are more powerful but judgment is impaired.",
+      "isNegative": true,
+      "autoApplyAtHpThreshold": null
+    },
+    {
+      "key": "haunted",
+      "label": "Haunted",
+      "description": "Tormented by visions or memories from Die. Disadvantage on Wits-based checks.",
+      "isNegative": true,
+      "autoApplyAtHpThreshold": null
+    },
+    {
+      "key": "inspired",
+      "label": "Inspired",
+      "description": "Motivated by hope or beauty. Advantage on one check of the player's choice.",
+      "isNegative": false,
+      "autoApplyAtHpThreshold": null
+    },
+    {
+      "key": "stunned",
+      "label": "Stunned",
+      "description": "Reeling from a blow or magical effect. Loses their action on the next turn.",
+      "isNegative": true,
+      "autoApplyAtHpThreshold": null
+    }
+  ],
+  "initiative": {
+    "attribute": "body",
+    "skill": "move",
+    "tieBreakerDice": "1d8",
+    "guidanceText": "Initiative = Body + Move + 1d8. Higher total acts first."
+  },
   "rollMechanics": {
     "skillCheck": {
       "diceKey": "d10ClassDie",

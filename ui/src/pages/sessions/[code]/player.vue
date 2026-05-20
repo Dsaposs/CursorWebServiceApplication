@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import type { InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
 import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
-import { evaluateActionOutcome } from '~/utils/actionOutcome';
 import { parseCharacterStats } from '~/utils/dice';
 import { parseInventory } from '~/utils/inventory';
-import { resolveEffectiveActionRoll } from '~/utils/items';
-import { findRulesetAction, parseRulesetDefinition } from '~/utils/rulesets';
-import { useDiceRollContext } from '~/composables/useDiceRollContext';
+import { parseRulesetDefinition } from '~/utils/rulesets';
 import { useRulesetTheme } from '~/composables/useRulesetTheme';
 import { useThemePreference } from '~/composables/useThemePreference';
 import PlayerRollPromptOverlay from '~/components/PlayerRollPromptOverlay.vue';
+import PlayerCombatTurnOverlay from '~/components/PlayerCombatTurnOverlay.vue';
 
 const route = useRoute();
 const { api } = useApi();
@@ -21,8 +19,6 @@ const ruleset = ref<RulesetResponse | null>(null);
 const showCharacterSheet = ref(false);
 const actionTargetPickerRef = ref<{ isValid: () => boolean; reset: () => void; toSubmitFields: () => { targetCharacterId?: string; targetNpcId?: string; targetName?: string } } | null>(null);
 const description = ref('');
-const rollResult = ref('');
-const damageRollResult = ref('');
 const isSubmitting = ref(false);
 const isSubmittingRollPrompt = ref(false);
 const showActionForm = ref(false);
@@ -88,15 +84,12 @@ const playerInventory = computed(() => parseInventory(state.value?.character?.in
 const {
   actionMode,
   selectedActionKey,
-  selectedSkillKey,
-  selectedAttributeKey,
+  selectedStatKey,
   customActionText: actionText,
   availableActions,
-  availableSkills,
-  availableAttributes,
+  availableStatChecks,
   selectedActionDetail,
-  selectedSkillDetail,
-  selectedAttributeDetail,
+  selectedStatDetail,
   resetSelection: resetActionSelection,
   buildSubmitPayload,
 } = useRulesetActionChooser(rulesetDefinition, actingClassKey, playerInventory);
@@ -111,6 +104,35 @@ const expandedPendingPlayerActions = ref<Set<string>>(new Set());
 
 const activeRollPrompt = computed(() =>
   (state.value?.rollPrompts ?? []).find(prompt => prompt.status === 'Pending') ?? null,
+);
+
+const showCombatTurnFocus = computed(() =>
+  isCombat.value && isMyTurn.value && !activeRollPrompt.value,
+);
+
+const isPlayerFocusActive = computed(() =>
+  showCombatTurnFocus.value || Boolean(isCombat.value && activeRollPrompt.value),
+);
+
+const combatTurnWaiting = computed(() =>
+  showCombatTurnFocus.value && pendingPlayerActions.value.length > 0,
+);
+
+watch(isMyTurn, (mine, wasMine) => {
+  if (mine && !wasMine) {
+    resetActionSelection();
+    actionTargetPickerRef.value?.reset();
+    description.value = '';
+  }
+});
+
+watch(
+  () => state.value?.state,
+  (mode) => {
+    if (mode !== 'Combat') {
+      showActionForm.value = false;
+    }
+  },
 );
 
 const publishedFeedActions = computed(() =>
@@ -170,41 +192,6 @@ async function withdrawAction(actionId: string) {
 
 const playerStats = computed(() => parseCharacterStats(state.value?.character?.rulesetDataJson));
 const playerAttributes = computed(() => playerStats.value.attributes);
-const playerSkills = computed(() => playerStats.value.skills);
-const playerGameValues = computed(() => playerStats.value.gameValues);
-
-const selectedRulesetActionDef = computed(() =>
-  findRulesetAction(rulesetDefinition.value, selectedActionKey.value),
-);
-const effectiveActionRoll = computed(() =>
-  resolveEffectiveActionRoll(rulesetDefinition.value, selectedRulesetActionDef.value),
-);
-const attackOutcome = computed(() => {
-  if (!rollResult.value || actionMode.value !== 'action') return null;
-  return evaluateActionOutcome(
-    rulesetDefinition.value,
-    selectedActionKey.value,
-    `🎲 Roll: ${rollResult.value}`,
-  );
-});
-const showDamageRoll = computed(() =>
-  Boolean(effectiveActionRoll.value?.damageRoll && attackOutcome.value === 'Pass'),
-);
-
-watch([selectedActionKey, rollResult], () => {
-  if (!showDamageRoll.value) damageRollResult.value = '';
-});
-
-const rollContext = useDiceRollContext(
-  rulesetDefinition,
-  actionMode,
-  selectedActionKey,
-  selectedSkillKey,
-  selectedAttributeKey,
-  playerAttributes,
-  playerSkills,
-  playerGameValues,
-);
 
 onMounted(async () => {
   playerToken.value = getSessionPlayerToken(route.params.code);
@@ -227,7 +214,7 @@ onMounted(async () => {
   start();
 });
 
-async function submitRollPrompt(rollSummary: string) {
+async function submitRollPrompt(payload: { rollSummary: string; rollResultJson?: string; pushed?: boolean }) {
   if (!playerToken.value || !activeRollPrompt.value) return;
 
   isSubmittingRollPrompt.value = true;
@@ -235,7 +222,7 @@ async function submitRollPrompt(rollSummary: string) {
     await api(`/api/roll-prompts/${activeRollPrompt.value.id}/submit`, {
       method: 'PUT',
       playerToken: playerToken.value,
-      body: { rollSummary },
+      body: payload,
     });
     await refresh();
     toastSuccess('Roll sent to the DM.');
@@ -258,13 +245,6 @@ async function submitAction() {
     return;
   }
 
-  // Prepend the dice roll result to the description if the player rolled
-  const fullDescription = [
-    rollResult.value ? `🎲 Roll: ${rollResult.value}` : '',
-    damageRollResult.value || '',
-    payload.description ?? '',
-  ].filter(Boolean).join('\n');
-
   isSubmitting.value = true;
   try {
     await api(`/api/sessions/${state.value.joinCode}/actions`, {
@@ -274,17 +254,17 @@ async function submitAction() {
         actionKey: payload.actionKey,
         actionText: payload.actionText,
         ...actionTargetPickerRef.value.toSubmitFields(),
-        description: fullDescription || undefined,
+        description: description.value.trim() || undefined,
       },
     });
     resetActionSelection();
     actionTargetPickerRef.value?.reset();
     description.value = '';
-    rollResult.value = '';
-    damageRollResult.value = '';
     await refresh();
-    showActionForm.value = false;
-    toastSuccess('Action sent to DM!');
+    if (!isCombat.value) {
+      showActionForm.value = false;
+    }
+    toastSuccess('Action sent to DM! The DM will call for your roll.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
@@ -302,6 +282,108 @@ async function submitAction() {
     :is-submitting="isSubmittingRollPrompt"
     @submit="submitRollPrompt"
   />
+
+  <PlayerCombatTurnOverlay
+    v-if="state?.character"
+    :character-name="state.character.name"
+    :is-open="showCombatTurnFocus"
+    :waiting-for-dm="combatTurnWaiting"
+  >
+    <form v-if="!combatTurnWaiting" class="player-combat-action-form" @submit.prevent="submitAction">
+      <label>
+        Action type <span style="color: var(--danger);">*</span>
+        <select v-model="actionMode">
+          <option v-if="availableActions.length" value="action">Action</option>
+          <option value="stat-check">Stat check</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+
+      <label v-if="actionMode === 'action'">
+        Action <span style="color: var(--danger);">*</span>
+        <select v-model="selectedActionKey" required>
+          <option value="">Choose an action</option>
+          <option v-for="action in availableActions" :key="action.key" :value="action.key">
+            {{ action.label }}
+          </option>
+        </select>
+      </label>
+
+      <label v-else-if="actionMode === 'stat-check'">
+        Stat <span style="color: var(--danger);">*</span>
+        <select v-model="selectedStatKey" required>
+          <option value="">Choose a stat</option>
+          <optgroup label="Skills">
+            <option v-for="stat in availableStatChecks.filter(s => s.type === 'skill')" :key="stat.key" :value="stat.key">
+              {{ stat.label }}
+            </option>
+          </optgroup>
+          <optgroup label="Attributes">
+            <option v-for="stat in availableStatChecks.filter(s => s.type === 'attribute')" :key="stat.key" :value="stat.key">
+              {{ stat.label }}
+            </option>
+          </optgroup>
+        </select>
+      </label>
+
+      <label v-else>
+        Custom action <span style="color: var(--danger);">*</span>
+        <input v-model.trim="actionText" placeholder="Swing sword, use medkit, lockpick door…" required />
+      </label>
+
+      <div v-if="actionMode === 'action' && selectedActionDetail" class="alert info">
+        <div>
+          <strong>{{ selectedActionDetail.dice }}</strong>
+          <p class="text-sm muted">
+            Expected check (you roll when the DM asks): {{ selectedActionDetail.attribute }} + {{ selectedActionDetail.skill }}.
+          </p>
+          <p class="text-sm">{{ selectedActionDetail.successRule }}</p>
+        </div>
+      </div>
+      <div v-else-if="actionMode === 'stat-check' && selectedStatDetail" class="alert info">
+        <div>
+          <strong>{{ selectedStatDetail.actionText }}</strong>
+          <p class="text-sm muted">Expected check: {{ selectedStatDetail.rollSummary }}.</p>
+        </div>
+      </div>
+
+      <ActionTargetPicker
+        v-if="state"
+        ref="actionTargetPickerRef"
+        :characters="state.game.characters"
+        :npcs="state.game.npcsAndMonsters"
+        :disabled="isSubmitting"
+      />
+      <label>
+        Description
+        <textarea v-model="description" placeholder="What are you trying to accomplish?" style="min-height: 3rem;" />
+      </label>
+      <button class="btn roll-prompt-submit" type="submit" :disabled="isSubmitting">
+        {{ isSubmitting ? 'Sending…' : 'Send action to DM' }}
+      </button>
+    </form>
+    <div v-else class="player-combat-waiting">
+      <article
+        v-for="action in pendingPlayerActions"
+        :key="action.id"
+        class="player-combat-pending-item"
+      >
+        <p class="text-sm" style="margin: 0;">
+          <strong>{{ action.actionText }}</strong>
+          <span v-if="action.targetName"> on {{ action.targetName }}</span>
+          — awaiting DM
+        </p>
+        <button
+          class="btn ghost sm"
+          type="button"
+          :disabled="isSubmitting"
+          @click="withdrawAction(action.id)"
+        >
+          Withdraw
+        </button>
+      </article>
+    </div>
+  </PlayerCombatTurnOverlay>
 
   <section class="app-shell" :style="rulesetThemeStyle">
     <!-- Topbar -->
@@ -321,7 +403,7 @@ async function submitAction() {
           :ended-at="state.endedAt"
           :is-active="state.isActive"
         />
-        <span class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ state.state }}</span>
+        <span class="badge" :class="isCombat ? 'combat' : 'exploration'">{{ isCombat ? 'In combat' : 'Session' }}</span>
         <button
           class="theme-toggle"
           :class="{ on: rulesetThemeEnabled }"
@@ -342,7 +424,16 @@ async function submitAction() {
       <SkeletonBlock :lines="5" />
     </div>
 
-    <main v-else class="stack session-screen-main">
+    <main
+      v-else
+      class="stack session-screen-main"
+      :class="{ 'session-screen-main--dimmed': isPlayerFocusActive }"
+    >
+      <div v-if="isCombat" class="combat-banner" role="status">
+        <strong>Combat is active</strong>
+        <span v-if="currentTurn"> — {{ currentTurn.combatantName }}'s turn</span>
+      </div>
+
       <SessionNotesPanel
         mode="player"
         :join-code="String(route.params.code)"
@@ -351,20 +442,21 @@ async function submitAction() {
 
       <div class="session-dashboard-grid">
         <div class="session-primary-column">
-      <!-- Your turn banner (combat only, shown when it is this player's turn) -->
-      <div v-if="isCombat && isMyTurn" class="alert info" role="status" style="margin: 0;">
-        <strong>Your Turn</strong> — submit your action before the DM advances the round.
+      <div v-if="isCombat && !isMyTurn && currentTurn" class="panel" role="status">
+        <p class="text-sm" style="margin: 0;">
+          Waiting for <strong>{{ currentTurn.combatantName }}</strong>'s turn. You'll be prompted when it's yours.
+        </p>
       </div>
 
-      <!-- Submit action — shown first so it is always accessible -->
-      <div class="panel">
+      <!-- Submit action — exploration only -->
+      <div v-if="!isCombat" class="panel">
         <div class="panel-title">
           <div>
             <h2>Actions</h2>
             <p v-if="pendingPlayerActions.length" class="text-sm">
               {{ pendingPlayerActions.length }} action{{ pendingPlayerActions.length === 1 ? '' : 's' }} pending DM review.
             </p>
-            <p v-else class="text-sm">Ready when you are. Actions stay hidden until you choose to take one.</p>
+            <p v-else class="text-sm">Submit your intent first — the DM will prompt you to roll when ready.</p>
           </div>
           <button
             v-if="!showActionForm"
@@ -375,47 +467,40 @@ async function submitAction() {
             Take Action
           </button>
         </div>
-        <p v-if="isCombat && currentTurn && !isMyTurn" style="font-size: 0.85rem;">
-          Waiting for <strong>{{ currentTurn.combatantName }}</strong> — you can queue an action now.
-        </p>
         <form v-if="showActionForm" @submit.prevent="submitAction">
           <label>
             Action type <span style="color: var(--danger);">*</span>
             <select v-model="actionMode">
-              <option v-if="availableActions.length" value="action">Predefined action</option>
-              <option v-if="availableSkills.length" value="skill">Skill check</option>
-              <option v-if="availableAttributes.length" value="attribute">Attribute check</option>
+              <option v-if="availableActions.length" value="action">Action</option>
+              <option value="stat-check">Stat check</option>
               <option value="custom">Custom action</option>
             </select>
           </label>
 
-          <label v-if="actionMode === 'action' && availableActions.length">
-            Predefined action <span style="color: var(--danger);">*</span>
+          <label v-if="actionMode === 'action'">
+            Action <span style="color: var(--danger);">*</span>
             <select v-model="selectedActionKey" required>
-              <option value="">Choose a predefined action</option>
+              <option value="">Choose an action</option>
               <option v-for="action in availableActions" :key="action.key" :value="action.key">
                 {{ action.label }}
               </option>
             </select>
           </label>
 
-          <label v-else-if="actionMode === 'skill' && availableSkills.length">
-            Skill <span style="color: var(--danger);">*</span>
-            <select v-model="selectedSkillKey" required>
-              <option value="">Choose a skill</option>
-              <option v-for="skill in availableSkills" :key="skill.key" :value="skill.key">
-                {{ skill.label }}
-              </option>
-            </select>
-          </label>
-
-          <label v-else-if="actionMode === 'attribute' && availableAttributes.length">
-            Attribute <span style="color: var(--danger);">*</span>
-            <select v-model="selectedAttributeKey" required>
-              <option value="">Choose an attribute</option>
-              <option v-for="attribute in availableAttributes" :key="attribute.key" :value="attribute.key">
-                {{ attribute.label }}
-              </option>
+          <label v-else-if="actionMode === 'stat-check'">
+            Stat <span style="color: var(--danger);">*</span>
+            <select v-model="selectedStatKey" required>
+              <option value="">Choose a stat</option>
+              <optgroup label="Skills">
+                <option v-for="stat in availableStatChecks.filter(s => s.type === 'skill')" :key="stat.key" :value="stat.key">
+                  {{ stat.label }}
+                </option>
+              </optgroup>
+              <optgroup label="Attributes">
+                <option v-for="stat in availableStatChecks.filter(s => s.type === 'attribute')" :key="stat.key" :value="stat.key">
+                  {{ stat.label }}
+                </option>
+              </optgroup>
             </select>
           </label>
 
@@ -424,38 +509,25 @@ async function submitAction() {
             <input v-model.trim="actionText" placeholder="Swing sword, use medkit, lockpick door…" required />
           </label>
 
-          <div v-if="selectedActionDetail" class="alert info">
+          <div v-if="actionMode === 'action' && selectedActionDetail" class="alert info">
             <div>
               <strong>{{ selectedActionDetail.dice }}</strong>
-              <p class="text-sm">
-                Roll {{ selectedActionDetail.attribute }} + {{ selectedActionDetail.skill }}.
-                Modifiers: {{ selectedActionDetail.modifiers }}.
+              <p class="text-sm muted">
+                Expected check (you roll when the DM asks): {{ selectedActionDetail.attribute }} + {{ selectedActionDetail.skill }}.
               </p>
               <p class="text-sm">{{ selectedActionDetail.successRule }}</p>
             </div>
           </div>
-          <div v-else-if="selectedSkillDetail || selectedAttributeDetail" class="alert info">
+          <div v-else-if="actionMode === 'stat-check' && selectedStatDetail" class="alert info">
             <div>
-              <strong>{{ selectedSkillDetail?.actionText ?? selectedAttributeDetail?.actionText }}</strong>
-              <p class="text-sm">
-                Suggested roll: {{ selectedSkillDetail?.rollSummary ?? selectedAttributeDetail?.rollSummary }}.
-              </p>
+              <strong>{{ selectedStatDetail.actionText }}</strong>
+              <p class="text-sm muted">Expected check: {{ selectedStatDetail.rollSummary }}.</p>
             </div>
           </div>
 
-          <RulesetDiceRoller
-            v-if="rollContext"
-            v-model="rollResult"
-            :context="rollContext"
-          />
-
-          <DamageRollRoller
-            v-if="showDamageRoll && effectiveActionRoll?.damageRoll && rulesetDefinition"
-            v-model="damageRollResult"
-            :damage-roll="effectiveActionRoll.damageRoll"
-            :definition="rulesetDefinition"
-            :attributes="playerAttributes"
-          />
+          <div class="alert info" style="font-size: 0.85rem; padding: 0.5rem 0.75rem;">
+            The DM will prompt you to roll once they review your action.
+          </div>
 
           <ActionTargetPicker
             ref="actionTargetPickerRef"
@@ -478,8 +550,8 @@ async function submitAction() {
         </form>
       </div>
 
-      <!-- Pending actions (withdraw) -->
-      <div v-if="pendingPlayerActions.length" class="panel">
+      <!-- Pending actions (withdraw) — exploration only; combat shows these in the turn overlay -->
+      <div v-if="!isCombat && pendingPlayerActions.length" class="panel">
         <div class="panel-title">
           <div>
             <h2>Your Pending Actions</h2>
@@ -541,6 +613,7 @@ async function submitAction() {
           >
             <span class="initiative-order">{{ idx + 1 }}</span>
             <span class="initiative-name">{{ entry.combatantName }}</span>
+            <span v-if="entry.initiativeScore" class="initiative-score text-sm">{{ entry.initiativeScore }}</span>
             <span v-if="entry.combatantId === state.character?.id" class="badge active" style="font-size: 0.65rem; padding: 0.1rem 0.4rem;">You</span>
           </li>
         </ul>

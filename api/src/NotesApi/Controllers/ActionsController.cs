@@ -161,6 +161,7 @@ public class ActionsController : ControllerBase
     {
         var action = await _db.ActionRequests
             .Include(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Ruleset)
+            .Include(a => a.Session).ThenInclude(s => s.InitiativeEntries)
             .Include(a => a.Resolution)
             .Include(a => a.RollPrompts)
             .FirstOrDefaultAsync(a => a.Id == actionId);
@@ -184,7 +185,8 @@ public class ActionsController : ControllerBase
         var outcome = ActionOutcomeResolver.Resolve(
             action.Session.Game.Ruleset.DefinitionJson,
             action.ActionKey,
-            action.Description);
+            action.Description,
+            action.RollPrompts);
 
         var now = DateTime.UtcNow;
         action.Status = ActionStatus.Published;
@@ -214,10 +216,14 @@ public class ActionsController : ControllerBase
             await ApplyStatChangeAsync(action.Session.GameId, statChange);
         }
 
+        await ApplyThresholdStatusesAsync(action.Session.GameId, statChanges);
+
         foreach (var prompt in action.RollPrompts.Where(p => p.Status == RollPromptStatus.Pending))
         {
             prompt.Status = RollPromptStatus.Cancelled;
         }
+
+        await CombatTurnAdvanceService.TryAdvanceAfterActionAsync(_db, action.Session, action);
 
         Touch(action.Session);
         await _db.SaveChangesAsync();
@@ -231,6 +237,7 @@ public class ActionsController : ControllerBase
     {
         var action = await _db.ActionRequests
             .Include(a => a.Session).ThenInclude(s => s.Game)
+            .Include(a => a.Session).ThenInclude(s => s.InitiativeEntries)
             .Include(a => a.Resolution)
             .Include(a => a.RollPrompts)
             .FirstOrDefaultAsync(a => a.Id == actionId);
@@ -277,6 +284,8 @@ public class ActionsController : ControllerBase
         {
             prompt.Status = RollPromptStatus.Cancelled;
         }
+
+        await CombatTurnAdvanceService.TryAdvanceAfterActionAsync(_db, action.Session, action);
 
         Touch(action.Session);
         await _db.SaveChangesAsync();
@@ -395,12 +404,14 @@ public class ActionsController : ControllerBase
                 TargetCharacterId = character.Id,
                 TargetCharacter = character,
                 PromptLabel = string.IsNullOrWhiteSpace(item.PromptLabel) ? null : item.PromptLabel.Trim(),
+                GuidanceText = string.IsNullOrWhiteSpace(item.GuidanceText) ? null : item.GuidanceText.Trim(),
                 CheckMode = checkMode,
                 ResultKind = resultKind,
                 ActionKey = string.IsNullOrWhiteSpace(item.ActionKey) ? null : item.ActionKey.Trim(),
                 SkillKey = string.IsNullOrWhiteSpace(item.SkillKey) ? null : item.SkillKey.Trim(),
                 AttributeKey = string.IsNullOrWhiteSpace(item.AttributeKey) ? null : item.AttributeKey.Trim(),
                 CustomCheckText = string.IsNullOrWhiteSpace(item.CustomCheckText) ? null : item.CustomCheckText.Trim(),
+                Dc = item.Dc,
                 Status = RollPromptStatus.Pending,
                 CreatedAt = now,
             };
@@ -414,6 +425,155 @@ public class ActionsController : ControllerBase
         return Ok(created.Select(p => ControllerHelpers.ToRollPromptResponse(p, action)));
     }
 
+    [HttpPost("actions/{actionId:guid}/roll-prompts/start-chain")]
+    [Authorize]
+    public async Task<ActionResult<RollPromptResponse>> StartRollChain(Guid actionId)
+    {
+        var action = await _db.ActionRequests
+            .Include(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Ruleset)
+            .Include(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Characters)
+            .Include(a => a.RollPrompts)
+            .FirstOrDefaultAsync(a => a.Id == actionId);
+
+        if (action is null || action.Session?.Game is null)
+        {
+            return NotFound();
+        }
+
+        if (!IsDm(action.Session.Game.DmUserId))
+        {
+            return NotFound();
+        }
+
+        if (action.Status != ActionStatus.Pending)
+        {
+            return BadRequest(new { errors = new[] { "Roll chains can only be started for pending actions." } });
+        }
+
+        if (action.RollPrompts.Any(p => p.Status == RollPromptStatus.Pending))
+        {
+            return BadRequest(new { errors = new[] { "A roll prompt is already waiting for this action." } });
+        }
+
+        var chain = RollChainCatalog.GetChain(action.Session.Game.Ruleset.DefinitionJson, action.ActionKey);
+        if (chain.Count == 0)
+        {
+            return BadRequest(new { errors = new[] { "This action has no roll chain defined in the ruleset." } });
+        }
+
+        var now = DateTime.UtcNow;
+        var prompt = RollChainOrchestrator.TryCreateFirstPrompt(
+            action,
+            action.Session.Game,
+            action.Session.Game.Ruleset.DefinitionJson,
+            now);
+
+        if (prompt is null)
+        {
+            return BadRequest(new { errors = new[] { "Could not start the roll chain — the acting player character was not found." } });
+        }
+
+        _db.ActionRollPrompts.Add(prompt);
+        Touch(action.Session);
+        await _db.SaveChangesAsync();
+
+        return Ok(ControllerHelpers.ToRollPromptResponse(prompt, action));
+    }
+
+    /// <summary>
+    /// DM rolls directly on behalf of the player character, bypassing the player prompt flow.
+    /// Creates a completed roll prompt with an optional DC check for auto pass/fail resolution.
+    /// </summary>
+    [HttpPost("actions/{actionId:guid}/roll-prompts/dm-roll")]
+    [Authorize]
+    public async Task<ActionResult<RollPromptResponse>> DmRollForAction(Guid actionId, DmRollRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.RollSummary))
+        {
+            return BadRequest(new { errors = new[] { "Roll result is required." } });
+        }
+
+        var action = await _db.ActionRequests
+            .Include(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Ruleset)
+            .Include(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Characters)
+            .Include(a => a.RollPrompts)
+            .FirstOrDefaultAsync(a => a.Id == actionId);
+
+        if (action is null || action.Session?.Game is null)
+        {
+            return NotFound();
+        }
+
+        if (!IsDm(action.Session.Game.DmUserId))
+        {
+            return Forbid();
+        }
+
+        if (action.Status != ActionStatus.Pending)
+        {
+            return BadRequest(new { errors = new[] { "Can only roll for pending actions." } });
+        }
+
+        if (action.RollPrompts.Any(p => p.Status == RollPromptStatus.Pending))
+        {
+            return BadRequest(new { errors = new[] { "Cancel the outstanding roll prompt before rolling directly." } });
+        }
+
+        // Determine target character — prefer the actor, fall back to first character in session.
+        var targetCharacter = action.ActorCharacterId.HasValue
+            ? action.Session.Game.Characters.FirstOrDefault(c => c.Id == action.ActorCharacterId.Value)
+            : action.Session.Game.Characters.FirstOrDefault();
+
+        if (targetCharacter is null)
+        {
+            return BadRequest(new { errors = new[] { "No player character found to attribute this roll to." } });
+        }
+
+        var rollSummary = request.RollSummary.Trim();
+        var now = DateTime.UtcNow;
+
+        // Resolve auto outcome from DC if provided.
+        string? autoResolveOutcome = null;
+        if (request.Dc.HasValue)
+        {
+            var rollData = RollResultParser.TryParseJson(request.RollResultJson)
+                ?? RollResultParser.ParseFromSummary(rollSummary, null, RollPromptResultKind.PassFail);
+            var primary = RollResultParser.GetPrimaryValue(rollData, RollPromptResultKind.PassFail, rollSummary);
+            if (primary.HasValue)
+            {
+                autoResolveOutcome = primary.Value >= request.Dc.Value
+                    ? RollChainOutcomes.Success
+                    : RollChainOutcomes.Failure;
+            }
+        }
+
+        var prompt = new ActionRollPrompt
+        {
+            Id = Guid.NewGuid(),
+            ActionRequestId = action.Id,
+            TargetCharacterId = targetCharacter.Id,
+            TargetCharacter = targetCharacter,
+            CheckMode = "Action",
+            ResultKind = RollPromptResultKind.PassFail,
+            ActionKey = action.ActionKey,
+            PromptLabel = "DM roll",
+            Dc = request.Dc,
+            DmRolled = true,
+            RollSummary = rollSummary,
+            RollResultJson = string.IsNullOrWhiteSpace(request.RollResultJson) ? null : request.RollResultJson.Trim(),
+            AutoResolveOutcome = autoResolveOutcome,
+            Status = RollPromptStatus.Completed,
+            CreatedAt = now,
+            CompletedAt = now,
+        };
+
+        _db.ActionRollPrompts.Add(prompt);
+        Touch(action.Session);
+        await _db.SaveChangesAsync();
+
+        return Ok(ControllerHelpers.ToRollPromptResponse(prompt, action));
+    }
+
     [HttpPut("roll-prompts/{promptId:guid}/submit")]
     public async Task<ActionResult<RollPromptResponse>> SubmitRollPrompt(Guid promptId, SubmitRollPromptRequest request)
     {
@@ -423,7 +583,10 @@ public class ActionsController : ControllerBase
         }
 
         var actionPrompt = await _db.ActionRollPrompts
-            .Include(p => p.ActionRequest).ThenInclude(a => a.Session).ThenInclude(s => s.Game)
+            .Include(p => p.ActionRequest).ThenInclude(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Ruleset)
+            .Include(p => p.ActionRequest).ThenInclude(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Characters)
+            .Include(p => p.ActionRequest).ThenInclude(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
+            .Include(p => p.ActionRequest).ThenInclude(a => a.RollPrompts)
             .Include(p => p.TargetCharacter)
             .FirstOrDefaultAsync(p => p.Id == promptId);
 
@@ -451,13 +614,50 @@ public class ActionsController : ControllerBase
             }
 
             var now = DateTime.UtcNow;
-            actionPrompt.RollSummary = request.RollSummary.Trim();
+            var rollSummary = request.RollSummary.Trim();
+            actionPrompt.RollSummary = rollSummary;
+            actionPrompt.RollResultJson = string.IsNullOrWhiteSpace(request.RollResultJson)
+                ? null
+                : request.RollResultJson.Trim();
             actionPrompt.Status = RollPromptStatus.Completed;
             actionPrompt.CompletedAt = now;
+
+            if (request.Pushed)
+            {
+                await ApplyPushStressAsync(actionPrompt.TargetCharacter, actionPrompt.ActionRequest.Session.Game.Ruleset.DefinitionJson);
+            }
+
+            // If the DM set a DC and this prompt has no roll-chain step, auto-resolve pass/fail.
+            if (actionPrompt.Dc.HasValue && string.IsNullOrWhiteSpace(actionPrompt.ChainStepKey)
+                && actionPrompt.AutoResolveOutcome is null)
+            {
+                var rollData = RollResultParser.TryParseJson(actionPrompt.RollResultJson)
+                    ?? RollResultParser.ParseFromSummary(rollSummary, null, actionPrompt.ResultKind);
+                var primary = RollResultParser.GetPrimaryValue(rollData, actionPrompt.ResultKind, rollSummary);
+                if (primary.HasValue)
+                {
+                    actionPrompt.AutoResolveOutcome = primary.Value >= actionPrompt.Dc.Value
+                        ? RollChainOutcomes.Success
+                        : RollChainOutcomes.Failure;
+                }
+            }
+
+            var chainResult = await RollChainOrchestrator.ProcessCompletedPromptAsync(
+                _db,
+                actionPrompt,
+                actionPrompt.ActionRequest,
+                actionPrompt.ActionRequest.Session.Game,
+                actionPrompt.ActionRequest.Session.Game.Ruleset.DefinitionJson,
+                rollSummary,
+                actionPrompt.RollResultJson,
+                now);
+
             Touch(actionPrompt.ActionRequest.Session);
             await _db.SaveChangesAsync();
 
-            return Ok(ControllerHelpers.ToRollPromptResponse(actionPrompt, actionPrompt.ActionRequest));
+            var response = ControllerHelpers.ToRollPromptResponse(actionPrompt, actionPrompt.ActionRequest);
+            response.AutoResolveMessage = chainResult.AutoResolveMessage;
+            return Ok(response);
         }
 
         var sessionPrompt = await _db.SessionRollPrompts
@@ -488,15 +688,18 @@ public class ActionsController : ControllerBase
         }
 
         var completedAt = DateTime.UtcNow;
-        var rollSummary = request.RollSummary.Trim();
+        var sessionRollSummary = request.RollSummary.Trim();
         var queuedAction = SessionRollPromptQueueService.CreatePendingAction(
             sessionPrompt.Session,
             sessionPrompt,
             sessionPrompt.Session.Game.Ruleset.DefinitionJson,
-            rollSummary,
+            sessionRollSummary,
             completedAt);
 
-        sessionPrompt.RollSummary = rollSummary;
+        sessionPrompt.RollSummary = sessionRollSummary;
+        sessionPrompt.RollResultJson = string.IsNullOrWhiteSpace(request.RollResultJson)
+            ? null
+            : request.RollResultJson.Trim();
         sessionPrompt.Status = RollPromptStatus.Completed;
         sessionPrompt.CompletedAt = completedAt;
         sessionPrompt.ActionRequestId = queuedAction.Id;
@@ -618,12 +821,53 @@ public class ActionsController : ControllerBase
                 RulesetCharacterData.ApplyNestedDeltas(character, "attributes", statChange.AttributeDeltas);
             if (statChange.InventoryDeltas is { Count: > 0 })
                 CharacterInventory.ApplyDeltas(character, statChange.InventoryDeltas);
+            if (statChange.AddStatusKeys is { Count: > 0 } || statChange.RemoveStatusKeys is { Count: > 0 })
+                RulesetCharacterData.ApplyStatusChanges(character, statChange.AddStatusKeys, statChange.RemoveStatusKeys);
         }
         else if (statChange.TargetType.Equals("NpcOrMonster", StringComparison.OrdinalIgnoreCase))
         {
             var npc = await _db.NpcsAndMonsters.FirstOrDefaultAsync(n => n.GameId == gameId && n.Id == statChange.TargetId);
             if (npc is null) return;
             ApplyHealthAndArmor(npc, statChange);
+            if (statChange.AddStatusKeys is { Count: > 0 } || statChange.RemoveStatusKeys is { Count: > 0 })
+                RulesetCharacterData.ApplyStatusChanges(npc, statChange.AddStatusKeys, statChange.RemoveStatusKeys);
+        }
+    }
+
+    /// <summary>Alien RPG push: add +1 stress when a player pushes a roll.</summary>
+    private static Task ApplyPushStressAsync(Character character, string definitionJson)
+    {
+        var definition = JsonSerializer.Deserialize<RulesetDefinition>(definitionJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        if (definition?.DiceRollerKey != "d6-pool")
+        {
+            return Task.CompletedTask;
+        }
+
+        RulesetCharacterData.ApplyGameValues(character, null, new Dictionary<string, int> { ["stress"] = 1 });
+        character.UpdatedAt = DateTime.UtcNow;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// After stat changes are applied, automatically add threshold-based statuses
+    /// (e.g. "broken" when a character reaches 0 HP) based on the ruleset definition.
+    /// </summary>
+    private async Task ApplyThresholdStatusesAsync(Guid gameId, IEnumerable<StatChangeRequest> statChanges)
+    {
+        foreach (var change in statChanges)
+        {
+            if (change.TargetType.Equals("Character", StringComparison.OrdinalIgnoreCase)
+                && (change.HealthDelta.HasValue || change.SetHealth.HasValue))
+            {
+                var character = await _db.Characters.FirstOrDefaultAsync(c => c.GameId == gameId && c.Id == change.TargetId);
+                if (character is null) continue;
+
+                // Auto-apply "broken" when HP drops to 0; auto-remove when HP is restored.
+                if (character.Health <= 0)
+                    RulesetCharacterData.ApplyStatusChanges(character, ["broken"], null);
+                else
+                    RulesetCharacterData.ApplyStatusChanges(character, null, ["broken"]);
+            }
         }
     }
 

@@ -5,7 +5,7 @@ using NotesApi.Models;
 namespace NotesApi.Rulesets;
 
 /// <summary>
-/// Derives Pass/Fail from the player's initial roll line in an action description.
+/// Derives Pass/Fail from completed roll prompts, or legacy roll lines in the action description.
 /// </summary>
 public static class ActionOutcomeResolver
 {
@@ -39,7 +39,30 @@ public static class ActionOutcomeResolver
         @"→\s*total\s+\d+",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    public static ActionOutcome? Resolve(string definitionJson, string? actionKey, string? description)
+    public static ActionOutcome? Resolve(
+        string definitionJson,
+        string? actionKey,
+        string? description,
+        IEnumerable<ActionRollPrompt>? rollPrompts = null)
+    {
+        var promptRoll = rollPrompts?
+            .Where(p => p.Status == RollPromptStatus.Completed && !string.IsNullOrWhiteSpace(p.RollSummary))
+            .Where(p => !string.Equals(p.ResultKind, RollPromptResultKind.Total, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(p => p.CompletedAt ?? p.CreatedAt)
+            .FirstOrDefault();
+
+        if (promptRoll is not null)
+        {
+            return Resolve(
+                definitionJson,
+                promptRoll.ActionKey ?? actionKey,
+                $"🎲 Roll: {promptRoll.RollSummary}");
+        }
+
+        return ResolveFromDescription(definitionJson, actionKey, description);
+    }
+
+    private static ActionOutcome? ResolveFromDescription(string definitionJson, string? actionKey, string? description)
     {
         var rollLine = ExtractRollLine(description);
         if (string.IsNullOrWhiteSpace(rollLine))

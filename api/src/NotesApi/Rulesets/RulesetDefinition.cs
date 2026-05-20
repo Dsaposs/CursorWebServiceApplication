@@ -44,6 +44,34 @@ public class RulesetDefinition
     /// </summary>
     [JsonPropertyName("rollMechanics")]
     public RulesetRollMechanicsDefinition? RollMechanics { get; set; }
+
+    /// <summary>
+    /// Status conditions available in this ruleset (e.g. stunned, panicking, broken).
+    /// The DM can apply and remove these during action resolution.
+    /// </summary>
+    [JsonPropertyName("statusEffects")]
+    public IEnumerable<RulesetStatusEffectDefinition> StatusEffects { get; set; } = Array.Empty<RulesetStatusEffectDefinition>();
+
+    /// <summary>How initiative order is determined when combat starts.</summary>
+    [JsonPropertyName("initiative")]
+    public RulesetInitiativeDefinition? Initiative { get; set; }
+}
+
+/// <summary>Rules for rolling initiative at the start of combat.</summary>
+public class RulesetInitiativeDefinition
+{
+    [JsonPropertyName("attribute")]
+    public string Attribute { get; set; } = string.Empty;
+
+    [JsonPropertyName("skill")]
+    public string Skill { get; set; } = string.Empty;
+
+    /// <summary>Optional tie-breaker dice notation (e.g. "1d6", "1d8").</summary>
+    [JsonPropertyName("tieBreakerDice")]
+    public string TieBreakerDice { get; set; } = "1d6";
+
+    [JsonPropertyName("guidanceText")]
+    public string? GuidanceText { get; set; }
 }
 
 public class RulesetDiceDefinition
@@ -180,6 +208,10 @@ public class RulesetActionDefinition
 
     [JsonPropertyName("roll")]
     public RulesetRollDefinition Roll { get; set; } = new();
+
+    /// <summary>Multi-step roll sequence (attack → damage, etc.) driven by JSON.</summary>
+    [JsonPropertyName("rollChain")]
+    public IEnumerable<RulesetRollChainStepDefinition> RollChain { get; set; } = Array.Empty<RulesetRollChainStepDefinition>();
 }
 
 public class RulesetItemDefinition
@@ -328,4 +360,28 @@ public class RulesetNpcTemplateDefinition
 
     [JsonPropertyName("defaultStats")]
     public Dictionary<string, object> DefaultStats { get; set; } = new();
+}
+
+/// <summary>A named condition that can be applied to characters and NPCs during a session.</summary>
+public class RulesetStatusEffectDefinition
+{
+    [JsonPropertyName("key")]
+    public string Key { get; set; } = string.Empty;
+
+    [JsonPropertyName("label")]
+    public string Label { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    /// <summary>True if this status is harmful (renders as red/orange badge); false for buffs.</summary>
+    [JsonPropertyName("isNegative")]
+    public bool IsNegative { get; set; } = true;
+
+    /// <summary>
+    /// When set, the status is automatically applied when a character's HP reaches this threshold.
+    /// Null means no automatic threshold. Use 0 for "broken at zero HP".
+    /// </summary>
+    [JsonPropertyName("autoApplyAtHpThreshold")]
+    public int? AutoApplyAtHpThreshold { get; set; }
 }

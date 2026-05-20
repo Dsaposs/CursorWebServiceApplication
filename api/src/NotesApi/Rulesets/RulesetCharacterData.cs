@@ -56,6 +56,85 @@ public static class RulesetCharacterData
         character.UpdatedAt = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// Adds and removes status effect keys on a Character. Duplicates are ignored;
+    /// removing a key that is not present is a no-op.
+    /// </summary>
+    public static void ApplyStatusChanges(
+        Character character,
+        IEnumerable<string>? addKeys,
+        IEnumerable<string>? removeKeys)
+    {
+        var add = addKeys?.ToList() ?? [];
+        var remove = removeKeys?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+
+        if (add.Count == 0 && remove.Count == 0)
+        {
+            return;
+        }
+
+        var current = ParseStatusKeys(character.StatusEffectsJson);
+        foreach (var key in remove)
+        {
+            current.Remove(key);
+        }
+        foreach (var key in add)
+        {
+            current.Add(key);
+        }
+
+        character.StatusEffectsJson = JsonSerializer.Serialize(current.ToList(), JsonOptions);
+        character.UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Adds and removes status effect keys on an NPC or Monster.
+    /// </summary>
+    public static void ApplyStatusChanges(
+        NotesApi.Models.NpcOrMonster npc,
+        IEnumerable<string>? addKeys,
+        IEnumerable<string>? removeKeys)
+    {
+        var add = addKeys?.ToList() ?? [];
+        var remove = removeKeys?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+
+        if (add.Count == 0 && remove.Count == 0)
+        {
+            return;
+        }
+
+        var current = ParseStatusKeys(npc.StatusEffectsJson);
+        foreach (var key in remove)
+        {
+            current.Remove(key);
+        }
+        foreach (var key in add)
+        {
+            current.Add(key);
+        }
+
+        npc.StatusEffectsJson = JsonSerializer.Serialize(current.ToList(), JsonOptions);
+        npc.UpdatedAt = DateTime.UtcNow;
+    }
+
+    private static HashSet<string> ParseStatusKeys(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "[]")
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        try
+        {
+            var list = JsonSerializer.Deserialize<List<string>>(json) ?? [];
+            return new HashSet<string>(list, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
     public static string MergeLegacyStats(string rulesetDataJson, string attributesJson, string skillsJson)
     {
         var root = ParseRoot(rulesetDataJson);

@@ -70,6 +70,7 @@ public static partial class ControllerHelpers
         Armor = character.Armor,
         InventoryJson = character.InventoryJson,
         RulesetDataJson = character.RulesetDataJson,
+        StatusEffectsJson = character.StatusEffectsJson,
         ClassKey = character.ClassKey,
     };
 
@@ -82,6 +83,7 @@ public static partial class ControllerHelpers
         Health = npc.Health,
         Armor = npc.Armor,
         StatBlockJson = npc.StatBlockJson,
+        StatusEffectsJson = npc.StatusEffectsJson,
         Visibility = visibility,
     };
 
@@ -143,6 +145,7 @@ public static partial class ControllerHelpers
         AdditionalActions = action.Resolution?.AdditionalActions,
         Outcome = action.Resolution?.Outcome?.ToString(),
         StatChangesJson = action.Resolution?.StatChangesJson ?? "[]",
+        PendingChainEffectsJson = action.PendingChainEffectsJson ?? "[]",
         FollowUpRolls = action.RollPrompts
             .Where(p => p.Status == RollPromptStatus.Completed)
             .OrderBy(p => p.CreatedAt)
@@ -188,6 +191,7 @@ public static partial class ControllerHelpers
         CombatantId = entry.CombatantId,
         CombatantName = entry.CombatantName,
         SortOrder = entry.SortOrder,
+        InitiativeScore = entry.InitiativeScore,
         IsCurrentTurn = entry.IsCurrentTurn,
     };
 
@@ -240,6 +244,7 @@ public static partial class ControllerHelpers
         TargetCharacterId = prompt.TargetCharacterId,
         TargetCharacterName = prompt.TargetCharacter?.Name ?? string.Empty,
         PromptLabel = prompt.PromptLabel,
+        GuidanceText = prompt.GuidanceText,
         CheckMode = prompt.CheckMode,
         ResultKind = prompt.ResultKind,
         ActionKey = prompt.ActionKey,
@@ -248,6 +253,11 @@ public static partial class ControllerHelpers
         CustomCheckText = prompt.CustomCheckText,
         Status = prompt.Status.ToString(),
         RollSummary = prompt.RollSummary,
+        RollResultJson = prompt.RollResultJson,
+        ChainStepKey = prompt.ChainStepKey,
+        AutoResolveOutcome = prompt.AutoResolveOutcome,
+        Dc = prompt.Dc,
+        DmRolled = prompt.DmRolled,
         CreatedAt = prompt.CreatedAt,
         CompletedAt = prompt.CompletedAt,
     };
@@ -261,6 +271,7 @@ public static partial class ControllerHelpers
         TargetCharacterId = prompt.TargetCharacterId,
         TargetCharacterName = prompt.TargetCharacter?.Name ?? string.Empty,
         PromptLabel = prompt.PromptLabel,
+        GuidanceText = prompt.GuidanceText,
         CheckMode = prompt.CheckMode,
         ResultKind = prompt.ResultKind,
         ActionKey = prompt.ActionKey,
@@ -269,6 +280,7 @@ public static partial class ControllerHelpers
         CustomCheckText = prompt.CustomCheckText,
         Status = prompt.Status.ToString(),
         RollSummary = prompt.RollSummary,
+        RollResultJson = prompt.RollResultJson,
         ResultActionRequestId = prompt.ActionRequestId,
         CreatedAt = prompt.CreatedAt,
         CompletedAt = prompt.CompletedAt,

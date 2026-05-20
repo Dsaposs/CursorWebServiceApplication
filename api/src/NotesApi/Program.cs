@@ -610,8 +610,131 @@ static async Task ApplySchemaUpdatesAsync(ApplicationDbContext db)
         await dropSkills.ExecuteNonQueryAsync();
     }
 
+    var hasCharacterStatusEffectsJson = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('Characters')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "StatusEffectsJson")
+            {
+                hasCharacterStatusEffectsJson = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasCharacterStatusEffectsJson)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"Characters\" ADD COLUMN \"StatusEffectsJson\" TEXT NOT NULL DEFAULT '[]'";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    var hasNpcStatusEffectsJson = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('NpcsAndMonsters')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "StatusEffectsJson")
+            {
+                hasNpcStatusEffectsJson = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasNpcStatusEffectsJson)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"NpcsAndMonsters\" ADD COLUMN \"StatusEffectsJson\" TEXT NOT NULL DEFAULT '[]'";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    var hasActionPromptGuidanceText = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('ActionRollPrompts')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "GuidanceText")
+            {
+                hasActionPromptGuidanceText = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasActionPromptGuidanceText)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"ActionRollPrompts\" ADD COLUMN \"GuidanceText\" TEXT NULL";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    var hasSessionPromptGuidanceText = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = "PRAGMA table_info('SessionRollPrompts')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == "GuidanceText")
+            {
+                hasSessionPromptGuidanceText = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasSessionPromptGuidanceText)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE \"SessionRollPrompts\" ADD COLUMN \"GuidanceText\" TEXT NULL";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    await EnsureColumnAsync(connection, "ActionRequests", "RollChainStateJson", "TEXT NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "PendingChainEffectsJson", "TEXT NOT NULL DEFAULT '[]'");
+    await EnsureColumnAsync(connection, "ActionRollPrompts", "RollResultJson", "TEXT NULL");
+    await EnsureColumnAsync(connection, "ActionRollPrompts", "ChainStepKey", "TEXT NULL");
+    await EnsureColumnAsync(connection, "ActionRollPrompts", "AutoResolveOutcome", "TEXT NULL");
+    await EnsureColumnAsync(connection, "ActionRollPrompts", "Dc", "INTEGER NULL");
+    await EnsureColumnAsync(connection, "ActionRollPrompts", "DmRolled", "INTEGER NOT NULL DEFAULT 0");
+    await EnsureColumnAsync(connection, "SessionRollPrompts", "RollResultJson", "TEXT NULL");
+    await EnsureColumnAsync(connection, "InitiativeEntries", "InitiativeScore", "INTEGER NOT NULL DEFAULT 0");
+
     if (!wasOpen)
         await connection.CloseAsync();
+}
+
+static async Task EnsureColumnAsync(System.Data.Common.DbConnection connection, string table, string column, string sqlType)
+{
+    var hasColumn = false;
+    using (var pragma = connection.CreateCommand())
+    {
+        pragma.CommandText = $"PRAGMA table_info('{table}')";
+        using var reader = await pragma.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader["name"]?.ToString() == column)
+            {
+                hasColumn = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasColumn)
+    {
+        using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {sqlType}";
+        await alter.ExecuteNonQueryAsync();
+    }
 }
 
 static async Task MigrateLegacyCharacterStatsAsync(System.Data.Common.DbConnection connection)

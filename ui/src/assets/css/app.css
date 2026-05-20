@@ -1160,6 +1160,80 @@ select option {
   font-variant-numeric: tabular-nums;
 }
 
+/* ─── Status effects (DmStatChangePanel) ─────────────────── */
+
+.status-effects-grid {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.status-effect-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.status-effect-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  min-width: 7rem;
+  text-transform: capitalize;
+  cursor: default;
+}
+
+.status-effect-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.status-preview {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.status-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+/* ─── Status badges on character sheets ──────────────────── */
+
+.status-effects-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.1rem 0;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 99px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid currentColor;
+}
+
+.status-badge.negative {
+  color: var(--danger);
+  background: var(--danger-dim, rgba(214, 0, 0, 0.12));
+}
+
+.status-badge.positive {
+  color: var(--success);
+  background: var(--success-dim, rgba(0, 200, 100, 0.12));
+}
+
 /* ─── Action cards ──────────────────────────────────────── */
 
 .action-card {
@@ -1537,6 +1611,31 @@ select option {
   box-shadow: var(--accent-glow);
 }
 
+/* When expanded, stack header + body vertically */
+.initiative-item.current-turn-expanded {
+  display: block;
+  padding: 0;
+}
+
+.initiative-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 0.9rem;
+}
+
+.initiative-turn-body {
+  border-top: 1px solid var(--border);
+  padding: 1rem 1rem 1rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.turn-inline-body {
+  display: grid;
+  gap: 0.6rem;
+}
+
 .initiative-order {
   font-size: 0.75rem;
   font-weight: 800;
@@ -1868,7 +1967,7 @@ select option {
   position: fixed;
   bottom: 1.5rem;
   right: 1.5rem;
-  z-index: 9999;
+  z-index: 10100;
   display: grid;
   gap: 0.5rem;
   pointer-events: none;
@@ -2249,6 +2348,105 @@ tr:hover td { background: var(--panel-alt); }
   border-top: 1px solid var(--border);
 }
 
+/* DM action roll panel (pending action resolution) */
+.dm-action-roll-panel {
+  margin: 0.75rem 0;
+  padding: 0.85rem 1rem;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.dm-action-roll-panel.nested {
+  box-shadow: none;
+}
+
+.dm-action-roll-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.dm-action-roll-header h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+
+.dm-action-roll-hint {
+  margin: 0;
+  color: var(--muted-light);
+}
+
+.dm-action-roll-dc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.dm-action-roll-dc-row label {
+  white-space: nowrap;
+  color: var(--muted-light);
+}
+
+.input-small {
+  width: 4.5rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.input-small:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.dm-roll-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+
+.dm-manual-roll-form {
+  margin-top: 0.65rem;
+  padding: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.dm-manual-roll-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted-light);
+}
+
+.dm-manual-roll-btns {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.dm-action-roll-primary {
+  margin-bottom: 0.75rem;
+}
+
+.dm-action-roll-primary .btn {
+  margin-bottom: 0.35rem;
+}
+
 /* DM follow-up roll prompts */
 .follow-up-roll-panel {
   display: block;
@@ -2470,17 +2668,46 @@ tr:hover td { background: var(--panel-alt); }
   cursor: pointer;
 }
 
-/* Player roll prompt overlay */
+/* Player combat focus & roll overlays (above sticky topbar, below toasts) */
+.player-focus-overlay,
 .roll-prompt-overlay {
   position: fixed;
   inset: 0;
-  z-index: 2000;
+  z-index: 10050;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
   background: rgba(13, 15, 29, 0.94);
   backdrop-filter: blur(6px);
+}
+
+.player-focus-card {
+  width: min(100%, 32rem);
+  max-height: min(92vh, 720px);
+  overflow-y: auto;
+}
+
+.player-combat-action-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.player-combat-waiting {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.player-combat-pending-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .roll-prompt-card {
@@ -2513,6 +2740,133 @@ tr:hover td { background: var(--panel-alt); }
 .roll-prompt-sub {
   margin: 0;
   color: var(--muted-light);
+}
+
+.roll-prompt-guidance {
+  margin: 0.6rem 0 0;
+  padding: 0.55rem 0.75rem;
+  background: var(--panel-alt, rgba(255,255,255,0.04));
+  border-left: 3px solid var(--accent, #60a5fa);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink-bright, #f8fafc);
+}
+
+.roll-prompt-push {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  font-size: 0.88rem;
+  color: var(--warn, #d08000);
+}
+
+.follow-up-roll-chain-start {
+  margin-bottom: 0.75rem;
+}
+
+.dm-roll-breakdown {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.dm-roll-auto-resolve {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+}
+
+.dm-roll-dice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.dm-roll-die-group {
+  padding: 0.35rem 0.5rem;
+  background: var(--surface);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.dm-roll-die-group.stress {
+  border-color: var(--warn, #d08000);
+}
+
+.dm-roll-die-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted-light);
+  margin-bottom: 0.25rem;
+}
+
+.dm-roll-die-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.dm-roll-die-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.25rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  background: var(--panel);
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 4px;
+}
+
+.dm-roll-primary {
+  margin: 0.4rem 0 0;
+}
+
+.roll-prompt-badge.combat-turn {
+  background: var(--danger-dim, rgba(214, 24, 0, 0.15));
+  color: var(--danger, #d61800);
+  border: 1px solid var(--danger, #d61800);
+}
+
+.turn-prompt-card {
+  max-width: 28rem;
+}
+
+.turn-prompt-actions {
+  margin-top: 0.75rem;
+}
+
+.session-screen-main--dimmed {
+  pointer-events: none;
+  user-select: none;
+}
+
+.session-screen-main--dimmed .topbar {
+  pointer-events: auto;
+  user-select: auto;
+}
+
+.combat-banner {
+  padding: 0.65rem 1rem;
+  background: var(--danger-dim, rgba(214, 24, 0, 0.12));
+  border: 1px solid var(--danger, #d61800);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--ink-bright, #f8fafc);
+  font-size: 0.9rem;
+}
+
+.initiative-score {
+  margin-left: 0.35rem;
+  color: var(--muted-light);
+  font-variant-numeric: tabular-nums;
 }
 
 .roll-prompt-submit {

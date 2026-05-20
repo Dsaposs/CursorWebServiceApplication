@@ -64,6 +64,7 @@ public class CharacterResponse
     public int Armor { get; set; }
     public string InventoryJson { get; set; } = "[]";
     public string RulesetDataJson { get; set; } = "{}";
+    public string StatusEffectsJson { get; set; } = "[]";
     public string ClassKey { get; set; } = string.Empty;
 }
 
@@ -76,6 +77,7 @@ public class NpcResponse
     public int Health { get; set; }
     public int Armor { get; set; }
     public string StatBlockJson { get; set; } = "{}";
+    public string StatusEffectsJson { get; set; } = "[]";
     public string Visibility { get; set; } = "Hidden";
 }
 
@@ -143,6 +145,7 @@ public class RollPromptResponse
     public Guid TargetCharacterId { get; set; }
     public string TargetCharacterName { get; set; } = string.Empty;
     public string? PromptLabel { get; set; }
+    public string? GuidanceText { get; set; }
     public string CheckMode { get; set; } = string.Empty;
     public string ResultKind { get; set; } = string.Empty;
     public string? ActionKey { get; set; }
@@ -151,7 +154,13 @@ public class RollPromptResponse
     public string? CustomCheckText { get; set; }
     public string Status { get; set; } = string.Empty;
     public string? RollSummary { get; set; }
+    public string? RollResultJson { get; set; }
+    public string? ChainStepKey { get; set; }
+    public string? AutoResolveOutcome { get; set; }
+    public string? AutoResolveMessage { get; set; }
     public Guid? ResultActionRequestId { get; set; }
+    public int? Dc { get; set; }
+    public bool DmRolled { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
 }
@@ -174,6 +183,7 @@ public class ActionQueueItemResponse
     public string? AdditionalActions { get; set; }
     public string? Outcome { get; set; }
     public string StatChangesJson { get; set; } = "[]";
+    public string PendingChainEffectsJson { get; set; } = "[]";
     public IEnumerable<RollPromptResponse> FollowUpRolls { get; set; } = Array.Empty<RollPromptResponse>();
     public Guid? CombatEncounterId { get; set; }
     public int? CombatEncounterSequence { get; set; }
@@ -191,7 +201,24 @@ public class InitiativeEntryResponse
     public Guid CombatantId { get; set; }
     public string CombatantName { get; set; } = string.Empty;
     public int SortOrder { get; set; }
+    public int InitiativeScore { get; set; }
     public bool IsCurrentTurn { get; set; }
+}
+
+public class CombatStartResponse
+{
+    public IEnumerable<InitiativeEntryResponse> Initiative { get; set; } = Array.Empty<InitiativeEntryResponse>();
+    public IEnumerable<InitiativeRollSummaryResponse> Rolls { get; set; } = Array.Empty<InitiativeRollSummaryResponse>();
+    public string? GuidanceText { get; set; }
+}
+
+public class InitiativeRollSummaryResponse
+{
+    public string CombatantType { get; set; } = string.Empty;
+    public Guid CombatantId { get; set; }
+    public string CombatantName { get; set; } = string.Empty;
+    public int Score { get; set; }
+    public string Summary { get; set; } = string.Empty;
 }
 
 public class SessionNoteResponse

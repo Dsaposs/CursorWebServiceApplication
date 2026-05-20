@@ -33,12 +33,18 @@ export function splitActionDescription(description?: string | null): ParsedActio
   const bodyLines: string[] = [];
 
   for (const line of description.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/^suggested roll:/i.test(trimmed)) {
+      bodyLines.push(trimmed);
+      continue;
+    }
     const rollIndex = line.indexOf('🎲 Roll:');
     if (rollIndex >= 0) {
       const rollText = line.slice(rollIndex + '🎲 Roll:'.length).trim();
       if (rollText) rollParts.push(rollText);
-    } else if (line.trim()) {
-      bodyLines.push(line.trim());
+    } else {
+      bodyLines.push(trimmed);
     }
   }
 

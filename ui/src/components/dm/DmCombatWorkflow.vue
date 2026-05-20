@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { InitiativeEntryResponse, NpcResponse } from '~/types/api';
+import type { InitiativeEntryResponse } from '~/types/api';
 
 interface Props {
   isCombat: boolean;
@@ -8,7 +8,7 @@ interface Props {
   displayedInitiative: InitiativeEntryResponse[];
   draggedInitiativeId: string | null;
   dragOverId: string | null;
-  currentTurnNpc: NpcResponse | null;
+  expandedEntryId: string | null;
 }
 
 defineProps<Props>();
@@ -19,7 +19,7 @@ const emit = defineEmits<{
   endCombat: [];
   startDrag: [entryId: string, event: PointerEvent];
   moveKeyboard: [entryId: string, offset: -1 | 1];
-  takeCurrentNpcAction: [npcId: string];
+  activateEntry: [entry: InitiativeEntryResponse];
 }>();
 </script>
 
@@ -28,28 +28,14 @@ const emit = defineEmits<{
     <div class="panel-title">
       <div>
         <h2>Combat</h2>
-        <p class="text-sm">{{ isCombat ? 'Use the handle or arrow keys to change turn order.' : 'All characters and NPCs will be included.' }}</p>
+        <p class="text-sm">{{ isCombat ? 'Drag to reorder. Click Act / Prompt to take a turn.' : 'Rolls initiative for all characters and NPCs per the ruleset.' }}</p>
       </div>
       <div class="btn-row">
-        <button v-if="isCombat && displayedInitiative.length" class="btn sm" type="button" :disabled="isSaving" @click="emit('advanceTurn')">Next Turn →</button>
+        <button v-if="isCombat && displayedInitiative.length" class="btn ghost sm" type="button" :disabled="isSaving" @click="emit('advanceTurn')">Next Turn →</button>
         <button v-if="!isCombat" class="btn ghost sm" type="button" :disabled="isSaving" @click="emit('setupCombat')">
-          {{ isSaving ? 'Starting…' : 'Set Initiative' }}
+          {{ isSaving ? 'Starting…' : 'Start combat' }}
         </button>
       </div>
-    </div>
-
-    <div v-if="currentTurn && isCombat" class="alert info" style="margin-bottom: 1rem;">
-      <span aria-hidden="true">⚔️</span> <strong>{{ currentTurn.combatantName }}'s turn</strong>
-    </div>
-
-    <div v-if="currentTurnNpc && isCombat" class="npc-turn-action">
-      <div>
-        <strong>{{ currentTurnNpc.name }} is up.</strong>
-        <p class="text-sm">Queue an action with this NPC preselected.</p>
-      </div>
-      <button class="btn sm" type="button" :disabled="isSaving" @click="emit('takeCurrentNpcAction', currentTurnNpc.id)">
-        NPC Action
-      </button>
     </div>
 
     <ul v-if="isCombat && displayedInitiative.length" class="initiative-list" style="margin-bottom: 1rem;">
@@ -59,29 +45,47 @@ const emit = defineEmits<{
         class="initiative-item"
         :class="{
           'current-turn': entry.isCurrentTurn,
+          'current-turn-expanded': entry.id === expandedEntryId,
           'dragging': draggedInitiativeId === entry.id,
           'draggable': isCombat && !isSaving,
           'drag-over': dragOverId === entry.id && draggedInitiativeId !== null && draggedInitiativeId !== entry.id,
         }"
         :data-initiative-id="entry.id"
       >
-        <button
-          class="initiative-drag-handle"
-          type="button"
-          :disabled="isSaving"
-          :aria-label="`Reorder ${entry.combatantName}`"
-          @pointerdown.stop="emit('startDrag', entry.id, $event)"
-          @keydown.up.prevent="emit('moveKeyboard', entry.id, -1)"
-          @keydown.down.prevent="emit('moveKeyboard', entry.id, 1)"
-        >
-          <span aria-hidden="true">↕</span>
-        </button>
-        <span class="initiative-order">{{ idx + 1 }}</span>
-        <span class="initiative-card-body">
-          <span class="initiative-name">{{ entry.combatantName }}</span>
-          <span class="initiative-type">{{ entry.combatantType }}</span>
-        </span>
-        <span v-if="entry.isCurrentTurn" class="badge active">Turn</span>
+        <div class="initiative-item-header">
+          <button
+            class="initiative-drag-handle"
+            type="button"
+            :disabled="isSaving"
+            :aria-label="`Reorder ${entry.combatantName}`"
+            @pointerdown.stop="emit('startDrag', entry.id, $event)"
+            @keydown.up.prevent="emit('moveKeyboard', entry.id, -1)"
+            @keydown.down.prevent="emit('moveKeyboard', entry.id, 1)"
+          >
+            <span aria-hidden="true">↕</span>
+          </button>
+          <span class="initiative-order">{{ idx + 1 }}</span>
+          <span class="initiative-card-body">
+            <span class="initiative-name">{{ entry.combatantName }}</span>
+            <span class="initiative-type">{{ entry.combatantType }}</span>
+            <span v-if="entry.initiativeScore" class="initiative-score text-sm">{{ entry.initiativeScore }}</span>
+          </span>
+          <span v-if="entry.isCurrentTurn" class="badge active">Turn</span>
+          <button
+            class="btn sm"
+            :class="entry.id === expandedEntryId ? 'ghost' : ''"
+            type="button"
+            :disabled="isSaving"
+            @click="emit('activateEntry', entry)"
+          >
+            {{ entry.id === expandedEntryId ? 'Close' : entry.combatantType === 'Character' ? 'Prompt' : 'Act' }}
+          </button>
+        </div>
+
+        <!-- Inline form — shown when DM has activated this entry -->
+        <div v-if="entry.id === expandedEntryId" class="initiative-turn-body">
+          <slot name="entry-action" :entry="entry" />
+        </div>
       </li>
     </ul>
 

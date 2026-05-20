@@ -68,8 +68,22 @@ export interface RulesetDefinition {
   npcTemplates: Array<Record<string, unknown>>;
   /** Ruleset-specific mechanics for skill and attribute checks. */
   rollMechanics?: RulesetRollMechanics;
+  /** Named status conditions that can be applied to characters and NPCs. */
+  statusEffects?: RulesetStatusEffectDefinition[];
+  /** How initiative is rolled when combat starts. */
+  initiative?: RulesetInitiativeDefinition;
   /** Visual theme tokens applied to session screens for this ruleset. */
   theme?: RulesetTheme;
+}
+
+export interface RulesetStatusEffectDefinition {
+  key: string;
+  label: string;
+  description?: string | null;
+  /** True = harmful (red/orange badge); false = buff (green/blue badge). */
+  isNegative: boolean;
+  /** HP threshold at which this status is auto-applied (null = manual only). */
+  autoApplyAtHpThreshold?: number | null;
 }
 
 export interface RulesetRollMechanics {
@@ -140,6 +154,8 @@ export interface RulesetSkillDefinition {
   label: string;
   attribute: string;
   default: number;
+  /** If set, this skill is only available when the actor has this item in their inventory. */
+  requiredItemKey?: string;
 }
 
 export interface RulesetItemDefinition {
@@ -166,6 +182,28 @@ export interface RulesetRollModifier {
   attackBonus?: number;
 }
 
+export interface RulesetRollChainStepDefinition {
+  step: string;
+  label?: string;
+  checkMode?: string;
+  resultKind?: string;
+  guidanceText?: string;
+  customCheckText?: string;
+  diceSource?: string;
+  autoResolve?: { condition: string; fallback?: string };
+  onSuccess?: string;
+  onFailure?: string;
+  onComplete?: string;
+  applyEffects?: Array<{
+    target: string;
+    stat: string;
+    operation: string;
+    value: string;
+    label?: string;
+    minResult?: number;
+  }>;
+}
+
 export interface RulesetActionDefinition {
   key: string;
   label: string;
@@ -182,6 +220,7 @@ export interface RulesetActionDefinition {
     successRule: string;
     difficultyClass?: number;
   };
+  rollChain?: RulesetRollChainStepDefinition[];
 }
 
 export interface GameResponse {
@@ -208,6 +247,7 @@ export interface CharacterResponse {
   armor: number;
   inventoryJson: string;
   rulesetDataJson: string;
+  statusEffectsJson: string;
   classKey: string;
 }
 
@@ -219,6 +259,7 @@ export interface NpcResponse {
   health: number;
   armor: number;
   statBlockJson: string;
+  statusEffectsJson: string;
   visibility: 'Visible' | 'Hidden';
 }
 
@@ -272,6 +313,7 @@ export interface RollPromptResponse {
   targetCharacterId: string;
   targetCharacterName: string;
   promptLabel?: string | null;
+  guidanceText?: string | null;
   checkMode: 'Action' | 'Skill' | 'Attribute' | 'Custom' | string;
   resultKind?: 'PassFail' | 'Total' | string;
   actionKey?: string | null;
@@ -280,7 +322,13 @@ export interface RollPromptResponse {
   customCheckText?: string | null;
   status: 'Pending' | 'Completed' | 'Cancelled' | string;
   rollSummary?: string | null;
+  rollResultJson?: string | null;
+  chainStepKey?: string | null;
+  autoResolveOutcome?: string | null;
+  autoResolveMessage?: string | null;
   resultActionRequestId?: string | null;
+  dc?: number | null;
+  dmRolled?: boolean;
   createdAt: string;
   completedAt?: string | null;
 }
@@ -302,6 +350,7 @@ export interface ActionQueueItemResponse {
   rollSummary?: string | null;
   additionalActions?: string | null;
   statChangesJson: string;
+  pendingChainEffectsJson?: string;
   followUpRolls?: RollPromptResponse[];
   combatEncounterId?: string | null;
   combatEncounterSequence?: number | null;
@@ -318,7 +367,29 @@ export interface InitiativeEntryResponse {
   combatantId: string;
   combatantName: string;
   sortOrder: number;
+  initiativeScore: number;
   isCurrentTurn: boolean;
+}
+
+export interface CombatStartResponse {
+  initiative: InitiativeEntryResponse[];
+  rolls: InitiativeRollSummaryResponse[];
+  guidanceText?: string | null;
+}
+
+export interface InitiativeRollSummaryResponse {
+  combatantType: string;
+  combatantId: string;
+  combatantName: string;
+  score: number;
+  summary: string;
+}
+
+export interface RulesetInitiativeDefinition {
+  attribute: string;
+  skill: string;
+  tieBreakerDice?: string;
+  guidanceText?: string | null;
 }
 
 export interface SessionNoteResponse {

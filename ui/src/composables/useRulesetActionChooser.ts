@@ -1,18 +1,27 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
 import type { RulesetDefinition } from '~/types/api';
-import type { InventoryEntry } from '~/utils/inventory';
+import { hasInventoryItem, type InventoryEntry } from '~/utils/inventory';
 import {
   availableActionsForClass,
-  availableSkillsForClass,
   describeAttributeCheck,
   describeRulesetAction,
   describeSkillCheck,
   findRulesetAction,
-  findRulesetAttribute,
-  findRulesetSkill,
 } from '~/utils/rulesets';
 
-export type RulesetActionMode = 'action' | 'skill' | 'attribute' | 'custom';
+export type RulesetActionMode = 'action' | 'stat-check' | 'custom';
+
+/**
+ * A selectable entry in the unified stat-check picker (covers both skills and attributes).
+ * The `key` is a composite: 'skill:<key>' or 'attribute:<key>'.
+ */
+export interface StatCheckOption {
+  key: string;
+  label: string;
+  type: 'skill' | 'attribute';
+  rollSummary: string;
+  actionText: string;
+}
 
 export interface RulesetActionSubmitPayload {
   actionKey?: string;
@@ -28,116 +37,124 @@ export function useRulesetActionChooser(
 ) {
   const actionMode = ref<RulesetActionMode>('action');
   const selectedActionKey = ref('');
-  const selectedSkillKey = ref('');
-  const selectedAttributeKey = ref('');
+  /** Composite key: 'skill:<key>' or 'attribute:<key>'. */
+  const selectedStatKey = ref('');
   const customActionText = ref('');
 
+  // Predefined actions filtered by class + inventory (existing behaviour).
   const availableActions = computed(() => isEnabled.value
     ? availableActionsForClass(definition.value, classKey.value, inventory.value)
     : []);
-  const availableSkills = computed(() => isEnabled.value
-    ? availableSkillsForClass(definition.value, classKey.value)
-    : []);
-  const availableAttributes = computed(() => isEnabled.value
-    ? definition.value?.character.attributes ?? []
-    : []);
+
+  /**
+   * All skills from the ruleset (equipment-gated via requiredItemKey) plus all attributes.
+   * Zero-value stats are intentionally included — a character can attempt anything they're bad at.
+   * Equipment gate: if a skill has `requiredItemKey` and the actor doesn't have that item, the
+   * option is hidden (e.g. can't attempt to fire a pulse rifle without one).
+   */
+  const availableStatChecks = computed((): StatCheckOption[] => {
+    if (!isEnabled.value || !definition.value) return [];
+    const def = definition.value;
+
+    const skillOptions: StatCheckOption[] = def.character.skills
+      .filter(skill => !skill.requiredItemKey || hasInventoryItem(inventory.value, skill.requiredItemKey))
+      .map(skill => {
+        const detail = describeSkillCheck(skill, def);
+        return { key: `skill:${skill.key}`, label: skill.label, type: 'skill', rollSummary: detail.rollSummary, actionText: detail.actionText };
+      });
+
+    const attributeOptions: StatCheckOption[] = def.character.attributes.map(attr => {
+      const detail = describeAttributeCheck(attr);
+      return { key: `attribute:${attr.key}`, label: attr.label, type: 'attribute', rollSummary: detail.rollSummary, actionText: detail.actionText };
+    });
+
+    return [...skillOptions, ...attributeOptions];
+  });
+
+  const selectedStatDetail = computed(
+    () => availableStatChecks.value.find(s => s.key === selectedStatKey.value) ?? null,
+  );
+
+  /** Whether the selected stat is a skill or attribute — needed for dice context. */
+  const selectedStatType = computed((): 'skill' | 'attribute' | null => {
+    if (!selectedStatKey.value) return null;
+    return selectedStatKey.value.startsWith('skill:') ? 'skill' : 'attribute';
+  });
+
+  /** The raw (non-prefixed) key for the selected stat. */
+  const selectedStatRawKey = computed(() => {
+    const idx = selectedStatKey.value.indexOf(':');
+    return idx >= 0 ? selectedStatKey.value.slice(idx + 1) : '';
+  });
 
   const selectedRulesetAction = computed(() => findRulesetAction(definition.value, selectedActionKey.value));
-  const selectedRulesetSkill = computed(() => findRulesetSkill(definition.value, selectedSkillKey.value));
-  const selectedRulesetAttribute = computed(() => findRulesetAttribute(definition.value, selectedAttributeKey.value));
 
   const selectedActionDetail = computed(() =>
     selectedRulesetAction.value && definition.value
       ? describeRulesetAction(selectedRulesetAction.value, definition.value)
       : null,
   );
-  const selectedSkillDetail = computed(() =>
-    selectedRulesetSkill.value && definition.value
-      ? describeSkillCheck(selectedRulesetSkill.value, definition.value)
-      : null,
-  );
-  const selectedAttributeDetail = computed(() =>
-    selectedRulesetAttribute.value ? describeAttributeCheck(selectedRulesetAttribute.value) : null,
-  );
 
   const resolvedActionText = computed(() => {
     switch (actionMode.value) {
-      case 'action':
-        return selectedRulesetAction.value?.label ?? '';
-      case 'skill':
-        return selectedSkillDetail.value?.actionText ?? '';
-      case 'attribute':
-        return selectedAttributeDetail.value?.actionText ?? '';
-      case 'custom':
-        return customActionText.value;
-      default:
-        return '';
+      case 'action': return selectedRulesetAction.value?.label ?? '';
+      case 'stat-check': return selectedStatDetail.value?.actionText ?? '';
+      case 'custom': return customActionText.value;
+      default: return '';
     }
   });
 
-  const suggestedRollSummary = computed(() => {
-    if (actionMode.value === 'skill') return selectedSkillDetail.value?.rollSummary ?? '';
-    if (actionMode.value === 'attribute') return selectedAttributeDetail.value?.rollSummary ?? '';
-    return '';
-  });
+  const suggestedRollSummary = computed(() =>
+    actionMode.value === 'stat-check' ? (selectedStatDetail.value?.rollSummary ?? '') : '',
+  );
 
   function firstAvailableActionMode(): RulesetActionMode {
     if (availableActions.value.length) return 'action';
-    if (availableSkills.value.length) return 'skill';
-    if (availableAttributes.value.length) return 'attribute';
+    if (availableStatChecks.value.length) return 'stat-check';
     return 'custom';
   }
 
   function resetSelection() {
     selectedActionKey.value = '';
-    selectedSkillKey.value = '';
-    selectedAttributeKey.value = '';
+    selectedStatKey.value = '';
     customActionText.value = '';
   }
 
   function buildDescription(description?: string) {
-    return [
-      suggestedRollSummary.value ? `Suggested roll: ${suggestedRollSummary.value}.` : '',
-      description ?? '',
-    ].filter(Boolean).join('\n');
+    return description?.trim() || undefined;
   }
 
   function buildSubmitPayload(description?: string): RulesetActionSubmitPayload | null {
     const actionText = resolvedActionText.value.trim();
     if (!actionText) return null;
-
-    const resolvedDescription = buildDescription(description);
     return {
       actionKey: actionMode.value === 'action' ? selectedActionKey.value || undefined : undefined,
       actionText,
-      description: resolvedDescription || undefined,
+      description: buildDescription(description) || undefined,
     };
   }
 
   watch(actionMode, resetSelection);
 
-  watch([availableActions, availableSkills, availableAttributes], () => {
+  watch([availableActions, availableStatChecks], () => {
     const modeIsAvailable =
       (actionMode.value === 'action' && availableActions.value.length > 0)
-      || (actionMode.value === 'skill' && availableSkills.value.length > 0)
-      || (actionMode.value === 'attribute' && availableAttributes.value.length > 0)
+      || (actionMode.value === 'stat-check' && availableStatChecks.value.length > 0)
       || actionMode.value === 'custom';
-
     if (!modeIsAvailable) actionMode.value = firstAvailableActionMode();
   }, { immediate: true });
 
   return {
     actionMode,
     selectedActionKey,
-    selectedSkillKey,
-    selectedAttributeKey,
+    selectedStatKey,
+    selectedStatType,
+    selectedStatRawKey,
     customActionText,
     availableActions,
-    availableSkills,
-    availableAttributes,
+    availableStatChecks,
     selectedActionDetail,
-    selectedSkillDetail,
-    selectedAttributeDetail,
+    selectedStatDetail,
     resolvedActionText,
     suggestedRollSummary,
     resetSelection,
