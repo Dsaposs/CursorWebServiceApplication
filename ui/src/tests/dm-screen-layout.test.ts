@@ -42,6 +42,10 @@ function normalizeSelector(selector: string): string {
   return selector.replace(/\s+/g, ' ').trim();
 }
 
+function stripCssComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
 function parseDeclarations(block: string): CssDeclarations {
   return block
     .split(';')
@@ -63,10 +67,11 @@ function parseDeclarations(block: string): CssDeclarations {
 
 function declarationsForRule(css: string, selector: string): CssDeclarations {
   const normalizedSelector = normalizeSelector(selector);
+  const cssWithoutComments = stripCssComments(css);
   const rulePattern = /([^{}]+)\{([^{}]+)\}/g;
   let match: RegExpExecArray | null;
 
-  while ((match = rulePattern.exec(css)) !== null) {
+  while ((match = rulePattern.exec(cssWithoutComments)) !== null) {
     if (normalizeSelector(match[1]) === normalizedSelector) {
       return parseDeclarations(match[2]);
     }
