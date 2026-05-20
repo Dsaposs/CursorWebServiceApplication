@@ -8,8 +8,9 @@ import {
   getActionRollFlowStatus,
   rollPromptsForAction,
 } from '~/utils/actionRolls';
+import { parseCharacterStats } from '~/utils/dice';
 import { normalizeRollResultKind, rollPromptCheckLabel, rollPromptResultKindLabel } from '~/utils/rollPrompt';
-import { findRulesetAction } from '~/utils/rulesets';
+import { buildDiceRollContext, findRulesetAction } from '~/utils/rulesets';
 import { formatAutoResolveLabel } from '~/utils/rollResult';
 
 interface Props {
@@ -71,6 +72,35 @@ const canRequestActorRoll = computed(() =>
 const showStartChain = computed(() =>
   hasRollChain.value && !hasPendingPrompt.value && Boolean(actorCharacter.value),
 );
+
+/** Parsed stats for the actor character — used to build the dice roll context. */
+const actorStats = computed(() => {
+  if (!actorCharacter.value) return null;
+  const parsed = parseCharacterStats(actorCharacter.value.rulesetDataJson);
+  return {
+    attributes: parsed.attributes,
+    skills: parsed.skills,
+    gameValues: parsed.gameValues,
+  };
+});
+
+/**
+ * Dice roll context for the DM-side roller. Available when the action has a known
+ * action key, a character actor, and a loaded ruleset definition.
+ */
+const dmRollContext = computed(() => {
+  if (!props.rulesetDefinition || !actorStats.value || !props.action.actionKey) return null;
+  return buildDiceRollContext({
+    definition: props.rulesetDefinition,
+    mode: 'action',
+    actionKey: props.action.actionKey,
+    skillKey: '',
+    attributeKey: '',
+    attributes: actorStats.value.attributes,
+    skills: actorStats.value.skills,
+    gameValues: actorStats.value.gameValues,
+  });
+});
 
 // DC + DM roll state
 const dc = ref<number | null>(null);
@@ -148,30 +178,39 @@ function promptSummary(prompt: RollPromptResponse) {
     <div v-else-if="canRequestActorRoll" class="dm-action-roll-primary">
       <div class="dm-roll-actions">
         <button type="button" class="btn" :disabled="isBusy" @click="requestActorRoll">
-          Send to {{ action.actorName }}
+          Prompt {{ action.actorName }}
         </button>
         <button
           type="button"
           class="btn ghost"
           :disabled="isBusy"
-          @click="showDmRollForm = !showDmRollForm"
+          @click="showDmRollForm = !showDmRollForm; dmRollInput = ''"
         >
-          Roll myself
+          Roll for player
         </button>
       </div>
 
       <div v-if="showDmRollForm" class="dm-manual-roll-form">
-        <label class="text-sm" for="dm-roll-input">Roll result</label>
-        <input
-          id="dm-roll-input"
-          v-model="dmRollInput"
-          type="text"
-          placeholder="e.g. 3 successes or 14"
-          class="input"
-        />
-        <p class="text-sm muted">
-          Enter the dice result.
-          <span v-if="dc">DC {{ dc }} — {{ action.actorName }}'s roll will be checked against it automatically.</span>
+        <!-- Use the real dice roller when we have context, otherwise fall back to a text input -->
+        <template v-if="dmRollContext">
+          <p class="text-sm muted" style="margin: 0 0 0.5rem;">
+            Roll the dice below on behalf of {{ action.actorName }}.
+          </p>
+          <RulesetDiceRoller v-model="dmRollInput" :context="dmRollContext" />
+        </template>
+        <template v-else>
+          <label class="text-sm" for="dm-roll-input">Roll result</label>
+          <input
+            id="dm-roll-input"
+            v-model="dmRollInput"
+            type="text"
+            placeholder="e.g. 3 successes or 14"
+            class="input"
+          />
+        </template>
+
+        <p class="text-sm muted" style="margin: 0.4rem 0 0;">
+          <span v-if="dc">DC {{ dc }} — the result will be checked against it automatically.</span>
           <span v-else>No DC set — outcome will be marked for your interpretation.</span>
         </p>
         <div class="dm-manual-roll-btns">

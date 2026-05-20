@@ -204,10 +204,10 @@ public class ActionsController : ControllerBase
             _db.ActionResolutions.Add(action.Resolution);
         }
 
-        action.Resolution.ResolutionText = request.ResolutionText;
+        action.Resolution.ResolutionText = request.ResolutionText?.Trim() ?? string.Empty;
         action.Resolution.Outcome = outcome.HasValue ? outcome.Value : null;
         action.Resolution.RollSummary = request.RollSummary;
-        action.Resolution.AdditionalActions = request.AdditionalActions;
+        action.Resolution.AdditionalActions = null;
         action.Resolution.StatChangesJson = JsonSerializer.Serialize(statChanges);
         action.Resolution.PublishedAt = now;
 

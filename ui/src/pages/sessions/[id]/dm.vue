@@ -41,7 +41,6 @@ const ruleset = ref<RulesetResponse | null>(null);
 
 // Per-action resolve form state
 const resolutionText = ref<Record<string, string>>({});
-const additionalActions = ref<Record<string, string>>({});
 const statChangeTarget = ref<Record<string, string>>({});
 const statChangeHealthDelta = ref<Record<string, string>>({});
 const statChangeSetHealth = ref<Record<string, string>>({});
@@ -148,7 +147,6 @@ const npcHasTarget = ref(false);
 
 // Inline NPC action-resolution form refs (combat only — create + resolve in a single submit)
 const npcInlineResolutionText = ref('');
-const npcInlineAdditionalActions = ref('');
 const npcInlineStatTarget = ref<string | undefined>(undefined);
 const npcInlineHealthDelta = ref<string | undefined>(undefined);
 const npcInlineSetHealth = ref<string | undefined>(undefined);
@@ -160,7 +158,6 @@ const npcInlineStatusChanges = ref<{ addKeys: string[]; removeKeys: string[] } |
 
 function resetNpcInlineFields() {
   npcInlineResolutionText.value = '';
-  npcInlineAdditionalActions.value = '';
   npcInlineStatTarget.value = undefined;
   npcInlineHealthDelta.value = undefined;
   npcInlineSetHealth.value = undefined;
@@ -329,8 +326,6 @@ async function submitAndResolveNpcAction() {
   const payload = buildNpcActionSubmitPayload();
   if (!payload) { toastError('Choose or describe an NPC action first.'); return; }
   if (!npcActionTargetPickerRef.value?.isValid()) { toastError('Enter a target name for Other.'); return; }
-  if (!npcInlineResolutionText.value.trim()) { toastError('Resolution text is required.'); return; }
-
   const npcDescription = [
     npcRollResult.value ? `🎲 Roll: ${npcRollResult.value}` : '',
     npcDamageRollResult.value || '',
@@ -352,8 +347,7 @@ async function submitAndResolveNpcAction() {
     await api(`/api/actions/${created.id}/resolve`, {
       method: 'PUT',
       body: {
-        resolutionText: npcInlineResolutionText.value,
-        additionalActions: npcInlineAdditionalActions.value || undefined,
+        resolutionText: npcInlineResolutionText.value || undefined,
         statChanges: buildNpcInlineStatChanges(),
       },
     });
@@ -511,7 +505,7 @@ async function rejectAction(action: ActionQueueItemResponse) {
         rejectionReason: rejectReason.value[action.id]?.trim() || undefined,
       },
     });
-    for (const map of [resolutionText, additionalActions, rejectReason, statChangeTarget, statChangeHealthDelta, statChangeSetHealth, statChangeSetArmor, gameValueChanges, statChangeGvDeltas, statChangeAttrDeltas, statChangeInventoryDeltas, statChangeStatusChanges]) {
+    for (const map of [resolutionText, rejectReason, statChangeTarget, statChangeHealthDelta, statChangeSetHealth, statChangeSetArmor, gameValueChanges, statChangeGvDeltas, statChangeAttrDeltas, statChangeInventoryDeltas, statChangeStatusChanges]) {
       delete map.value[action.id];
     }
     expandedPendingActions.value.delete(action.id);
@@ -525,21 +519,16 @@ async function rejectAction(action: ActionQueueItemResponse) {
 }
 
 async function resolveAction(action: ActionQueueItemResponse) {
-  if (!String(resolutionText.value[action.id] ?? '').trim()) {
-    toastError('Resolution text is required.');
-    return;
-  }
   isSaving.value = true;
   try {
     await api(`/api/actions/${action.id}/resolve`, {
       method: 'PUT',
       body: {
-        resolutionText: resolutionText.value[action.id],
-        additionalActions: additionalActions.value[action.id] || undefined,
+        resolutionText: resolutionText.value[action.id] || undefined,
         statChanges: buildStatChanges(action),
       },
     });
-    for (const map of [resolutionText, additionalActions, rejectReason, statChangeTarget, statChangeHealthDelta, statChangeSetHealth, statChangeSetArmor, gameValueChanges, statChangeGvDeltas, statChangeAttrDeltas, statChangeInventoryDeltas, statChangeStatusChanges]) {
+    for (const map of [resolutionText, rejectReason, statChangeTarget, statChangeHealthDelta, statChangeSetHealth, statChangeSetArmor, gameValueChanges, statChangeGvDeltas, statChangeAttrDeltas, statChangeInventoryDeltas, statChangeStatusChanges]) {
       delete map.value[action.id];
     }
     expandedPendingActions.value.delete(action.id);
@@ -1031,14 +1020,6 @@ const npcRollContext = computed(() => {
 
                 <hr style="margin: 0.75rem 0; border-color: var(--border);" />
 
-                <label>
-                  Resolution <span style="color: var(--danger);">*</span>
-                  <textarea v-model="npcInlineResolutionText" placeholder="Describe what happens…" required style="min-height: 3rem;" />
-                </label>
-                <label>
-                  Additional actions / counter-actions
-                  <textarea v-model="npcInlineAdditionalActions" placeholder="The alien counter-attacks…" style="min-height: 2rem;" />
-                </label>
                 <DmStatChangePanel
                   :characters="state.game.characters"
                   :npcs="state.game.npcsAndMonsters"
@@ -1281,15 +1262,6 @@ const npcRollContext = computed(() => {
                       {{ derivedActionOutcome(action) }}
                     </span>
                   </p>
-
-                  <label>
-                    Resolution <span style="color: var(--danger);">*</span>
-                    <textarea v-model="resolutionText[action.id]" placeholder="Describe what happens…" required style="min-height: 3.5rem;" />
-                  </label>
-                  <label>
-                    Additional actions / counter-actions
-                    <textarea v-model="additionalActions[action.id]" placeholder="The orc counter-attacks…" style="min-height: 2.5rem;" />
-                  </label>
 
                   <DmStatChangePanel
                     :characters="state.game.characters"

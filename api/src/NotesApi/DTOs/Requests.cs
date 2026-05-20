@@ -140,12 +140,9 @@ public class SubmitActionRequest
 
 public class ResolveActionRequest
 {
-    [Required]
-    public string ResolutionText { get; set; } = string.Empty;
+    public string? ResolutionText { get; set; }
 
     public string? RollSummary { get; set; }
-
-    public string? AdditionalActions { get; set; }
 
     public IEnumerable<StatChangeRequest> StatChanges { get; set; } = Array.Empty<StatChangeRequest>();
 }
