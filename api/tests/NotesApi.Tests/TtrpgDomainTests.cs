@@ -222,6 +222,143 @@ public class TtrpgDomainTests
     }
 
     [Fact]
+    public void PlayerViewMapping_OnlyExposesVisibleNpcs()
+    {
+        var now = DateTime.UtcNow;
+        var visibleNpc = new NpcOrMonster
+        {
+            Id = Guid.NewGuid(),
+            Name = "Alpha Visible",
+            Kind = "NPC",
+            MaxHealth = 10,
+            Health = 10,
+            StatBlockJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var hiddenNpc = new NpcOrMonster
+        {
+            Id = Guid.NewGuid(),
+            Name = "Beta Hidden",
+            Kind = "Monster",
+            MaxHealth = 8,
+            Health = 8,
+            StatBlockJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var game = new Game
+        {
+            Id = Guid.NewGuid(),
+            DmUserId = "dm-1",
+            RulesetCode = "alien-rpg",
+            Ruleset = new Ruleset
+            {
+                Code = "alien-rpg",
+                DisplayName = "Alien RPG",
+                Description = "Test ruleset",
+                DiceNotation = "d6",
+            },
+            Name = "Visibility Regression",
+            InviteCode = "visibility",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        game.NpcsAndMonsters.Add(hiddenNpc);
+        game.NpcsAndMonsters.Add(visibleNpc);
+        var visibilities = new Dictionary<string, string>
+        {
+            [visibleNpc.Id.ToString()] = ControllerHelpers.NpcVisibilityVisible,
+            [hiddenNpc.Id.ToString()] = "Obscured",
+        };
+        var controller = new TestController();
+
+        var dmView = controller.ToGameResponse(game, visibilities);
+        var playerView = controller.ToGameResponse(game, visibilities, playerView: true);
+
+        Assert.Equal(
+            new[] { "Alpha Visible", "Beta Hidden" },
+            dmView.NpcsAndMonsters.Select(n => n.Name));
+        Assert.Equal(
+            new[] { ControllerHelpers.NpcVisibilityVisible, ControllerHelpers.NpcVisibilityHidden },
+            dmView.NpcsAndMonsters.Select(n => n.Visibility));
+        var playerNpc = Assert.Single(playerView.NpcsAndMonsters);
+        Assert.Equal(visibleNpc.Id, playerNpc.Id);
+        Assert.Equal(ControllerHelpers.NpcVisibilityVisible, playerNpc.Visibility);
+    }
+
+    [Fact]
+    public void PlayerViewMapping_MasksHiddenNpcActionAndInitiativeReferences()
+    {
+        var visibleNpcId = Guid.NewGuid();
+        var hiddenNpcId = Guid.NewGuid();
+        var characterId = Guid.NewGuid();
+        var visibilities = new Dictionary<string, string>
+        {
+            [visibleNpcId.ToString()] = ControllerHelpers.NpcVisibilityVisible,
+        };
+        var action = new ActionRequest
+        {
+            Id = Guid.NewGuid(),
+            ActorNpcId = hiddenNpcId,
+            ActorName = "Hidden Drone",
+            ActionText = "stalks the corridor",
+            TargetNpcId = hiddenNpcId,
+            TargetName = "Hidden Drone",
+            Sequence = 1,
+            Status = ActionStatus.Published,
+            SubmittedAt = DateTime.UtcNow,
+        };
+        var session = new GameSession
+        {
+            Id = Guid.NewGuid(),
+            JoinCode = "initiative",
+            State = SessionMode.Combat,
+            StartedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        session.InitiativeEntries.Add(new InitiativeEntry
+        {
+            Id = Guid.NewGuid(),
+            CombatantType = CombatantType.Character,
+            CombatantId = characterId,
+            CombatantName = "Ripley",
+            SortOrder = 1,
+            CreatedAt = DateTime.UtcNow,
+        });
+        session.InitiativeEntries.Add(new InitiativeEntry
+        {
+            Id = Guid.NewGuid(),
+            CombatantType = CombatantType.NpcOrMonster,
+            CombatantId = hiddenNpcId,
+            CombatantName = "Hidden Drone",
+            SortOrder = 2,
+            CreatedAt = DateTime.UtcNow,
+        });
+        session.InitiativeEntries.Add(new InitiativeEntry
+        {
+            Id = Guid.NewGuid(),
+            CombatantType = CombatantType.NpcOrMonster,
+            CombatantId = visibleNpcId,
+            CombatantName = "Visible Drone",
+            SortOrder = 3,
+            CreatedAt = DateTime.UtcNow,
+        });
+
+        var playerAction = ControllerHelpers.ToActionResponse(action, npcVisibilities: visibilities, playerView: true);
+        var dmAction = ControllerHelpers.ToActionResponse(action, npcVisibilities: visibilities);
+        var playerInitiative = ControllerHelpers.SelectInitiativeEntries(session, visibilities, playerView: true).ToList();
+
+        Assert.Equal("???", playerAction.ActorName);
+        Assert.Null(playerAction.ActorNpcId);
+        Assert.Null(playerAction.TargetNpcId);
+        Assert.Null(playerAction.TargetName);
+        Assert.Equal(hiddenNpcId, dmAction.ActorNpcId);
+        Assert.Equal(hiddenNpcId, dmAction.TargetNpcId);
+        Assert.Equal(new[] { characterId, visibleNpcId }, playerInitiative.Select(i => i.CombatantId));
+    }
+
+    [Fact]
     public async Task PlayerJoinToken_IsScopedToOneGameCharacter()
     {
         await using var db = CreateDbContext();
@@ -459,5 +596,9 @@ public class TtrpgDomainTests
             new ApplicationUser { Id = "dm-1", UserName = "dm-1@example.local", Email = "dm-1@example.local" },
             new ApplicationUser { Id = "dm-2", UserName = "dm-2@example.local", Email = "dm-2@example.local" });
         await db.SaveChangesAsync();
+    }
+
+    private sealed class TestController : ControllerBase
+    {
     }
 }
