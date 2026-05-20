@@ -1,0 +1,31 @@
+# AGENTS.md
+
+## Cursor Cloud specific instructions
+
+### Services overview
+
+| Service | Tech | Dev command | Port |
+|---------|------|-------------|------|
+| API | ASP.NET Core 8 + EF Core + SQLite | `dotnet run --project api/src/NotesApi/NotesApi.csproj --urls "http://0.0.0.0:5294"` | 5294 |
+| UI | Nuxt 4 (Vue 3, TypeScript) | `NUXT_API_BASE_URL=http://localhost:5294 npm run dev` (from `ui/src/`) | 3000 |
+
+### Running services
+
+- **API** must start before the UI since the Nuxt server-side proxy forwards `/api/*` requests to `http://localhost:5294`.
+- SQLite DB is auto-created on first API startup — no migration commands needed.
+- The API seeds an admin user on first run; dev defaults are in `appsettings.json` (JWT key and admin password are placeholders safe for local dev).
+- Run `npx nuxi prepare` inside `ui/src/` before typechecking — Nuxt generates `.nuxt/tsconfig.json` which downstream tooling requires.
+
+### Tests
+
+- API: `dotnet test api/tests/NotesApi.Tests/NotesApi.Tests.csproj` (9 xUnit tests)
+- UI: `npm test` from `ui/src/` (vitest). Note: tests currently fail with a pre-existing issue where `vitest.config.ts` is missing the `@vitejs/plugin-vue` plugin needed to parse `.vue` imports in the test dependency chain.
+
+### Key dev notes
+
+- The .NET 8 SDK is installed at `/usr/local/dotnet` and added to PATH via `~/.bashrc`.
+- Node.js v22 is managed via nvm (default in environment).
+- No lockfile for UI dependencies beyond `package-lock.json`; use `npm install` (not yarn/pnpm).
+- Health check: `GET http://localhost:5294/health` → "Healthy"
+- Swagger UI available at `http://localhost:5294/swagger` in Development mode.
+- The D&D 5e character creation flow requires `classKey`, `skillAllocations`, and `startingItemKey` fields — partial requests are rejected with validation errors.

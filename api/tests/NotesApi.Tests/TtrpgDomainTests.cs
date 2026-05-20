@@ -2,6 +2,7 @@ namespace NotesApi.Tests;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NotesApi.Controllers;
@@ -9,6 +10,7 @@ using NotesApi.Data;
 using NotesApi.Models;
 using NotesApi.DTOs;
 using NotesApi.Rulesets;
+using System.Security.Claims;
 
 public class TtrpgDomainTests
 {
@@ -130,6 +132,93 @@ public class TtrpgDomainTests
 
         Assert.NotNull(visible);
         Assert.Null(hidden);
+    }
+
+    [Fact]
+    public async Task NpcUpdate_PreservesStructuredStatsAndBumpsOnlyActiveSessionVersion()
+    {
+        await using var db = CreateDbContext();
+        await SeedRulesetAsync(db);
+        await SeedUsersAsync(db);
+        var timestamp = DateTime.UtcNow.AddMinutes(-5);
+        var game = new Game
+        {
+            Id = Guid.NewGuid(),
+            DmUserId = "dm-1",
+            RulesetCode = "alien-rpg",
+            Name = "NPC Regression",
+            InviteCode = "npc-regression",
+            CreatedAt = timestamp,
+            UpdatedAt = timestamp,
+        };
+        var npc = new NpcOrMonster
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            Name = "Drone",
+            Kind = "Monster",
+            MaxHealth = 8,
+            Health = 4,
+            Armor = 1,
+            StatBlockJson = "{}",
+            CreatedAt = timestamp,
+            UpdatedAt = timestamp,
+        };
+        var activeSession = new GameSession
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            JoinCode = "active-npcs",
+            IsActive = true,
+            State = SessionMode.Exploration,
+            Version = 2,
+            StartedAt = timestamp,
+            UpdatedAt = timestamp,
+        };
+        var inactiveSession = new GameSession
+        {
+            Id = Guid.NewGuid(),
+            GameId = game.Id,
+            JoinCode = "inactive-npcs",
+            IsActive = false,
+            State = SessionMode.Exploration,
+            Version = 7,
+            StartedAt = timestamp,
+            EndedAt = timestamp,
+            UpdatedAt = timestamp,
+        };
+        db.AddRange(game, npc, activeSession, inactiveSession);
+        await db.SaveChangesAsync();
+        var controller = CreateNpcsController(db, "dm-1");
+        var statBlockJson = """
+            {"attributes":{"strength":4},"skills":{"stealth":2},"inventory":[{"itemKey":"acid-claws","quantity":1}]}
+            """;
+
+        var result = await controller.Update(game.Id, npc.Id, new UpdateNpcRequest
+        {
+            Name = "Alpha Drone",
+            Kind = "Monster",
+            MaxHealth = 12,
+            Health = 99,
+            Armor = 3,
+            StatBlockJson = statBlockJson,
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<NpcResponse>(ok.Value);
+        Assert.Equal("Alpha Drone", response.Name);
+        Assert.Equal("Monster", response.Kind);
+        Assert.Equal(12, response.MaxHealth);
+        Assert.Equal(12, response.Health);
+        Assert.Equal(3, response.Armor);
+        Assert.Equal(statBlockJson, response.StatBlockJson);
+        Assert.Equal(3, activeSession.Version);
+        Assert.NotEqual(timestamp, activeSession.UpdatedAt);
+        Assert.Equal(7, inactiveSession.Version);
+        Assert.Equal(timestamp, inactiveSession.UpdatedAt);
+
+        var savedNpc = await db.NpcsAndMonsters.SingleAsync(n => n.Id == npc.Id);
+        Assert.Equal(statBlockJson, savedNpc.StatBlockJson);
     }
 
     [Fact]
@@ -332,6 +421,22 @@ public class TtrpgDomainTests
         var db = new ApplicationDbContext(options);
         db.Database.EnsureCreated();
         return db;
+    }
+
+    private static NpcsController CreateNpcsController(ApplicationDbContext db, string userId)
+    {
+        return new NpcsController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                        new[] { new Claim(ClaimTypes.NameIdentifier, userId) },
+                        "TestAuth")),
+                },
+            },
+        };
     }
 
     private static async Task SeedRulesetAsync(ApplicationDbContext db)

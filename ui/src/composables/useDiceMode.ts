@@ -1,3 +1,5 @@
+import { ref } from 'vue';
+
 export type DiceMode = 'auto' | 'manual';
 
 const STORAGE_KEY = 'ttrpg_dice_mode';
