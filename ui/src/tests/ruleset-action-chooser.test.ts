@@ -78,17 +78,17 @@ describe('useRulesetActionChooser', () => {
     });
   });
 
-  it('builds skill check payloads without an action key', async () => {
+  it('builds stat check payloads without an action key', async () => {
     const chooser = useRulesetActionChooser(computed(() => testRuleset), computed(() => 'marine'));
 
-    chooser.actionMode.value = 'skill';
+    chooser.actionMode.value = 'stat-check';
     await nextTick();
-    chooser.selectedSkillKey.value = 'rangedCombat';
+    chooser.selectedStatKey.value = 'skill:rangedCombat';
 
     expect(chooser.buildSubmitPayload('I line up the shot.')).toEqual({
       actionKey: undefined,
       actionText: 'Skill check: Ranged Combat',
-      description: 'Suggested roll: Agility + Ranged Combat.\nI line up the shot.',
+      description: 'I line up the shot.',
     });
   });
 });
