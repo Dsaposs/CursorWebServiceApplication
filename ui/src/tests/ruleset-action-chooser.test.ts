@@ -2,7 +2,8 @@ import { computed, nextTick } from 'vue';
 import { describe, expect, it } from 'vitest';
 import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
 import type { RulesetDefinition } from '~/types/api';
-import { availableSkillsForClass, describeSkillCheck } from '~/utils/rulesets';
+import { parseCharacterStats } from '~/utils/dice';
+import { availableSkillsForClass, buildDiceRollContext, describeSkillCheck } from '~/utils/rulesets';
 
 const testRuleset: RulesetDefinition = {
   schemaVersion: 1,
@@ -62,6 +63,61 @@ describe('ruleset action utilities', () => {
       actionText: 'Skill check: Ranged Combat',
       rollSummary: 'Agility + Ranged Combat',
     });
+  });
+
+  it('builds action roll contexts from nested character stats', () => {
+    const d6PoolRuleset: RulesetDefinition = {
+      ...testRuleset,
+      schemaVersion: 2,
+      diceRollerKey: 'd6-pool',
+      dice: [{ key: 'd6Pool', label: 'D6 Pool', notation: '1d6', successTarget: 6 }],
+      actions: [{
+        key: 'shoot',
+        label: 'Shoot',
+        allowedClasses: ['marine'],
+        roll: {
+          dice: 'd6Pool',
+          dicePoolMode: 'attribute+skill',
+          attribute: 'agility',
+          skill: 'rangedCombat',
+          modifiers: [{ source: 'gameValue', key: 'stress', dicePerPoint: 1, isStressDice: true }],
+          successRule: 'Each 6 is a success.',
+        },
+      }],
+    };
+    const stats = parseCharacterStats(JSON.stringify({
+      attributes: { agility: 4 },
+      skills: { rangedCombat: 2 },
+      gameValues: { stress: 3 },
+    }));
+
+    const context = buildDiceRollContext({
+      definition: d6PoolRuleset,
+      mode: 'action',
+      actionKey: 'shoot',
+      skillKey: '',
+      attributeKey: '',
+      attributes: stats.attributes,
+      skills: stats.skills,
+      gameValues: stats.gameValues,
+    });
+
+    expect(context).toMatchObject({
+      rollerKey: 'd6-pool',
+      label: 'Shoot',
+      config: {
+        kind: 'd6-pool',
+        baseDiceCount: 6,
+        stressDiceCount: 3,
+        sides: 6,
+        successTarget: 6,
+      },
+    });
+    expect(context?.poolBreakdown).toEqual([
+      'Agility 4',
+      'Ranged Combat 2',
+      '+3 stress (stress 3)',
+    ]);
   });
 });
 
