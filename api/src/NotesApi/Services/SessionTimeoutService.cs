@@ -40,7 +40,7 @@ public sealed class SessionTimeoutService : BackgroundService
         }
     }
 
-    private async Task EndInactiveSessionsAsync(CancellationToken cancellationToken)
+    internal async Task EndInactiveSessionsAsync(CancellationToken cancellationToken)
     {
         try
         {
