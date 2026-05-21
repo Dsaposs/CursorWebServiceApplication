@@ -20,6 +20,12 @@ function defaultDiceSides(definition: RulesetDefinition): number {
   return parseDiceSides(notation);
 }
 
+export function isSameGuid(a?: string | null, b?: string | null): boolean {
+  const left = (a ?? '').trim().toLowerCase();
+  const right = (b ?? '').trim().toLowerCase();
+  return Boolean(left && right && left === right);
+}
+
 export function normalizeRollResultKind(raw?: string | null): RollResultKind {
   return raw === 'Total' ? 'Total' : 'PassFail';
 }

@@ -358,6 +358,27 @@ public class RulesetNpcTemplateDefinition
     [JsonPropertyName("label")]
     public string Label { get; set; } = string.Empty;
 
+    /// <summary>Optional scenario tag for grouping adventure-specific presets (e.g. "hopes-last-day").</summary>
+    [JsonPropertyName("scenario")]
+    public string? Scenario { get; set; }
+
+    /// <summary>Flavor text shown when selecting this template.</summary>
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    /// <summary>NPC or Monster; defaults to NPC when omitted.</summary>
+    [JsonPropertyName("kind")]
+    public string? Kind { get; set; }
+
+    [JsonPropertyName("maxHealth")]
+    public int? MaxHealth { get; set; }
+
+    [JsonPropertyName("health")]
+    public int? Health { get; set; }
+
+    [JsonPropertyName("armor")]
+    public int? Armor { get; set; }
+
     [JsonPropertyName("defaultStats")]
     public Dictionary<string, object> DefaultStats { get; set; } = new();
 }

@@ -11,6 +11,7 @@ import {
 import { parseCharacterStats } from '~/utils/dice';
 import { normalizeRollResultKind, rollPromptCheckLabel, rollPromptResultKindLabel } from '~/utils/rollPrompt';
 import { buildDiceRollContext, findRulesetAction } from '~/utils/rulesets';
+import { isStatCheckAction, parseStatCheckFromAction } from '~/utils/statCheckAction';
 import { formatAutoResolveLabel } from '~/utils/rollResult';
 
 interface Props {
@@ -27,7 +28,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'startChain'): void;
-  (e: 'send', payload: { prompts: Array<{ targetCharacterId: string; checkMode: string; actionKey?: string; resultKind: string; dc?: number | null }> }): void;
+  (e: 'send', payload: { prompts: Array<{ targetCharacterId: string; checkMode: string; actionKey?: string; skillKey?: string; attributeKey?: string; resultKind: string; dc?: number | null }> }): void;
   (e: 'cancel', promptId: string): void;
   (e: 'dmRoll', payload: { actionId: string; rollSummary: string; dc?: number | null }): void;
 }>();
@@ -41,7 +42,9 @@ const rollFlowStatus = computed(() =>
 );
 
 const rollFlowHint = computed(() =>
-  formatRollFlowHint(rollFlowStatus.value, props.action.actorName),
+  formatRollFlowHint(rollFlowStatus.value, props.action.actorName, {
+    isStatCheck: isStatCheckAction(props.action),
+  }),
 );
 
 const needsPlayerRoll = computed(() =>
@@ -62,9 +65,13 @@ const hasPendingPrompt = computed(() =>
   actionPrompts.value.some(p => p.status === 'Pending'),
 );
 
+const statCheckRollRequest = computed(() =>
+  parseStatCheckFromAction(props.action, props.rulesetDefinition),
+);
+
 const canRequestActorRoll = computed(() =>
   Boolean(actorCharacter.value)
-  && props.action.actionKey
+  && (props.action.actionKey || statCheckRollRequest.value)
   && !hasPendingPrompt.value
   && !hasRollChain.value,
 );
@@ -89,13 +96,30 @@ const actorStats = computed(() => {
  * action key, a character actor, and a loaded ruleset definition.
  */
 const dmRollContext = computed(() => {
-  if (!props.rulesetDefinition || !actorStats.value || !props.action.actionKey) return null;
+  if (!props.rulesetDefinition || !actorStats.value) return null;
+
+  if (props.action.actionKey) {
+    return buildDiceRollContext({
+      definition: props.rulesetDefinition,
+      mode: 'action',
+      actionKey: props.action.actionKey,
+      skillKey: '',
+      attributeKey: '',
+      attributes: actorStats.value.attributes,
+      skills: actorStats.value.skills,
+      gameValues: actorStats.value.gameValues,
+    });
+  }
+
+  const statCheck = statCheckRollRequest.value;
+  if (!statCheck) return null;
+
   return buildDiceRollContext({
     definition: props.rulesetDefinition,
-    mode: 'action',
-    actionKey: props.action.actionKey,
-    skillKey: '',
-    attributeKey: '',
+    mode: statCheck.checkMode === 'Skill' ? 'skill' : 'attribute',
+    actionKey: '',
+    skillKey: statCheck.skillKey ?? '',
+    attributeKey: statCheck.attributeKey ?? '',
     attributes: actorStats.value.attributes,
     skills: actorStats.value.skills,
     gameValues: actorStats.value.gameValues,
@@ -108,7 +132,24 @@ const showDmRollForm = ref(false);
 const dmRollInput = ref('');
 
 function requestActorRoll() {
-  if (!actorCharacter.value || !props.action.actionKey) return;
+  if (!actorCharacter.value) return;
+
+  const statCheck = statCheckRollRequest.value;
+  if (statCheck) {
+    emit('send', {
+      prompts: [{
+        targetCharacterId: actorCharacter.value.id,
+        checkMode: statCheck.checkMode,
+        skillKey: statCheck.skillKey,
+        attributeKey: statCheck.attributeKey,
+        resultKind: 'PassFail',
+        dc: dc.value,
+      }],
+    });
+    return;
+  }
+
+  if (!props.action.actionKey) return;
 
   emit('send', {
     prompts: [{
@@ -141,7 +182,7 @@ function promptSummary(prompt: RollPromptResponse) {
   <section v-if="needsPlayerRoll || actionPrompts.length" class="dm-action-roll-panel panel nested">
     <div class="dm-action-roll-header">
       <div>
-        <h3>Player rolls</h3>
+        <h3>{{ isStatCheckAction(action) ? 'Stat check roll' : 'Player rolls' }}</h3>
         <p v-if="rollFlowHint" class="text-sm dm-action-roll-hint">{{ rollFlowHint }}</p>
       </div>
       <span

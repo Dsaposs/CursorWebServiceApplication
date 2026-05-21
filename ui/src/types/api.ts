@@ -65,7 +65,7 @@ export interface RulesetDefinition {
   character: RulesetCharacterDefinition;
   actions: RulesetActionDefinition[];
   items?: RulesetItemDefinition[];
-  npcTemplates: Array<Record<string, unknown>>;
+  npcTemplates: RulesetNpcTemplateDefinition[];
   /** Ruleset-specific mechanics for skill and attribute checks. */
   rollMechanics?: RulesetRollMechanics;
   /** Named status conditions that can be applied to characters and NPCs. */
@@ -147,6 +147,18 @@ export interface RulesetClassDefinition {
   startingSkillPoints: number;
   maxSkillRank?: number;
   startingItemOptions?: string[];
+}
+
+export interface RulesetNpcTemplateDefinition {
+  key: string;
+  label: string;
+  scenario?: string;
+  description?: string;
+  kind?: string;
+  maxHealth?: number;
+  health?: number;
+  armor?: number;
+  defaultStats?: Record<string, unknown>;
 }
 
 export interface RulesetSkillDefinition {

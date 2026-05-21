@@ -86,6 +86,10 @@ public class ImportRulesetRequest
 
 public class CreateNpcRequest
 {
+    /// <summary>When set, applies a ruleset <c>npcTemplates</c> preset; explicit fields override template defaults.</summary>
+    [MaxLength(80)]
+    public string? TemplateKey { get; set; }
+
     [Required, MaxLength(160)]
     public string Name { get; set; } = string.Empty;
 

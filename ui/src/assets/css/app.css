@@ -1,4 +1,5 @@
 :root {
+  --page-max: 1480px;
   --bg: #0d0f1d;
   --surface: #131627;
   --panel: #1a1e35;

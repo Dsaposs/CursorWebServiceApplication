@@ -6,6 +6,11 @@ import type {
   RulesetSkillDefinition,
 } from '~/types/api';
 import { parseNpcInventory, type InventoryEntry } from '~/utils/inventory';
+import {
+  applyNpcTemplateToForm,
+  buildStatBlockJsonFromForm,
+  findNpcTemplate,
+} from '~/utils/npcTemplates';
 
 export interface NpcFormPayload {
   name: string;
@@ -46,8 +51,10 @@ const localArmor = ref(0);
 const localAttrs = ref<Record<string, number>>({});
 const localSkills = ref<Record<string, number>>({});
 const localInventory = ref<InventoryEntry[]>([]);
+const selectedTemplateKey = ref('');
 
 const isEditMode = computed(() => Boolean(props.npc));
+const selectedTemplate = computed(() => findNpcTemplate(props.rulesetDefinition, selectedTemplateKey.value));
 
 const attributes = computed<RulesetAttributeDefinition[]>(
   () => props.rulesetDefinition?.character.attributes ?? [],
@@ -65,6 +72,7 @@ function defaultSkills(): Record<string, number> {
 }
 
 function resetForm() {
+  selectedTemplateKey.value = '';
   localName.value = '';
   localKind.value = 'NPC';
   localMaxHealth.value = 10;
@@ -74,6 +82,33 @@ function resetForm() {
   localSkills.value = defaultSkills();
   localInventory.value = [];
 }
+
+function applyTemplate(templateKey: string) {
+  if (!templateKey || !props.rulesetDefinition) return;
+
+  const template = findNpcTemplate(props.rulesetDefinition, templateKey);
+  if (!template) return;
+
+  const applied = applyNpcTemplateToForm(
+    template,
+    props.rulesetDefinition,
+    attributes.value,
+    skills.value,
+  );
+  localName.value = applied.name;
+  localKind.value = applied.kind;
+  localMaxHealth.value = applied.maxHealth;
+  localHealth.value = applied.health;
+  localArmor.value = applied.armor;
+  localAttrs.value = applied.attrs;
+  localSkills.value = applied.skills;
+  localInventory.value = applied.inventory.map(entry => ({ ...entry }));
+}
+
+watch(selectedTemplateKey, (templateKey) => {
+  if (!templateKey) return;
+  applyTemplate(templateKey);
+});
 
 function populateFromNpc(npc: NpcResponse) {
   localName.value = npc.name;
@@ -116,20 +151,12 @@ watch(
 );
 
 function buildStatBlockJson(): string {
-  const hasAttrs = attributes.value.length > 0;
-  const hasSkills = skills.value.length > 0;
-  const hasInventory = localInventory.value.length > 0;
-  if (!hasAttrs && !hasSkills && !hasInventory) return '{}';
-  const block: Record<string, unknown> = {};
-  if (hasAttrs) block.attributes = { ...localAttrs.value };
-  if (hasSkills) block.skills = { ...localSkills.value };
-  if (hasInventory) {
-    block.inventory = localInventory.value.map(entry => ({
-      itemKey: entry.itemKey,
-      quantity: entry.quantity,
-    }));
-  }
-  return JSON.stringify(block);
+  return buildStatBlockJsonFromForm(
+    localAttrs.value,
+    localSkills.value,
+    localInventory.value,
+    selectedTemplate.value,
+  );
 }
 
 function buildPayload(): NpcFormPayload {
@@ -203,6 +230,13 @@ function cancel() {
     <p v-if="isEditMode" class="text-sm muted" style="margin: 0 0 0.75rem;">
       Editing <strong>{{ npc?.name }}</strong>
     </p>
+
+    <NpcTemplatePicker
+      v-if="rulesetDefinition && !isEditMode"
+      v-model="selectedTemplateKey"
+      :definition="rulesetDefinition"
+      :disabled="formBusy"
+    />
 
     <label>
       Name

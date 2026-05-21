@@ -2,6 +2,7 @@ import type { ActionQueueItemResponse, RollPromptResponse, RulesetDefinition } f
 import type { ActionOutcomeValue } from '~/utils/actionOutcome';
 import { evaluateActionOutcome } from '~/utils/actionOutcome';
 import { findRulesetAction } from '~/utils/rulesets';
+import { isStatCheckAction } from '~/utils/statCheckAction';
 
 export type ActionRollFlowStatus =
   | 'not-applicable'
@@ -22,7 +23,7 @@ export function actionNeedsPlayerRoll(
   action: ActionQueueItemResponse,
   definition: RulesetDefinition | null,
 ): boolean {
-  if (action.isSkillCheckResponse) return true;
+  if (isStatCheckAction(action) && action.actorCharacterId) return true;
   if (!action.actorCharacterId) return false;
   if (action.actionKey) {
     const def = findRulesetAction(definition, action.actionKey);
@@ -99,10 +100,13 @@ export function evaluateActionOutcomeFromRolls(
 export function formatRollFlowHint(
   status: ActionRollFlowStatus,
   actorName: string,
+  options?: { isStatCheck?: boolean },
 ): string {
   switch (status) {
     case 'awaiting-dm-request':
-      return `Ask ${actorName} to roll before you publish the outcome.`;
+      return options?.isStatCheck
+        ? `Prompt ${actorName} to roll for this stat check before publishing.`
+        : `Ask ${actorName} to roll before you publish the outcome.`;
     case 'awaiting-player':
       return `${actorName} has been prompted — waiting for their roll.`;
     case 'rolls-received':

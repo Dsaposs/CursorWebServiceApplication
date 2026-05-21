@@ -1,9 +1,11 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Models;
+using NotesApi.Rulesets;
 
 namespace NotesApi.Controllers;
 
@@ -28,17 +30,22 @@ public class NpcsController : ControllerBase
             return NotFound();
         }
 
+        if (!TryResolveCreateRequest(game, request, out var resolved, out var resolveError))
+        {
+            return BadRequest(new { error = resolveError });
+        }
+
         var now = DateTime.UtcNow;
         var npc = new NpcOrMonster
         {
             Id = Guid.NewGuid(),
             GameId = game.Id,
-            Name = request.Name,
-            Kind = request.Kind,
-            MaxHealth = request.MaxHealth <= 0 ? 1 : request.MaxHealth,
-            Health = request.Health <= 0 ? request.MaxHealth : request.Health,
-            Armor = request.Armor,
-            StatBlockJson = request.StatBlockJson,
+            Name = resolved.Name,
+            Kind = resolved.Kind,
+            MaxHealth = resolved.MaxHealth <= 0 ? 1 : resolved.MaxHealth,
+            Health = resolved.Health <= 0 ? resolved.MaxHealth : resolved.Health,
+            Armor = resolved.Armor,
+            StatBlockJson = resolved.StatBlockJson,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -116,5 +123,64 @@ public class NpcsController : ControllerBase
         game.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return NoContent();
+    }
+
+    private bool TryResolveCreateRequest(
+        Game game,
+        CreateNpcRequest request,
+        out CreateNpcRequest resolved,
+        out string? error)
+    {
+        resolved = request;
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(request.TemplateKey))
+        {
+            return true;
+        }
+
+        var ruleset = _db.Rulesets.AsNoTracking().FirstOrDefault(r => r.Code == game.RulesetCode);
+        if (ruleset is null)
+        {
+            error = $"Ruleset '{game.RulesetCode}' is not available.";
+            return false;
+        }
+
+        RulesetDefinition? definition;
+        try
+        {
+            definition = JsonSerializer.Deserialize<RulesetDefinition>(
+                ruleset.DefinitionJson,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        catch
+        {
+            error = "Ruleset definition could not be parsed.";
+            return false;
+        }
+
+        if (definition is null)
+        {
+            error = "Ruleset definition could not be parsed.";
+            return false;
+        }
+
+        if (!NpcTemplateApplicator.TryBuildCreateRequest(
+                definition,
+                request.TemplateKey,
+                request.Name,
+                out var fromTemplate,
+                out error))
+        {
+            return false;
+        }
+
+        resolved = fromTemplate;
+        if (!string.IsNullOrWhiteSpace(request.Name))
+        {
+            resolved.Name = request.Name.Trim();
+        }
+
+        return true;
     }
 }

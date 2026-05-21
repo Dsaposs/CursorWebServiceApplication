@@ -15,69 +15,202 @@
   ],
   "character": {
     "vitals": {
-      "health": { "label": "Health Points", "defaultMax": 3 },
-      "armor": { "label": "Armor Rating", "default": 0 }
+      "health": {
+        "label": "Health Points",
+        "defaultMax": 3
+      },
+      "armor": {
+        "label": "Armor Rating",
+        "default": 0
+      }
     },
     "attributes": [
-      { "key": "strength", "label": "Strength", "default": 2, "min": 2, "max": 5 },
-      { "key": "agility", "label": "Agility", "default": 2, "min": 2, "max": 5 },
-      { "key": "wits", "label": "Wits", "default": 2, "min": 2, "max": 5 },
-      { "key": "empathy", "label": "Empathy", "default": 2, "min": 2, "max": 5 }
+      {
+        "key": "strength",
+        "label": "Strength",
+        "default": 2,
+        "min": 2,
+        "max": 5
+      },
+      {
+        "key": "agility",
+        "label": "Agility",
+        "default": 2,
+        "min": 2,
+        "max": 5
+      },
+      {
+        "key": "wits",
+        "label": "Wits",
+        "default": 2,
+        "min": 2,
+        "max": 5
+      },
+      {
+        "key": "empathy",
+        "label": "Empathy",
+        "default": 2,
+        "min": 2,
+        "max": 5
+      }
     ],
     "gameValues": [
-      { "key": "stress", "label": "Stress", "type": "number", "default": 0, "min": 0 }
+      {
+        "key": "stress",
+        "label": "Stress",
+        "type": "number",
+        "default": 0,
+        "min": 0
+      }
     ],
     "classes": [
       {
         "key": "colonialMarine",
         "label": "Colonial Marine",
         "description": "Combat-trained military specialist.",
-        "availableSkills": ["closeCombat", "rangedCombat", "mobility", "stamina"],
+        "availableSkills": [
+          "closeCombat",
+          "rangedCombat",
+          "mobility",
+          "stamina"
+        ],
         "startingSkillPoints": 10,
         "maxSkillRank": 3,
-        "startingItemOptions": ["heavyRevolver", "pulseRifle", "combatKnife", "shotgun"]
+        "startingItemOptions": [
+          "heavyRevolver",
+          "pulseRifle",
+          "combatKnife",
+          "shotgun"
+        ]
       },
       {
         "key": "scientist",
         "label": "Scientist",
         "description": "Research and technical expert.",
-        "availableSkills": ["observation", "survival", "comtech", "medicalAid"],
+        "availableSkills": [
+          "observation",
+          "survival",
+          "comtech",
+          "medicalAid"
+        ],
         "startingSkillPoints": 10,
         "maxSkillRank": 3,
-        "startingItemOptions": ["medkit", "motionTracker", "heavyRevolver"]
+        "startingItemOptions": [
+          "medkit",
+          "motionTracker",
+          "heavyRevolver"
+        ]
       },
       {
         "key": "roughneck",
         "label": "Roughneck",
         "description": "Tough manual laborer and survivor.",
-        "availableSkills": ["closeCombat", "stamina", "heavyMachinery", "survival"],
+        "availableSkills": [
+          "closeCombat",
+          "stamina",
+          "heavyMachinery",
+          "survival"
+        ],
         "startingSkillPoints": 10,
         "maxSkillRank": 3,
-        "startingItemOptions": ["combatKnife", "shotgun", "heavyRevolver"]
+        "startingItemOptions": [
+          "combatKnife",
+          "shotgun",
+          "heavyRevolver"
+        ]
       },
       {
         "key": "pilot",
         "label": "Pilot",
         "description": "Expert in spacecraft and vehicles.",
-        "availableSkills": ["piloting", "comtech", "mobility", "rangedCombat"],
+        "availableSkills": [
+          "piloting",
+          "comtech",
+          "mobility",
+          "rangedCombat"
+        ],
         "startingSkillPoints": 10,
         "maxSkillRank": 3,
-        "startingItemOptions": ["heavyRevolver", "pulseRifle", "motionTracker"]
+        "startingItemOptions": [
+          "heavyRevolver",
+          "pulseRifle",
+          "motionTracker"
+        ]
       }
     ],
     "skills": [
-      { "key": "closeCombat", "label": "Close Combat", "attribute": "strength", "default": 0 },
-      { "key": "heavyMachinery", "label": "Heavy Machinery", "attribute": "strength", "default": 0 },
-      { "key": "stamina", "label": "Stamina", "attribute": "strength", "default": 0 },
-      { "key": "rangedCombat", "label": "Ranged Combat", "attribute": "agility", "default": 0 },
-      { "key": "mobility", "label": "Mobility", "attribute": "agility", "default": 0 },
-      { "key": "piloting", "label": "Piloting", "attribute": "agility", "default": 0 },
-      { "key": "observation", "label": "Observation", "attribute": "wits", "default": 0 },
-      { "key": "survival", "label": "Survival", "attribute": "wits", "default": 0 },
-      { "key": "comtech", "label": "Comtech", "attribute": "wits", "default": 0 },
-      { "key": "medicalAid", "label": "Medical Aid", "attribute": "empathy", "default": 0 },
-      { "key": "manipulation", "label": "Manipulation", "attribute": "empathy", "default": 0 },
-      { "key": "commandSkill", "label": "Command", "attribute": "empathy", "default": 0 }
+      {
+        "key": "closeCombat",
+        "label": "Close Combat",
+        "attribute": "strength",
+        "default": 0
+      },
+      {
+        "key": "heavyMachinery",
+        "label": "Heavy Machinery",
+        "attribute": "strength",
+        "default": 0
+      },
+      {
+        "key": "stamina",
+        "label": "Stamina",
+        "attribute": "strength",
+        "default": 0
+      },
+      {
+        "key": "rangedCombat",
+        "label": "Ranged Combat",
+        "attribute": "agility",
+        "default": 0
+      },
+      {
+        "key": "mobility",
+        "label": "Mobility",
+        "attribute": "agility",
+        "default": 0
+      },
+      {
+        "key": "piloting",
+        "label": "Piloting",
+        "attribute": "agility",
+        "default": 0
+      },
+      {
+        "key": "observation",
+        "label": "Observation",
+        "attribute": "wits",
+        "default": 0
+      },
+      {
+        "key": "survival",
+        "label": "Survival",
+        "attribute": "wits",
+        "default": 0
+      },
+      {
+        "key": "comtech",
+        "label": "Comtech",
+        "attribute": "wits",
+        "default": 0
+      },
+      {
+        "key": "medicalAid",
+        "label": "Medical Aid",
+        "attribute": "empathy",
+        "default": 0
+      },
+      {
+        "key": "manipulation",
+        "label": "Manipulation",
+        "attribute": "empathy",
+        "default": 0
+      },
+      {
+        "key": "commandSkill",
+        "label": "Command",
+        "attribute": "empathy",
+        "default": 0
+      }
     ]
   },
   "items": [
@@ -93,7 +226,12 @@
         "attribute": "strength",
         "skill": "closeCombat",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 rolled is one success. One success hits."
       },
@@ -107,14 +245,25 @@
       "label": "Heavy Revolver",
       "description": "Reliable sidearm with stopping power at short range.",
       "category": "weapon",
-      "modifiers": [{ "source": "item", "key": "heavyRevolver", "flatDice": 1 }],
+      "modifiers": [
+        {
+          "source": "item",
+          "key": "heavyRevolver",
+          "flatDice": 1
+        }
+      ],
       "attackRoll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
         "attribute": "agility",
         "skill": "rangedCombat",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 rolled is one success. One success hits."
       },
@@ -128,14 +277,25 @@
       "label": "M41A Pulse Rifle",
       "description": "Military assault rifle. Fires controlled bursts.",
       "category": "weapon",
-      "modifiers": [{ "source": "item", "key": "pulseRifle", "flatDice": 1 }],
+      "modifiers": [
+        {
+          "source": "item",
+          "key": "pulseRifle",
+          "flatDice": 1
+        }
+      ],
       "attackRoll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
         "attribute": "agility",
         "skill": "rangedCombat",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 rolled is one success. One success hits."
       },
@@ -149,14 +309,25 @@
       "label": "Shotgun",
       "description": "Pump-action shotgun devastating at close range.",
       "category": "weapon",
-      "modifiers": [{ "source": "item", "key": "shotgun", "flatDice": 1 }],
+      "modifiers": [
+        {
+          "source": "item",
+          "key": "shotgun",
+          "flatDice": 1
+        }
+      ],
       "attackRoll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
         "attribute": "agility",
         "skill": "rangedCombat",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 rolled is one success. One success hits at close range."
       },
@@ -177,7 +348,13 @@
       "label": "Motion Tracker",
       "description": "Handheld sensor that detects movement through walls.",
       "category": "gear",
-      "modifiers": [{ "source": "item", "key": "motionTracker", "flatDice": 1 }]
+      "modifiers": [
+        {
+          "source": "item",
+          "key": "motionTracker",
+          "flatDice": 1
+        }
+      ]
     }
   ],
   "actions": [
@@ -192,7 +369,12 @@
         "attribute": "strength",
         "skill": "closeCombat",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 rolled is one success. One success hits. On a stress die showing 1, roll for panic."
       },
@@ -203,7 +385,10 @@
           "checkMode": "Action",
           "resultKind": "PassFail",
           "guidanceText": "Roll Strength + Close Combat (+ stress dice). Each 6 is a success; one success hits.",
-          "autoResolve": { "condition": "successes >= 1", "fallback": "dm_input" },
+          "autoResolve": {
+            "condition": "successes >= 1",
+            "fallback": "dm_input"
+          },
           "onSuccess": "damage",
           "onFailure": "end"
         },
@@ -226,7 +411,8 @@
           ],
           "onComplete": "end"
         }
-      ]
+      ],
+      "context": "combat"
     },
     {
       "key": "rangedAttack",
@@ -239,7 +425,12 @@
         "attribute": "agility",
         "skill": "rangedCombat",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 rolled is one success. One success hits. On a stress die showing 1, roll for panic."
       },
@@ -250,7 +441,10 @@
           "checkMode": "Action",
           "resultKind": "PassFail",
           "guidanceText": "Roll Agility + Ranged Combat (+ stress dice). Each 6 is a success; one success hits.",
-          "autoResolve": { "condition": "successes >= 1", "fallback": "dm_input" },
+          "autoResolve": {
+            "condition": "successes >= 1",
+            "fallback": "dm_input"
+          },
           "onSuccess": "damage",
           "onFailure": "end"
         },
@@ -272,7 +466,8 @@
           ],
           "onComplete": "end"
         }
-      ]
+      ],
+      "context": "combat"
     },
     {
       "key": "suppressiveFire",
@@ -285,10 +480,16 @@
         "attribute": "agility",
         "skill": "rangedCombat",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success. One success suppresses the target; two or more also inflict 1 damage."
-      }
+      },
+      "context": "combat"
     },
     {
       "key": "overwatch",
@@ -301,10 +502,16 @@
         "attribute": "agility",
         "skill": "rangedCombat",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "If triggered, each 6 is a success. One success hits the triggering target."
-      }
+      },
+      "context": "combat"
     },
     {
       "key": "forcedEntry",
@@ -317,10 +524,16 @@
         "attribute": "strength",
         "skill": "heavyMachinery",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success. One success opens it; failure means it holds."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "observeThreat",
@@ -333,10 +546,16 @@
         "attribute": "wits",
         "skill": "observation",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success. Extra successes reveal more detail."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "survival",
@@ -349,10 +568,16 @@
         "attribute": "wits",
         "skill": "survival",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "comtech",
@@ -365,10 +590,16 @@
         "attribute": "wits",
         "skill": "comtech",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "medicalAid",
@@ -381,10 +612,16 @@
         "attribute": "empathy",
         "skill": "medicalAid",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success. One success stabilises; two or more heal 1 HP."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "manipulation",
@@ -397,10 +634,16 @@
         "attribute": "empathy",
         "skill": "manipulation",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "mobility",
@@ -413,10 +656,16 @@
         "attribute": "agility",
         "skill": "mobility",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "commandTroops",
@@ -429,16 +678,24 @@
         "attribute": "empathy",
         "skill": "commandSkill",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success. One success grants one ally an immediate bonus action."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoDroneInnerJaw",
       "label": "Inner Jaw Strike",
       "description": "The drone extends its secondary inner jaw in a lightning-fast strike at the target's head or neck.",
-      "allowedClasses": ["xenomorphDrone"],
+      "allowedClasses": [
+        "xenomorphDrone"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -446,13 +703,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success hits for 2 damage. Two or more successes: the target is broken immediately."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoDroneTailWhip",
       "label": "Tail Whip",
       "description": "The drone lashes its blade-tipped tail in a wide arc, striking nearby targets.",
-      "allowedClasses": ["xenomorphDrone"],
+      "allowedClasses": [
+        "xenomorphDrone"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -460,13 +720,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success hits primary target for 1 damage. Two or more successes also hit an adjacent target."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoDroneSilentHunt",
       "label": "Silent Hunt",
       "description": "The drone moves unseen through vents, shadows, or darkness to reposition without being detected.",
-      "allowedClasses": ["xenomorphDrone"],
+      "allowedClasses": [
+        "xenomorphDrone"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -474,13 +737,16 @@
         "skill": "mobility",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: repositions without detection. Observers must beat this roll to spot the drone."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoDroneAcidSpit",
       "label": "Acid Spit",
       "description": "The drone spits a burst of corrosive acid at a target. Melts through armour and flesh alike.",
-      "allowedClasses": ["xenomorphDrone"],
+      "allowedClasses": [
+        "xenomorphDrone"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -488,13 +754,16 @@
         "skill": "rangedCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success hits for 1 damage and applies Burning. Each subsequent round the target takes 1 damage until treated."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoWarriorClawSlash",
       "label": "Claw Slash",
       "description": "The warrior drives its talons into the target with crushing force.",
-      "allowedClasses": ["xenomorphWarrior"],
+      "allowedClasses": [
+        "xenomorphWarrior"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -502,13 +771,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success hits for 2 damage. Three or more successes: 3 damage and the target is knocked prone."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoWarriorTailSlam",
       "label": "Tail Slam",
       "description": "The warrior drives its heavy tail into the target with bone-crushing force.",
-      "allowedClasses": ["xenomorphWarrior"],
+      "allowedClasses": [
+        "xenomorphWarrior"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -516,13 +788,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success hits for 2 damage and stuns the target. A stunned target loses their next action."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoWarriorPounce",
       "label": "Pounce",
       "description": "The warrior launches itself at the target from a distance, closing the gap instantly.",
-      "allowedClasses": ["xenomorphWarrior"],
+      "allowedClasses": [
+        "xenomorphWarrior"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -530,13 +805,16 @@
         "skill": "mobility",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: warrior closes all distance and gets a free Claw Slash. Failure: warrior lands adjacent but does not attack."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoWarriorFrenzy",
       "label": "Combat Frenzy",
       "description": "The warrior enters a berserk state, attacking multiple times in a single turn.",
-      "allowedClasses": ["xenomorphWarrior"],
+      "allowedClasses": [
+        "xenomorphWarrior"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -544,13 +822,16 @@
         "skill": "stamina",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: may make two attack actions this turn. Failure: only one attack, and warrior takes 1 damage from exertion."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoQueenRend",
       "label": "Rend",
       "description": "The queen tears into the target with enormous claws and inner jaws simultaneously.",
-      "allowedClasses": ["xenomorphQueen"],
+      "allowedClasses": [
+        "xenomorphQueen"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -558,13 +839,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: 3 damage. Two or more: 3 damage and target gains Bleeding status."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoQueenTerrifyingRoar",
       "label": "Terrifying Roar",
       "description": "The queen releases a deafening screech that triggers raw biological terror in all nearby humans.",
-      "allowedClasses": ["xenomorphQueen"],
+      "allowedClasses": [
+        "xenomorphQueen"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -572,13 +856,16 @@
         "skill": "commandSkill",
         "modifiers": [],
         "successRule": "Each 6 is a success. Each success forces one human target within range to roll for panic immediately. Affected characters also gain 1 Stress."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoQueenTailSpear",
       "label": "Tail Spear",
       "description": "The queen drives her massive bladed tail like a spear at a single target with devastating precision.",
-      "allowedClasses": ["xenomorphQueen"],
+      "allowedClasses": [
+        "xenomorphQueen"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -586,13 +873,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: 4 damage. On two or more successes the target is also impaled — Broken immediately regardless of HP."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "xenoQueenOviposition",
       "label": "Lay Egg",
       "description": "The queen deposits an egg in a secured location. The egg will hatch a Facehugger when a warm body comes within range.",
-      "allowedClasses": ["xenomorphQueen"],
+      "allowedClasses": [
+        "xenomorphQueen"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -600,13 +890,16 @@
         "skill": "stamina",
         "modifiers": [],
         "successRule": "Always succeeds if the queen is not Broken. The DM places a Facehugger egg token in the scene."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "facehuggerLeapAttach",
       "label": "Leap and Attach",
       "description": "The facehugger launches itself at a target's face, wrapping its legs around the head and inserting the ovipositor.",
-      "allowedClasses": ["facehugger"],
+      "allowedClasses": [
+        "facehugger"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -614,13 +907,16 @@
         "skill": "mobility",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: facehugger attaches. Target is Entangled and cannot act freely while attached. Failure: facehugger misses and is exposed."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "facehuggerImplant",
       "label": "Implant Embryo",
       "description": "While attached, the facehugger forces the ovipositor down the host's throat and implants a xenomorph embryo.",
-      "allowedClasses": ["facehugger"],
+      "allowedClasses": [
+        "facehugger"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -628,13 +924,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. Requires the target to be Entangled. One success: embryo implanted. The host is infected. A chestburster will emerge in hours."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "chestbursterEmerge",
       "label": "Burst Free",
       "description": "The chestburster erupts from the host's chest in a spray of blood and tissue.",
-      "allowedClasses": ["chestburster"],
+      "allowedClasses": [
+        "chestburster"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -642,13 +941,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Always succeeds. The host takes 4 damage and is Broken. The chestburster enters play adjacent to the host's body."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "chestbursterSurge",
       "label": "Frantic Surge",
       "description": "The chestburster moves in an unpredictable burst of speed, biting anything in reach before fleeing.",
-      "allowedClasses": ["chestburster"],
+      "allowedClasses": [
+        "chestburster"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -656,13 +958,16 @@
         "skill": "mobility",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: bites one target for 1 damage and moves up to full speed without triggering overwatch. Failure: moves but does not bite."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "neomorphBite",
       "label": "Feral Bite",
       "description": "The neomorph lunges forward and bites with its pale, tooth-lined maw.",
-      "allowedClasses": ["neomorph"],
+      "allowedClasses": [
+        "neomorph"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -670,13 +975,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: 2 damage. Two or more: 2 damage and the target gains the Bleeding status."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "neomorphHeadBite",
       "label": "Headbite",
       "description": "The neomorph targets the skull specifically, driving its head-crest into the target's cranium.",
-      "allowedClasses": ["neomorph"],
+      "allowedClasses": [
+        "neomorph"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -684,13 +992,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: 1 damage and the target is Stunned. Three or more successes: target is Broken regardless of HP."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "neomorphSpineCharge",
       "label": "Spine Charge",
       "description": "The neomorph lowers its dorsal spines and charges full-speed into a target.",
-      "allowedClasses": ["neomorph"],
+      "allowedClasses": [
+        "neomorph"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -698,13 +1009,16 @@
         "skill": "mobility",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: neomorph moves up to full speed and the target takes 2 damage and is knocked prone. Failure: neomorph ends movement adjacent to target only."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "syntheticStrike",
       "label": "Combat Protocol Strike",
       "description": "The synthetic engages its combat subroutines and delivers a precisely calculated blow.",
-      "allowedClasses": ["weylandSynthetic"],
+      "allowedClasses": [
+        "weylandSynthetic"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -712,13 +1026,16 @@
         "skill": "closeCombat",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: 2 damage. Two or more: 2 damage and may choose to disarm or knock prone the target."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "syntheticDeception",
       "label": "Synthetic Deception",
       "description": "The synthetic uses its human appearance and perfectly calibrated body language to mislead or gain trust.",
-      "allowedClasses": ["weylandSynthetic"],
+      "allowedClasses": [
+        "weylandSynthetic"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -726,13 +1043,16 @@
         "skill": "manipulation",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: target believes the lie or complies. Two or more: target also does not suspect the synthetic's true nature."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "syntheticSystemOverride",
       "label": "System Override",
       "description": "The synthetic interfaces directly with a computer or electronic device, bypassing security.",
-      "allowedClasses": ["weylandSynthetic"],
+      "allowedClasses": [
+        "weylandSynthetic"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -740,13 +1060,16 @@
         "skill": "comtech",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: takes control of one electronic system (door, camera, turret). Two or more: no trace left in the system log."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "syntheticFieldSurgery",
       "label": "Field Surgery",
       "description": "The synthetic applies precise medical knowledge to stabilise or treat a critically injured person.",
-      "allowedClasses": ["weylandSynthetic"],
+      "allowedClasses": [
+        "weylandSynthetic"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
@@ -754,71 +1077,104 @@
         "skill": "medicalAid",
         "modifiers": [],
         "successRule": "Each 6 is a success. One success: stabilises a Broken character. Two or more: also heals 1 HP."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "marineFireBurst",
       "label": "Controlled Burst",
       "description": "Trained military fire discipline — three short bursts on a single target.",
-      "allowedClasses": ["colonialMarineNpc"],
+      "allowedClasses": [
+        "colonialMarineNpc"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
         "attribute": "agility",
         "skill": "rangedCombat",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success. One success: 2 damage. Two or more: 2 damage and target is Suppressed (cannot move next round)."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "marineTacticalMove",
       "label": "Tactical Advance",
       "description": "The marine moves from cover to cover using bounding fire, staying protected while advancing.",
-      "allowedClasses": ["colonialMarineNpc"],
+      "allowedClasses": [
+        "colonialMarineNpc"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
         "attribute": "agility",
         "skill": "mobility",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success. One success: moves full speed and counts as being in cover until next turn."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "mercAmbush",
       "label": "Ambush",
       "description": "The mercenary waits in concealment and strikes when the target is unaware.",
-      "allowedClasses": ["weylandMercenary"],
+      "allowedClasses": [
+        "weylandMercenary"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
         "attribute": "agility",
         "skill": "rangedCombat",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success. Requires the target to be unaware. One success: 3 damage and target is Stunned. Failure: target becomes aware but attack still fires for 1 damage."
-      }
+      },
+      "context": "exploration"
     },
     {
       "key": "mercCoerce",
       "label": "Coerce",
       "description": "The mercenary uses threats, implied violence, and leverage to force compliance.",
-      "allowedClasses": ["weylandMercenary"],
+      "allowedClasses": [
+        "weylandMercenary"
+      ],
       "roll": {
         "dice": "d6Pool",
         "dicePoolMode": "attribute+skill",
         "attribute": "empathy",
         "skill": "manipulation",
         "modifiers": [
-          { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+          {
+            "source": "gameValue",
+            "key": "stress",
+            "dicePerPoint": 1,
+            "isStressDice": true
+          }
         ],
         "successRule": "Each 6 is a success. One success: target complies for this scene. Two or more: target also reveals one secret or gives up something of value."
-      }
+      },
+      "context": "exploration"
     }
   ],
   "npcTemplates": [
@@ -1025,6 +1381,324 @@
           "stress": 0
         }
       }
+    },
+    {
+      "key": "hldMirandaReynolds",
+      "label": "Miranda Reynolds",
+      "scenario": "hopes-last-day",
+      "description": "Weyland-Yutani agent; Acheron Inspection Team leader. Often found dead in the Medlab.",
+      "kind": "NPC",
+      "maxHealth": 3,
+      "health": 0,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "weylandMercenary",
+        "attributes": { "strength": 3, "agility": 3, "wits": 4, "empathy": 3 },
+        "skills": {
+          "closeCombat": 1,
+          "rangedCombat": 2,
+          "manipulation": 3,
+          "observation": 2,
+          "mobility": 1
+        },
+        "gameValues": { "stress": 0 },
+        "inventory": [{ "itemKey": "heavyRevolver", "quantity": 1 }]
+      }
+    },
+    {
+      "key": "hldTheodoraKomiskey",
+      "label": "Theodora Komiskey",
+      "scenario": "hopes-last-day",
+      "description": "Weyland-Yutani chief scientist on the inspection team. Trapped in the Medlab; holds the Starcub keycard.",
+      "kind": "NPC",
+      "maxHealth": 3,
+      "health": 3,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "weylandMercenary",
+        "attributes": { "strength": 2, "agility": 2, "wits": 4, "empathy": 3 },
+        "skills": {
+          "medicalAid": 3,
+          "observation": 2,
+          "comtech": 2,
+          "manipulation": 2,
+          "survival": 1
+        },
+        "gameValues": { "stress": 1 },
+        "inventory": [{ "itemKey": "medkit", "quantity": 1 }]
+      }
+    },
+    {
+      "key": "hldWesOsterman",
+      "label": "Wes Osterman",
+      "scenario": "hopes-last-day",
+      "description": "Hadley's Hope facilities engineer; Morgan Hirsch's poker buddy. Often barricaded in Billy's Bar.",
+      "kind": "NPC",
+      "maxHealth": 3,
+      "health": 3,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "survivorNpc",
+        "attributes": { "strength": 3, "agility": 3, "wits": 2, "empathy": 2 },
+        "skills": {
+          "heavyMachinery": 2,
+          "comtech": 2,
+          "stamina": 1,
+          "mobility": 1,
+          "closeCombat": 1
+        },
+        "gameValues": { "stress": 0 }
+      }
+    },
+    {
+      "key": "hldAlSimpson",
+      "label": "Al Simpson",
+      "scenario": "hopes-last-day",
+      "description": "Hadley's Hope operations manager and colony supervisor. Often found in the morgue.",
+      "kind": "NPC",
+      "maxHealth": 3,
+      "health": 0,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "survivorNpc",
+        "attributes": { "strength": 3, "agility": 2, "wits": 3, "empathy": 3 },
+        "skills": {
+          "commandSkill": 3,
+          "manipulation": 2,
+          "observation": 1,
+          "survival": 1
+        },
+        "gameValues": { "stress": 0 }
+      }
+    },
+    {
+      "key": "hldJohnMarachuk",
+      "label": "John J. Marachuk",
+      "scenario": "hopes-last-day",
+      "description": "Geolab technician; unassuming colonist. Corpse in the morgue may host a chestburster.",
+      "kind": "NPC",
+      "maxHealth": 3,
+      "health": 0,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "survivorNpc",
+        "attributes": { "strength": 2, "agility": 2, "wits": 3, "empathy": 3 },
+        "skills": {
+          "survival": 2,
+          "observation": 1,
+          "comtech": 1,
+          "heavyMachinery": 1
+        },
+        "gameValues": { "stress": 0 }
+      }
+    },
+    {
+      "key": "hldAngelaLinn",
+      "label": "Angela Linn",
+      "scenario": "hopes-last-day",
+      "description": "Infected colonist; may suddenly host a chestburster during play.",
+      "kind": "NPC",
+      "maxHealth": 3,
+      "health": 2,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "survivorNpc",
+        "attributes": { "strength": 2, "agility": 3, "wits": 2, "empathy": 3 },
+        "skills": {
+          "medicalAid": 1,
+          "observation": 1,
+          "mobility": 1,
+          "survival": 1
+        },
+        "gameValues": { "stress": 2 }
+      }
+    },
+    {
+      "key": "hldJaniceMacWhirr",
+      "label": "Janice MacWhirr",
+      "scenario": "hopes-last-day",
+      "description": "Pregenerated PC — Colonial Administration Union organizer and survey team leader.",
+      "kind": "NPC",
+      "maxHealth": 3,
+      "health": 3,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "colonialMarineNpc",
+        "attributes": { "strength": 3, "agility": 2, "wits": 3, "empathy": 3 },
+        "skills": {
+          "closeCombat": 1,
+          "observation": 2,
+          "commandSkill": 2,
+          "manipulation": 1,
+          "survival": 1
+        },
+        "gameValues": { "stress": 0 },
+        "inventory": [{ "itemKey": "motionTracker", "quantity": 1 }]
+      }
+    },
+    {
+      "key": "hldMorganHirsch",
+      "label": "Morgan Hirsch",
+      "scenario": "hopes-last-day",
+      "description": "Pregenerated PC — former marine working colony security/sanitation.",
+      "kind": "NPC",
+      "maxHealth": 4,
+      "health": 4,
+      "armor": 1,
+      "defaultStats": {
+        "classKey": "colonialMarineNpc",
+        "attributes": { "strength": 4, "agility": 2, "wits": 2, "empathy": 3 },
+        "skills": {
+          "closeCombat": 2,
+          "rangedCombat": 1,
+          "stamina": 2,
+          "heavyMachinery": 1,
+          "observation": 1
+        },
+        "gameValues": { "stress": 0 },
+        "inventory": [{ "itemKey": "shotgun", "quantity": 1 }]
+      }
+    },
+    {
+      "key": "hldHannahSingleton",
+      "label": "Hannah Singleton",
+      "scenario": "hopes-last-day",
+      "description": "Pregenerated PC — tractor driver and Weyland-Yutani sleeper agent.",
+      "kind": "NPC",
+      "maxHealth": 3,
+      "health": 3,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "weylandMercenary",
+        "attributes": { "strength": 3, "agility": 3, "wits": 3, "empathy": 2 },
+        "skills": {
+          "heavyMachinery": 2,
+          "piloting": 1,
+          "mobility": 1,
+          "manipulation": 1,
+          "observation": 1
+        },
+        "gameValues": { "stress": 0 }
+      }
+    },
+    {
+      "key": "hldSonnySigg",
+      "label": "Sonny Sigg",
+      "scenario": "hopes-last-day",
+      "description": "Pregenerated PC — lab technician and aspiring company scientist.",
+      "kind": "NPC",
+      "maxHealth": 3,
+      "health": 3,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "scientist",
+        "attributes": { "strength": 2, "agility": 2, "wits": 4, "empathy": 3 },
+        "skills": {
+          "observation": 2,
+          "medicalAid": 1,
+          "comtech": 2,
+          "survival": 1,
+          "manipulation": 1
+        },
+        "gameValues": { "stress": 0 },
+        "inventory": [{ "itemKey": "medkit", "quantity": 1 }]
+      }
+    },
+    {
+      "key": "hldHolroyd",
+      "label": "Holroyd",
+      "scenario": "hopes-last-day",
+      "description": "Pregenerated PC — Weyland-Yutani synthetic mechanic.",
+      "kind": "NPC",
+      "maxHealth": 4,
+      "health": 4,
+      "armor": 1,
+      "defaultStats": {
+        "classKey": "weylandSynthetic",
+        "attributes": { "strength": 4, "agility": 3, "wits": 3, "empathy": 1 },
+        "skills": {
+          "heavyMachinery": 3,
+          "comtech": 2,
+          "closeCombat": 1,
+          "observation": 1,
+          "stamina": 1
+        },
+        "gameValues": { "stress": 0 }
+      }
+    },
+    {
+      "key": "hldXenomorphDrone",
+      "label": "Colony Xenomorph Drone",
+      "scenario": "hopes-last-day",
+      "description": "Adult drone encountered in Hadley's Hope corridors and vents.",
+      "kind": "Monster",
+      "maxHealth": 8,
+      "health": 8,
+      "armor": 2,
+      "defaultStats": {
+        "classKey": "xenomorphDrone",
+        "attributes": { "strength": 5, "agility": 4, "wits": 2, "empathy": 1 },
+        "skills": {
+          "closeCombat": 3,
+          "mobility": 3,
+          "observation": 2,
+          "survival": 1,
+          "stamina": 2
+        },
+        "gameValues": {}
+      }
+    },
+    {
+      "key": "hldFacehugger",
+      "label": "Facehugger (Stasis)",
+      "scenario": "hopes-last-day",
+      "description": "Facehugger in a glass tube or loose in the Medlab stasis wing.",
+      "kind": "Monster",
+      "maxHealth": 2,
+      "health": 2,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "facehugger",
+        "attributes": { "strength": 1, "agility": 5, "wits": 2, "empathy": 0 },
+        "skills": { "closeCombat": 2, "mobility": 5 },
+        "gameValues": {}
+      }
+    },
+    {
+      "key": "hldChestburster",
+      "label": "Chestburster",
+      "scenario": "hopes-last-day",
+      "description": "Newly emerged chestburster — morgue corpses or infected colonists.",
+      "kind": "Monster",
+      "maxHealth": 3,
+      "health": 3,
+      "armor": 0,
+      "defaultStats": {
+        "classKey": "chestburster",
+        "attributes": { "strength": 2, "agility": 4, "wits": 1, "empathy": 0 },
+        "skills": { "closeCombat": 1, "mobility": 4 },
+        "gameValues": {}
+      }
+    },
+    {
+      "key": "hldNeomorph",
+      "label": "Neomorph (Hadley's Hope)",
+      "scenario": "hopes-last-day",
+      "description": "Fast, feral variant stalking the colony.",
+      "kind": "Monster",
+      "maxHealth": 6,
+      "health": 6,
+      "armor": 1,
+      "defaultStats": {
+        "classKey": "neomorph",
+        "attributes": { "strength": 4, "agility": 5, "wits": 2, "empathy": 0 },
+        "skills": {
+          "closeCombat": 3,
+          "mobility": 4,
+          "observation": 1
+        },
+        "gameValues": {}
+      }
     }
   ],
   "statusEffects": [
@@ -1103,7 +1777,12 @@
       "diceKey": "d6Pool",
       "poolMode": "attribute+skill",
       "modifiers": [
-        { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+        {
+          "source": "gameValue",
+          "key": "stress",
+          "dicePerPoint": 1,
+          "isStressDice": true
+        }
       ],
       "successRule": "Each 6 is a success. One or more successes = the task is accomplished. A 1 on any stress die triggers a panic roll."
     },
@@ -1111,7 +1790,12 @@
       "diceKey": "d6Pool",
       "poolMode": "attribute",
       "modifiers": [
-        { "source": "gameValue", "key": "stress", "dicePerPoint": 1, "isStressDice": true }
+        {
+          "source": "gameValue",
+          "key": "stress",
+          "dicePerPoint": 1,
+          "isStressDice": true
+        }
       ],
       "successRule": "Each 6 is a success. Used when no skill applies directly."
     }

@@ -125,6 +125,16 @@ public class ActionsController : ControllerBase
         if (session.State == SessionMode.Combat)
         {
             await CombatEncounterLifecycle.EnsureEncounterForCombatAsync(_db, session);
+
+            if (!isDm)
+            {
+                return BadRequest(new { errors = new[] { "During combat, wait for the DM to prompt your turn — actions cannot be submitted to the queue." } });
+            }
+
+            if (!request.ActorNpcId.HasValue)
+            {
+                return BadRequest(new { errors = new[] { "During combat, resolve player actions from the initiative panel — only NPC actions can be queued here." } });
+            }
         }
 
         var nextSequence = session.Actions.Count == 0 ? 1 : session.Actions.Max(a => a.Sequence) + 1;

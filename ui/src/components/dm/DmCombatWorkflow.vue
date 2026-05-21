@@ -72,6 +72,7 @@ const emit = defineEmits<{
           </span>
           <span v-if="entry.isCurrentTurn" class="badge active">Turn</span>
           <button
+            v-if="entry.isCurrentTurn"
             class="btn sm"
             :class="entry.id === expandedEntryId ? 'ghost' : ''"
             type="button"

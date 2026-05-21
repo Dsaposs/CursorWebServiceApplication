@@ -8,6 +8,7 @@ import { useRulesetTheme } from '~/composables/useRulesetTheme';
 import { useThemePreference } from '~/composables/useThemePreference';
 import PlayerRollPromptOverlay from '~/components/PlayerRollPromptOverlay.vue';
 import PlayerCombatTurnOverlay from '~/components/PlayerCombatTurnOverlay.vue';
+import { isSameGuid } from '~/utils/rollPrompt';
 
 const route = useRoute();
 const { api } = useApi();
@@ -103,11 +104,15 @@ const pendingPlayerActions = computed(() =>
 const expandedPendingPlayerActions = ref<Set<string>>(new Set());
 
 const activeRollPrompt = computed(() =>
-  (state.value?.rollPrompts ?? []).find(prompt => prompt.status === 'Pending') ?? null,
+  (state.value?.rollPrompts ?? []).find(prompt =>
+    prompt.status === 'Pending'
+    && isSameGuid(prompt.targetCharacterId, state.value?.character?.id)
+    && (!isCombat.value || isMyTurn.value),
+  ) ?? null,
 );
 
 const showCombatTurnFocus = computed(() =>
-  isCombat.value && isMyTurn.value && !activeRollPrompt.value,
+  isCombat.value && isMyTurn.value,
 );
 
 const isPlayerFocusActive = computed(() =>
@@ -286,103 +291,12 @@ async function submitAction() {
   <PlayerCombatTurnOverlay
     v-if="state?.character"
     :character-name="state.character.name"
-    :is-open="showCombatTurnFocus"
-    :waiting-for-dm="combatTurnWaiting"
+    :is-open="showCombatTurnFocus && !activeRollPrompt"
+    :waiting-for-dm="false"
   >
-    <form v-if="!combatTurnWaiting" class="player-combat-action-form" @submit.prevent="submitAction">
-      <label>
-        Action type <span style="color: var(--danger);">*</span>
-        <select v-model="actionMode">
-          <option v-if="availableActions.length" value="action">Action</option>
-          <option value="stat-check">Stat check</option>
-          <option value="custom">Custom</option>
-        </select>
-      </label>
-
-      <label v-if="actionMode === 'action'">
-        Action <span style="color: var(--danger);">*</span>
-        <select v-model="selectedActionKey" required>
-          <option value="">Choose an action</option>
-          <option v-for="action in availableActions" :key="action.key" :value="action.key">
-            {{ action.label }}
-          </option>
-        </select>
-      </label>
-
-      <label v-else-if="actionMode === 'stat-check'">
-        Stat <span style="color: var(--danger);">*</span>
-        <select v-model="selectedStatKey" required>
-          <option value="">Choose a stat</option>
-          <optgroup label="Skills">
-            <option v-for="stat in availableStatChecks.filter(s => s.type === 'skill')" :key="stat.key" :value="stat.key">
-              {{ stat.label }}
-            </option>
-          </optgroup>
-          <optgroup label="Attributes">
-            <option v-for="stat in availableStatChecks.filter(s => s.type === 'attribute')" :key="stat.key" :value="stat.key">
-              {{ stat.label }}
-            </option>
-          </optgroup>
-        </select>
-      </label>
-
-      <label v-else>
-        Custom action <span style="color: var(--danger);">*</span>
-        <input v-model.trim="actionText" placeholder="Swing sword, use medkit, lockpick door…" required />
-      </label>
-
-      <div v-if="actionMode === 'action' && selectedActionDetail" class="alert info">
-        <div>
-          <strong>{{ selectedActionDetail.dice }}</strong>
-          <p class="text-sm muted">
-            Expected check (you roll when the DM asks): {{ selectedActionDetail.attribute }} + {{ selectedActionDetail.skill }}.
-          </p>
-          <p class="text-sm">{{ selectedActionDetail.successRule }}</p>
-        </div>
-      </div>
-      <div v-else-if="actionMode === 'stat-check' && selectedStatDetail" class="alert info">
-        <div>
-          <strong>{{ selectedStatDetail.actionText }}</strong>
-          <p class="text-sm muted">Expected check: {{ selectedStatDetail.rollSummary }}.</p>
-        </div>
-      </div>
-
-      <ActionTargetPicker
-        v-if="state"
-        ref="actionTargetPickerRef"
-        :characters="state.game.characters"
-        :npcs="state.game.npcsAndMonsters"
-        :disabled="isSubmitting"
-      />
-      <label>
-        Description
-        <textarea v-model="description" placeholder="What are you trying to accomplish?" style="min-height: 3rem;" />
-      </label>
-      <button class="btn roll-prompt-submit" type="submit" :disabled="isSubmitting">
-        {{ isSubmitting ? 'Sending…' : 'Send action to DM' }}
-      </button>
-    </form>
-    <div v-else class="player-combat-waiting">
-      <article
-        v-for="action in pendingPlayerActions"
-        :key="action.id"
-        class="player-combat-pending-item"
-      >
-        <p class="text-sm" style="margin: 0;">
-          <strong>{{ action.actionText }}</strong>
-          <span v-if="action.targetName"> on {{ action.targetName }}</span>
-          — awaiting DM
-        </p>
-        <button
-          class="btn ghost sm"
-          type="button"
-          :disabled="isSubmitting"
-          @click="withdrawAction(action.id)"
-        >
-          Withdraw
-        </button>
-      </article>
-    </div>
+    <p class="text-sm muted" style="margin: 0;">
+      It is your turn. The DM will prompt you when a roll is needed — you cannot queue actions to the pending log during combat.
+    </p>
   </PlayerCombatTurnOverlay>
 
   <section class="app-shell" :style="rulesetThemeStyle">

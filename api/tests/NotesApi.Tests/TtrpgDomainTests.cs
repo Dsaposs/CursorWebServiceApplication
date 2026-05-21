@@ -135,6 +135,39 @@ public class TtrpgDomainTests
     }
 
     [Fact]
+    public async Task NpcCreate_AppliesRulesetTemplateKey()
+    {
+        await using var db = CreateDbContext();
+        await SeedRulesetWithNpcTemplateAsync(db);
+        await SeedUsersAsync(db);
+        var game = new Game
+        {
+            Id = Guid.NewGuid(),
+            DmUserId = "dm-1",
+            RulesetCode = "alien-rpg",
+            Name = "Hope's Last Day",
+            InviteCode = "hld-test",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        db.Games.Add(game);
+        await db.SaveChangesAsync();
+
+        var controller = CreateNpcsController(db, "dm-1");
+        var result = await controller.Create(game.Id, new CreateNpcRequest
+        {
+            TemplateKey = "hldWesOsterman",
+        });
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<NpcResponse>(ok.Value);
+        Assert.Equal("Wes Osterman", response.Name);
+        Assert.Equal("NPC", response.Kind);
+        Assert.Equal(3, response.MaxHealth);
+        Assert.Contains("survivorNpc", response.StatBlockJson);
+    }
+
+    [Fact]
     public async Task NpcUpdate_PreservesStructuredStatsAndBumpsOnlyActiveSessionVersion()
     {
         await using var db = CreateDbContext();
@@ -449,6 +482,38 @@ public class TtrpgDomainTests
             DiceNotation = "d6",
             CharacterTemplateJson = "{}",
             DefinitionJson = ValidRulesetJson.Replace("test-rules", "alien-rpg").Replace("Test Rules", "Alien RPG"),
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SeedRulesetWithNpcTemplateAsync(ApplicationDbContext db)
+    {
+        var definitionJson = ValidRulesetJson
+            .Replace("test-rules", "alien-rpg")
+            .Replace("Test Rules", "Alien RPG")
+            .Replace("\"npcTemplates\": []", """
+                "npcTemplates": [{
+                  "key": "hldWesOsterman",
+                  "label": "Wes Osterman",
+                  "kind": "NPC",
+                  "maxHealth": 3,
+                  "health": 3,
+                  "defaultStats": {
+                    "classKey": "survivorNpc",
+                    "attributes": { "strength": 3 },
+                    "skills": { "heavyMachinery": 2 }
+                  }
+                }]
+                """);
+
+        db.Rulesets.Add(new Ruleset
+        {
+            Code = "alien-rpg",
+            DisplayName = "Alien RPG",
+            Description = "Test ruleset",
+            DiceNotation = "d6",
+            CharacterTemplateJson = "{}",
+            DefinitionJson = definitionJson,
         });
         await db.SaveChangesAsync();
     }
