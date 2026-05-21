@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: ttrpg-api
     ports:
-      - "5294:8080"
+      - "0.0.0.0:5294:8080"
     volumes:
       - ttrpg-data:/data
     environment:
@@ -17,6 +17,7 @@ services:
       Jwt__Key: "${TTRPG_JWT_KEY}"
       Seed__AdminPassword: "${TTRPG_SEED_ADMIN_PASSWORD}"
       Cors__AllowedOrigins__0: "http://localhost:3000"
+      Cors__AllowedOrigins__1: "http://${LAN_HOST_IP:-localhost}:3000"
     restart: unless-stopped
 
   ui:
@@ -25,7 +26,7 @@ services:
       dockerfile: Dockerfile
     container_name: ttrpg-ui
     ports:
-      - "3000:3000"
+      - "0.0.0.0:3000:3000"
     environment:
       NUXT_API_BASE_URL: "http://ttrpg-api:8080"
       HOST: "0.0.0.0"
