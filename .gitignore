@@ -5,11 +5,15 @@ obj/
 *.db-shm
 *.db-wal
 
+# IDE / OS
 *.user
 *.suo
 .vs/
+.vscode/
 appsettings.*.local.json
 secrets.json
+.DS_Store
+Thumbs.db
 
 ## Nuxt / Node
 node_modules/
@@ -28,3 +32,7 @@ perf/node_modules/
 perf/.auth/
 perf/test-results/
 perf/playwright-report/
+
+## Kubernetes Secrets
+k8s/secret.yaml
+k8s/sealed-secret.yaml

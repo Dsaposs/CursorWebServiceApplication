@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 concurrency:
   group: ci-cd-${{ github.ref }}
@@ -105,12 +106,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build API image
-        run: docker build --file Dockerfile --tag ttrpg-api:${{ github.sha }} .
+      - name: Google Auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      - name: Build UI image
-        run: docker build --file ui/src/Dockerfile --tag ttrpg-ui:${{ github.sha }} ui/src
+      - name: Log in to Google Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.GCP_REGION }}-docker.pkg.dev
+          username: _json_key
+          password: ${{ secrets.GCP_SA_KEY }}
 
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPO }}/api:${{ github.sha }}
+
+      - name: Build and push UI image
+        uses: docker/build-push-action@v5
+        with:
+          context: ui/src
+          file: ui/src/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPO }}/ui:${{ github.sha }}
+          
   deploy:
     name: Deploy to production
     runs-on: ubuntu-latest
@@ -118,87 +141,21 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     environment: production
 
-    env:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-      TTRPG_JWT_KEY: ${{ secrets.TTRPG_JWT_KEY }}
-      TTRPG_SEED_ADMIN_PASSWORD: ${{ secrets.TTRPG_SEED_ADMIN_PASSWORD }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate deployment secrets
-        shell: bash
-        run: |
-          set -euo pipefail
+      - name: Google Auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-          missing=0
-          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_SSH_PRIVATE_KEY TTRPG_JWT_KEY TTRPG_SEED_ADMIN_PASSWORD; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Repository secret ${name} is required for production deployment."
-              missing=1
-            fi
-          done
-
-          if [ -z "${DEPLOY_PORT}" ]; then
-            echo "DEPLOY_PORT was not set; defaulting to SSH port 22."
-          fi
-
-          exit "${missing}"
-
-      - name: Configure SSH
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-
-          port="${DEPLOY_PORT:-22}"
-          ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
-
-      - name: Sync application files
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          port="${DEPLOY_PORT:-22}"
-          ssh -i ~/.ssh/deploy_key -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}'"
-
-          rsync -az --delete \
-            -e "ssh -i ~/.ssh/deploy_key -p ${port}" \
-            --exclude ".git/" \
-            --exclude ".github/" \
-            --exclude "api/**/bin/" \
-            --exclude "api/**/obj/" \
-            --exclude "ui/src/.nuxt/" \
-            --exclude "ui/src/.output/" \
-            --exclude "ui/src/node_modules/" \
-            --exclude ".env" \
-            ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
-
-      - name: Write production environment
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          port="${DEPLOY_PORT:-22}"
-          ssh -i ~/.ssh/deploy_key -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" "cd '${DEPLOY_PATH}' && umask 077 && tee .env >/dev/null" <<EOF
-          TTRPG_JWT_KEY=${TTRPG_JWT_KEY}
-          TTRPG_SEED_ADMIN_PASSWORD=${TTRPG_SEED_ADMIN_PASSWORD}
-          EOF
-
-      - name: Start production services
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          port="${DEPLOY_PORT:-22}"
-          ssh -i ~/.ssh/deploy_key -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "cd '${DEPLOY_PATH}' && docker compose up -d --build --remove-orphans && docker image prune -f"
+      - name: Deploy API to Cloud Run
+        uses: 'google-github-actions/deploy-cloudrun@v2'
+        with:
+          service: 'ttrpg-api'
+          image: '${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPO }}/api:${{ github.sha }}'
+          region: '${{ secrets.GCP_REGION }}'
+          env_vars: |
+            TTRPG_JWT_KEY=${{ secrets.TTRPG_JWT_KEY }}
+            TTRPG_SEED_ADMIN_PASSWORD=${{ secrets.TTRPG_SEED_ADMIN_PASSWORD }}
