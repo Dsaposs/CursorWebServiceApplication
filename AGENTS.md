@@ -23,6 +23,7 @@
 - UI: `npm test` from `ui/src/` (vitest). Note: tests currently fail with a pre-existing issue where `vitest.config.ts` is missing the `@vitejs/plugin-vue` plugin needed to parse `.vue` imports in the test dependency chain.
 - E2E: `cd e2e && npm test` (Playwright against Docker stack; also run via `scripts/start-app.cmd`)
 - Performance: `scripts/run-perf.cmd` or `cd perf && npm run pipeline` — k6 load probes, soak/memory sampling, UI latency; outputs `perf/reports/PERFORMANCE_REPORT.md`
+- GCP (local): install CLI with `winget install Google.CloudSDK`, then `gcloud auth login`. Bootstrap Artifact Registry + IAM with `scripts/gcp-setup.ps1` (see script header for parameters).
 
 ### Key dev notes
 
