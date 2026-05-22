@@ -21,3 +21,10 @@ coverage/
 
 ## Local secrets — never commit real values
 .env
+
+## Performance test raw artifacts
+perf/reports/raw/
+perf/node_modules/
+perf/.auth/
+perf/test-results/
+perf/playwright-report/

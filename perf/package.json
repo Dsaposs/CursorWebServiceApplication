@@ -1,0 +1,19 @@
+{
+  "name": "ttrpg-perf",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bootstrap": "tsx setup/bootstrap.ts",
+    "soak": "tsx soak/long-session.ts",
+    "test:ui": "playwright test",
+    "test:k6": "tsx scripts/run-k6.ts",
+    "report": "tsx lib/report.ts",
+    "pipeline": "tsx scripts/pipeline.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}
