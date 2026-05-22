@@ -487,3 +487,72 @@ export interface AdminUserReportResponse {
   hasPasswordHash: boolean;
   gamesHostedCount: number;
 }
+
+// ── Campaigns ─────────────────────────────────────────────────────────────
+
+export interface CampaignResponse {
+  id: string;
+  name: string;
+  description?: string | null;
+  ownerId: string;
+  gameId: string;
+  gameName: string;
+  createdAt: string;
+  memberCount: number;
+  scheduledSessionCount: number;
+}
+
+export interface CampaignMemberResponse {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail?: string | null;
+  joinedAt: string;
+}
+
+export interface ScheduledSessionResponse {
+  id: string;
+  campaignId: string;
+  campaignName: string;
+  title: string;
+  notes?: string | null;
+  scheduledAt: string;
+  durationMinutes: number;
+  recurrence: string;
+  recurrenceCron?: string | null;
+  linkedSessionId?: string | null;
+  isCancelled: boolean;
+  createdAt: string;
+}
+
+export interface CreateCampaignRequest {
+  name: string;
+  description?: string | null;
+  gameId: string;
+}
+
+export interface UpdateCampaignRequest {
+  name: string;
+  description?: string | null;
+}
+
+export interface AddCampaignMemberRequest {
+  userEmail: string;
+}
+
+export interface CreateScheduledSessionRequest {
+  title: string;
+  notes?: string | null;
+  scheduledAt: string;
+  durationMinutes?: number;
+  recurrence?: string;
+  recurrenceCron?: string | null;
+}
+
+export interface UpdateScheduledSessionRequest {
+  title?: string | null;
+  notes?: string | null;
+  scheduledAt?: string | null;
+  durationMinutes?: number | null;
+  isCancelled?: boolean | null;
+}

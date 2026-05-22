@@ -24,6 +24,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<CombatEncounter> CombatEncounters => Set<CombatEncounter>();
     public DbSet<SessionNote> SessionNotes => Set<SessionNote>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Campaign> Campaigns => Set<Campaign>();
+    public DbSet<CampaignMember> CampaignMembers => Set<CampaignMember>();
+    public DbSet<ScheduledSession> ScheduledSessions => Set<ScheduledSession>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -235,6 +238,50 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(p => p.ActionRequest)
                 .WithMany()
                 .HasForeignKey(p => p.ActionRequestId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<Campaign>(entity =>
+        {
+            entity.Property(c => c.Name).HasMaxLength(120).IsRequired();
+            entity.Property(c => c.Description).HasMaxLength(1000);
+            entity.HasIndex(c => new { c.OwnerId, c.CreatedAt });
+            entity.HasOne(c => c.Owner)
+                .WithMany()
+                .HasForeignKey(c => c.OwnerId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(c => c.Game)
+                .WithMany()
+                .HasForeignKey(c => c.GameId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<CampaignMember>(entity =>
+        {
+            entity.HasIndex(m => new { m.CampaignId, m.UserId }).IsUnique();
+            entity.HasOne(m => m.Campaign)
+                .WithMany(c => c.Members)
+                .HasForeignKey(m => m.CampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(m => m.User)
+                .WithMany()
+                .HasForeignKey(m => m.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ScheduledSession>(entity =>
+        {
+            entity.Property(s => s.Title).HasMaxLength(200).IsRequired();
+            entity.Property(s => s.Notes).HasMaxLength(1000);
+            entity.Property(s => s.RecurrenceCron).HasMaxLength(100);
+            entity.HasIndex(s => new { s.CampaignId, s.ScheduledAt });
+            entity.HasOne(s => s.Campaign)
+                .WithMany(c => c.ScheduledSessions)
+                .HasForeignKey(s => s.CampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(s => s.LinkedSession)
+                .WithMany()
+                .HasForeignKey(s => s.LinkedSessionId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
     }

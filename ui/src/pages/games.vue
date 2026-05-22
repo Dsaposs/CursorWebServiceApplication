@@ -224,6 +224,7 @@ function signOut() {
         <div class="topbar-sub">{{ email }}</div>
       </div>
       <div class="topbar-actions">
+        <NuxtLink class="btn ghost sm" to="/campaigns">Campaigns</NuxtLink>
         <NuxtLink class="btn ghost sm" to="/rulesets">Rulesets</NuxtLink>
         <button class="btn ghost sm" type="button" @click="signOut">Sign out</button>
       </div>

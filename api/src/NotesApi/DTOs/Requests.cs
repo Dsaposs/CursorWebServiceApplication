@@ -404,3 +404,72 @@ public class UpsertSessionNoteRequest
     [MaxLength(20000)]
     public string Content { get; set; } = string.Empty;
 }
+
+// ── Campaigns ──────────────────────────────────────────────────────────────
+
+public class CreateCampaignRequest
+{
+    [Required, MaxLength(120)]
+    public string Name { get; set; } = string.Empty;
+
+    [MaxLength(1000)]
+    public string? Description { get; set; }
+
+    [Required]
+    public Guid GameId { get; set; }
+}
+
+public class UpdateCampaignRequest
+{
+    [Required, MaxLength(120)]
+    public string Name { get; set; } = string.Empty;
+
+    [MaxLength(1000)]
+    public string? Description { get; set; }
+}
+
+public class AddCampaignMemberRequest
+{
+    [Required]
+    public string UserEmail { get; set; } = string.Empty;
+}
+
+public class CreateScheduledSessionRequest
+{
+    [Required, MaxLength(200)]
+    public string Title { get; set; } = string.Empty;
+
+    [MaxLength(1000)]
+    public string? Notes { get; set; }
+
+    [Required]
+    public DateTime ScheduledAt { get; set; }
+
+    public int DurationMinutes { get; set; } = 120;
+
+    public string Recurrence { get; set; } = "None";
+
+    [MaxLength(100)]
+    public string? RecurrenceCron { get; set; }
+}
+
+public class UpdateScheduledSessionRequest
+{
+    [MaxLength(200)]
+    public string? Title { get; set; }
+
+    [MaxLength(1000)]
+    public string? Notes { get; set; }
+
+    public DateTime? ScheduledAt { get; set; }
+
+    public int? DurationMinutes { get; set; }
+
+    public bool? IsCancelled { get; set; }
+}
+
+public class LinkSessionRequest
+{
+    [Required]
+    public Guid SessionId { get; set; }
+}

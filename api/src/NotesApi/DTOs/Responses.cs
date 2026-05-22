@@ -279,3 +279,43 @@ public class AdminUserReportResponse
     public bool HasPasswordHash { get; set; }
     public int GamesHostedCount { get; set; }
 }
+
+// ── Campaigns ──────────────────────────────────────────────────────────────
+
+public class CampaignResponse
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string OwnerId { get; set; } = string.Empty;
+    public Guid GameId { get; set; }
+    public string GameName { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public int MemberCount { get; set; }
+    public int ScheduledSessionCount { get; set; }
+}
+
+public class CampaignMemberResponse
+{
+    public Guid Id { get; set; }
+    public string UserId { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
+    public string? UserEmail { get; set; }
+    public DateTime JoinedAt { get; set; }
+}
+
+public class ScheduledSessionResponse
+{
+    public Guid Id { get; set; }
+    public Guid CampaignId { get; set; }
+    public string CampaignName { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+    public DateTime ScheduledAt { get; set; }
+    public int DurationMinutes { get; set; }
+    public string Recurrence { get; set; } = "None";
+    public string? RecurrenceCron { get; set; }
+    public Guid? LinkedSessionId { get; set; }
+    public bool IsCancelled { get; set; }
+    public DateTime CreatedAt { get; set; }
+}

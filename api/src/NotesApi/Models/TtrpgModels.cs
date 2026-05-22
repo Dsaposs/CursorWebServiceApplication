@@ -613,3 +613,94 @@ public class InitiativeEntry
 
     public DateTime CreatedAt { get; set; }
 }
+
+// ──────────────────────────────────────────────
+// Campaigns
+// ──────────────────────────────────────────────
+
+public enum RecurrenceType
+{
+    None = 0,
+    Weekly = 1,
+    Biweekly = 2,
+    Monthly = 3,
+    Custom = 4,
+}
+
+public class Campaign
+{
+    public Guid Id { get; set; }
+
+    [Required, MaxLength(120)]
+    public string Name { get; set; } = string.Empty;
+
+    [MaxLength(1000)]
+    public string? Description { get; set; }
+
+    [Required]
+    public string OwnerId { get; set; } = string.Empty;
+
+    public ApplicationUser Owner { get; set; } = null!;
+
+    /// <summary>FK to the Game/Ruleset being used for this campaign.</summary>
+    public Guid GameId { get; set; }
+
+    public Game Game { get; set; } = null!;
+
+    public DateTime CreatedAt { get; set; }
+
+    public ICollection<ScheduledSession> ScheduledSessions { get; set; } = new List<ScheduledSession>();
+
+    /// <summary>Player user IDs invited to this campaign.</summary>
+    public ICollection<CampaignMember> Members { get; set; } = new List<CampaignMember>();
+}
+
+public class CampaignMember
+{
+    public Guid Id { get; set; }
+
+    public Guid CampaignId { get; set; }
+
+    public Campaign Campaign { get; set; } = null!;
+
+    [Required]
+    public string UserId { get; set; } = string.Empty;
+
+    public ApplicationUser User { get; set; } = null!;
+
+    public DateTime JoinedAt { get; set; }
+}
+
+public class ScheduledSession
+{
+    public Guid Id { get; set; }
+
+    public Guid CampaignId { get; set; }
+
+    public Campaign Campaign { get; set; } = null!;
+
+    [Required, MaxLength(200)]
+    public string Title { get; set; } = string.Empty;
+
+    [MaxLength(1000)]
+    public string? Notes { get; set; }
+
+    public DateTime ScheduledAt { get; set; }
+
+    public int DurationMinutes { get; set; } = 120;
+
+    public RecurrenceType Recurrence { get; set; } = RecurrenceType.None;
+
+    /// <summary>Cron expression for custom recurrence (only used when Recurrence == Custom).</summary>
+    [MaxLength(100)]
+    public string? RecurrenceCron { get; set; }
+
+    /// <summary>Set when the DM starts the session from the scheduler.</summary>
+    public Guid? LinkedSessionId { get; set; }
+
+    public GameSession? LinkedSession { get; set; }
+
+    public bool IsCancelled { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+}
