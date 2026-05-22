@@ -25,6 +25,10 @@ cd mobile/src
 npm install
 ```
 
+> **First-time bootstrap:** After running `npm install`, commit the generated `package-lock.json`.
+> Once it exists, edit `mobile/Dockerfile` and change `npm install` back to `npm ci`
+> for faster, reproducible Docker builds.
+
 ### Web (development)
 
 ```bash

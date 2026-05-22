@@ -1,0 +1,6 @@
+src/node_modules
+src/.nuxt
+src/.output
+src/ios
+src/android
+*.log

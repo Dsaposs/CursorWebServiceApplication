@@ -2,7 +2,10 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY src/package*.json ./
-RUN npm ci
+# Use npm install (not ci) because no lockfile exists until the project is bootstrapped locally.
+# Once you run `npm install` in mobile/src/ and commit the generated package-lock.json,
+# change this back to `npm ci` for reproducible, faster installs.
+RUN npm install --prefer-offline
 
 COPY src/ .
 RUN npm run build
