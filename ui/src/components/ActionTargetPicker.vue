@@ -25,8 +25,14 @@ const {
   toSubmitFields,
 } = useActionTarget(() => props.characters, () => props.npcs);
 
-watch(selection, () => emit('change', isValid.value));
-watch(otherText, () => emit('change', isValid.value));
+function emitChange() {
+  emit('change', isValid.value);
+}
+
+watch(selection, emitChange);
+watch(otherText, emitChange);
+
+onMounted(emitChange);
 
 defineExpose({ isValid, reset, toSubmitFields });
 </script>

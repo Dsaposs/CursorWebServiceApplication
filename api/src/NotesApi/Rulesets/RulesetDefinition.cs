@@ -171,6 +171,10 @@ public class RulesetClassDefinition
     /// <summary>Item keys the player may choose one of when creating this class.</summary>
     [JsonPropertyName("startingItemOptions")]
     public IEnumerable<string> StartingItemOptions { get; set; } = Array.Empty<string>();
+
+    /// <summary>Primary spellcasting attribute for this class (e.g. intelligence for wizard).</summary>
+    [JsonPropertyName("spellcastingAttribute")]
+    public string? SpellcastingAttribute { get; set; }
 }
 
 public class RulesetSkillDefinition
@@ -212,6 +216,26 @@ public class RulesetActionDefinition
     /// <summary>Multi-step roll sequence (attack → damage, etc.) driven by JSON.</summary>
     [JsonPropertyName("rollChain")]
     public IEnumerable<RulesetRollChainStepDefinition> RollChain { get; set; } = Array.Empty<RulesetRollChainStepDefinition>();
+
+    /// <summary>combat | exploration — combat actions appear during initiative turns.</summary>
+    [JsonPropertyName("context")]
+    public string? Context { get; set; }
+
+    /// <summary>weaponAttack | spellAttack | spellSave | autoHit — drives target and resolution rules.</summary>
+    [JsonPropertyName("attackType")]
+    public string? AttackType { get; set; }
+
+    /// <summary>When true, the action must specify a target (for AC or spell save DC context).</summary>
+    [JsonPropertyName("requiresTarget")]
+    public bool? RequiresTarget { get; set; }
+
+    /// <summary>Spellcasting attribute for spell attacks and saves (defaults from class when omitted).</summary>
+    [JsonPropertyName("spellcastingAttribute")]
+    public string? SpellcastingAttribute { get; set; }
+
+    /// <summary>Damage dice for spell or unarmed actions without a required weapon item.</summary>
+    [JsonPropertyName("damageRoll")]
+    public RulesetDamageRollDefinition? DamageRoll { get; set; }
 }
 
 public class RulesetItemDefinition

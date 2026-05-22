@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RulesetResponse, SessionStateResponse } from '~/types/api';
+import { isPlayerActionLogEntry } from '~/utils/actionLog';
 import { parseRulesetDefinition } from '~/utils/rulesets';
 
 const route = useRoute();
@@ -95,7 +96,13 @@ const publishedActions = computed(() =>
 const pendingActions = computed(() =>
   state.value?.actions.filter(a => a.status === 'Pending') ?? [],
 );
-const allActions = computed(() => [...(state.value?.actions ?? [])].sort((a, b) => a.sequence - b.sequence));
+const playerLogActions = computed(() =>
+  (state.value?.actions ?? []).filter(isPlayerActionLogEntry),
+);
+const allActions = computed(() => {
+  const actions = isPlayerView.value ? playerLogActions.value : (state.value?.actions ?? []);
+  return [...actions].sort((a, b) => a.sequence - b.sequence);
+});
 const summaryCombatEncounters = computed(() => state.value?.combatEncounters ?? []);
 const summarySessionId = computed(() => state.value?.id ?? String(route.params.id ?? ''));
 const expandedSummaryActions = ref<Set<string>>(new Set());

@@ -7,8 +7,12 @@ import { useRulesetTheme } from '~/composables/useRulesetTheme';
 import { useThemePreference } from '~/composables/useThemePreference';
 import ActionForm from '~/components/ActionForm.vue';
 import PlayerRollPromptOverlay from '~/components/PlayerRollPromptOverlay.vue';
+import PlayerRollChainOverlay from '~/components/PlayerRollChainOverlay.vue';
 import PlayerCombatTurnOverlay from '~/components/PlayerCombatTurnOverlay.vue';
-import { isSameGuid } from '~/utils/rollPrompt';
+import { isPlayerActionLogEntry, isUnresolvedActionStatus } from '~/utils/actionLog';
+import { actionHasRollChain } from '~/utils/actionRolls';
+import { findActivePlayerRollPrompt, isSameGuid } from '~/utils/rollPrompt';
+import type { RollPromptResponse } from '~/types/api';
 
 const route = useRoute();
 const { api } = useApi();
@@ -87,25 +91,78 @@ const pendingPlayerActions = computed(() =>
   ) ?? [],
 );
 
+/** Unresolved combat actions for this player in the active encounter. */
+const unresolvedPlayerCombatActions = computed(() => {
+  const characterId = state.value?.character?.id;
+  const encounterId = activeEncounter.value?.id;
+  if (!characterId || !encounterId) return [];
+
+  return (state.value?.actions ?? []).filter(action =>
+    isUnresolvedActionStatus(action.status)
+    && action.actorCharacterId === characterId
+    && action.combatEncounterId === encounterId,
+  );
+});
+
 const expandedPendingPlayerActions = ref<Set<string>>(new Set());
 
 const activeRollPrompt = computed(() =>
-  (state.value?.rollPrompts ?? []).find(prompt =>
-    prompt.status === 'Pending'
-    && isSameGuid(prompt.targetCharacterId, state.value?.character?.id)
-    && (!isCombat.value || isMyTurn.value),
-  ) ?? null,
+  findActivePlayerRollPrompt(
+    state.value?.rollPrompts ?? [],
+    state.value?.character?.id,
+    { requireMyTurn: isCombat.value, isMyTurn: isMyTurn.value },
+  ),
+);
+
+const activeRollChainAction = computed(() => {
+  const prompt = activeRollPrompt.value;
+  if (!prompt?.actionRequestId) return null;
+
+  const linkedAction = (state.value?.actions ?? []).find(action =>
+    isSameGuid(action.id, prompt.actionRequestId),
+  );
+  if (linkedAction && actionHasRollChain(rulesetDefinition.value, linkedAction.actionKey)) {
+    return linkedAction;
+  }
+
+  return unresolvedPlayerCombatActions.value.find(action =>
+    actionHasRollChain(rulesetDefinition.value, action.actionKey),
+  ) ?? null;
+});
+
+const showRollChainOverlay = computed(() =>
+  Boolean(activeRollChainAction.value && activeRollPrompt.value),
+);
+
+const awaitingDmRollRequest = computed(() =>
+  unresolvedPlayerCombatActions.value.some(action =>
+    action.status === 'Pending'
+    || action.status === 'DmReviewing',
+  ),
+);
+
+const awaitingPlayerRollForAction = computed(() =>
+  unresolvedPlayerCombatActions.value.some(action =>
+    action.status === 'AwaitingRoll'
+    || action.status === 'AwaitingFollowUpRoll',
+  ),
 );
 
 const activeEncounter = computed(() =>
   state.value?.combatEncounters?.find(e => e.isActive) ?? null,
 );
 
+const hasUnresolvedPlayerCombatAction = computed(() =>
+  unresolvedPlayerCombatActions.value.length > 0,
+);
+
 /** Only show the action form overlay once the DM has explicitly prompted this character to act. */
 const showCombatTurnFocus = computed(() =>
   isCombat.value
   && isMyTurn.value
-  && activeEncounter.value?.promptedTurnCharacterId === state.value?.character?.id,
+  && activeEncounter.value?.promptedTurnCharacterId === state.value?.character?.id
+  && !activeRollPrompt.value
+  && !hasUnresolvedPlayerCombatAction.value,
 );
 
 const isPlayerFocusActive = computed(() =>
@@ -113,12 +170,45 @@ const isPlayerFocusActive = computed(() =>
 );
 
 const combatTurnWaiting = computed(() =>
-  showCombatTurnFocus.value && pendingPlayerActions.value.length > 0,
+  showCombatTurnFocus.value
+  && !activeRollPrompt.value
+  && awaitingDmRollRequest.value
+  && !awaitingPlayerRollForAction.value,
 );
+
+const combatTurnFormKey = computed(() => {
+  const encounter = activeEncounter.value;
+  const turn = currentTurn.value;
+  const characterId = state.value?.character?.id;
+  if (!encounter || !turn || !characterId) return 'combat-form';
+
+  return [
+    encounter.id,
+    encounter.round,
+    turn.combatantId,
+    encounter.promptedTurnCharacterId ?? 'none',
+  ].join(':');
+});
+
+function resetCombatTurnForm() {
+  actionFormRef.value?.reset();
+}
 
 watch(isMyTurn, (mine, wasMine) => {
   if (mine && !wasMine) {
-    actionFormRef.value?.reset();
+    resetCombatTurnForm();
+  }
+});
+
+watch(showCombatTurnFocus, (open, wasOpen) => {
+  if (open && !wasOpen) {
+    nextTick(() => resetCombatTurnForm());
+  }
+});
+
+watch(combatTurnWaiting, (waiting, wasWaiting) => {
+  if (wasWaiting && !waiting) {
+    nextTick(() => resetCombatTurnForm());
   }
 });
 
@@ -132,9 +222,7 @@ watch(
 );
 
 const publishedFeedActions = computed(() =>
-  state.value?.actions.filter(action =>
-    action.status === 'Published' || action.status === 'Rejected',
-  ) ?? [],
+  state.value?.actions.filter(isPlayerActionLogEntry) ?? [],
 );
 
 const expandedFeedActions = ref<Set<string>>(new Set());
@@ -212,20 +300,43 @@ onMounted(async () => {
 async function submitRollPrompt(payload: { rollSummary: string; rollResultJson?: string; pushed?: boolean }) {
   if (!playerToken.value || !activeRollPrompt.value) return;
 
+  const submittedPromptId = activeRollPrompt.value.id;
   isSubmittingRollPrompt.value = true;
   try {
-    await api(`/api/roll-prompts/${activeRollPrompt.value.id}/submit`, {
+    const response = await api<RollPromptResponse>(`/api/roll-prompts/${submittedPromptId}/submit`, {
       method: 'PUT',
       playerToken: playerToken.value,
       body: payload,
     });
-    await refresh();
-    toastSuccess('Roll sent to the DM.');
+
+    applyRollPromptTransition(response, submittedPromptId);
+    await refresh({ force: true });
+
+    if (response.nextPendingPrompt) {
+      toastSuccess('Roll sent — next roll is ready.');
+    } else {
+      toastSuccess('Roll sent to the DM.');
+    }
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
     isSubmittingRollPrompt.value = false;
   }
+}
+
+function applyRollPromptTransition(response: RollPromptResponse, submittedPromptId: string) {
+  if (!state.value) return;
+
+  const remaining = (state.value.rollPrompts ?? []).filter(
+    prompt => prompt.id !== submittedPromptId && prompt.status === 'Pending',
+  );
+
+  if (response.nextPendingPrompt) {
+    state.value.rollPrompts = [...remaining, response.nextPendingPrompt];
+    return;
+  }
+
+  state.value.rollPrompts = remaining;
 }
 
 interface ActionFormPayload {
@@ -253,11 +364,19 @@ async function submitActionFromForm(payload: ActionFormPayload) {
       },
     });
     actionFormRef.value?.reset();
-    await refresh();
+    await refresh({ force: true });
     if (!isCombat.value) {
       showActionForm.value = false;
     }
-    toastSuccess('Action sent to DM! The DM will call for your roll.');
+    const usesRollChain = Boolean(
+      payload.actionKey
+      && actionHasRollChain(rulesetDefinition.value, payload.actionKey),
+    );
+    toastSuccess(
+      usesRollChain && isCombat.value
+        ? 'Action sent — complete your attack and damage rolls.'
+        : 'Action sent to DM! The DM will call for your roll.',
+    );
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
@@ -284,8 +403,21 @@ async function skipTurn() {
 </script>
 
 <template>
+  <PlayerRollChainOverlay
+    v-if="state?.character && showRollChainOverlay && activeRollChainAction && activeRollPrompt"
+    :key="activeRollPrompt.id"
+    :action="activeRollChainAction"
+    :prompt="activeRollPrompt"
+    :character="state.character"
+    :roll-prompts="state.rollPrompts ?? []"
+    :ruleset-definition="rulesetDefinition"
+    :is-submitting="isSubmittingRollPrompt"
+    @submit="submitRollPrompt"
+  />
+
   <PlayerRollPromptOverlay
-    v-if="state?.character && activeRollPrompt"
+    v-else-if="state?.character && activeRollPrompt"
+    :key="activeRollPrompt.id"
     :prompt="activeRollPrompt"
     :character="state.character"
     :ruleset-definition="rulesetDefinition"
@@ -299,7 +431,12 @@ async function skipTurn() {
     :is-open="showCombatTurnFocus && !activeRollPrompt"
     :waiting-for-dm="combatTurnWaiting"
   >
-    <template v-if="!combatTurnWaiting">
+    <template v-if="awaitingPlayerRollForAction && !activeRollPrompt">
+      <p class="text-sm" style="margin: 0;">
+        The DM sent your next roll — it should appear momentarily. If nothing shows up, wait a few seconds or refresh the page.
+      </p>
+    </template>
+    <template v-else-if="!combatTurnWaiting">
       <div style="display: flex; justify-content: flex-end; margin-bottom: 0.75rem;">
         <button
           class="btn ghost sm"
@@ -311,6 +448,7 @@ async function skipTurn() {
         </button>
       </div>
       <ActionForm
+        :key="combatTurnFormKey"
         ref="actionFormRef"
         :ruleset-definition="rulesetDefinition"
         :class-key="state.character?.classKey"
@@ -532,6 +670,7 @@ async function skipTurn() {
                 <h2>Action Feed</h2>
                 <p v-if="publishedFeedActions.length" class="text-sm">
                   Grouped by combat encounter. Expand actions to see full details.
+                  Newest actions appear at the top.
                 </p>
               </div>
               <div v-if="publishedFeedActions.length" class="btn-row">

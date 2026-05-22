@@ -134,7 +134,7 @@ public static class RollChainEvaluator
 
         if (condition.Contains("target.armor", StringComparison.OrdinalIgnoreCase))
         {
-            var defense = ResolveTargetArmor(action, game);
+            var defense = ActionTargetStats.ResolveTargetArmor(action, game);
             if (defense is null)
             {
                 return false;
@@ -151,7 +151,7 @@ public static class RollChainEvaluator
         if (statMatch.Success)
         {
             var statKey = statMatch.Groups[1].Value;
-            var statValue = ResolveTargetStat(action, game, statKey);
+            var statValue = ActionTargetStats.ResolveTargetStat(action, game, statKey);
             if (statValue is null)
             {
                 return false;
@@ -162,88 +162,6 @@ public static class RollChainEvaluator
         }
 
         return false;
-    }
-
-    private static int? ResolveTargetArmor(ActionRequest action, Game game)
-    {
-        if (action.TargetCharacterId.HasValue)
-        {
-            var character = game.Characters.FirstOrDefault(c => c.Id == action.TargetCharacterId.Value);
-            return character?.Armor;
-        }
-
-        if (action.TargetNpcId.HasValue)
-        {
-            var npc = game.NpcsAndMonsters.FirstOrDefault(n => n.Id == action.TargetNpcId.Value);
-            return npc?.Armor;
-        }
-
-        return null;
-    }
-
-    private static int? ResolveTargetStat(ActionRequest action, Game game, string statKey)
-    {
-        if (action.TargetNpcId.HasValue)
-        {
-            var npc = game.NpcsAndMonsters.FirstOrDefault(n => n.Id == action.TargetNpcId.Value);
-            if (npc is null)
-            {
-                return null;
-            }
-
-            return ReadStatFromJson(npc.StatBlockJson, statKey) ?? npc.Armor;
-        }
-
-        if (action.TargetCharacterId.HasValue)
-        {
-            var character = game.Characters.FirstOrDefault(c => c.Id == action.TargetCharacterId.Value);
-            if (character is null)
-            {
-                return null;
-            }
-
-            if (statKey.Equals("armor", StringComparison.OrdinalIgnoreCase))
-            {
-                return character.Armor;
-            }
-
-            return ReadStatFromJson(character.RulesetDataJson, statKey);
-        }
-
-        return null;
-    }
-
-    private static int? ReadStatFromJson(string json, string key)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
-            if (doc.RootElement.TryGetProperty("attributes", out var attrs)
-                && attrs.TryGetProperty(key, out var attrVal)
-                && attrVal.TryGetInt32(out var attrInt))
-            {
-                return attrInt;
-            }
-
-            if (doc.RootElement.TryGetProperty("gameValues", out var gvs)
-                && gvs.TryGetProperty(key, out var gvVal)
-                && gvVal.TryGetInt32(out var gvInt))
-            {
-                return gvInt;
-            }
-
-            if (doc.RootElement.TryGetProperty(key, out var direct)
-                && direct.TryGetInt32(out var directInt))
-            {
-                return directInt;
-            }
-        }
-        catch (JsonException)
-        {
-            // ignore
-        }
-
-        return null;
     }
 
     private static (string Type, Guid Id)? ResolveEffectTarget(string targetExpr, ActionRequest action)

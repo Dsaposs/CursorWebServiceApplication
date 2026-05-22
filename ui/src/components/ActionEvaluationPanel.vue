@@ -11,7 +11,10 @@ import DmFollowUpRollPanel from '~/components/DmFollowUpRollPanel.vue';
 import DmStatChangePanel from '~/components/DmStatChangePanel.vue';
 import RollChainStepRow from '~/components/RollChainStepRow.vue';
 import {
+  canPublishActionResolution,
   evaluateActionOutcomeFromRolls,
+  getRollChainProgress,
+  rollChainStatusHint,
   rollPromptsForAction,
 } from '~/utils/actionRolls';
 import { findRulesetAction, describeRulesetAction } from '~/utils/rulesets';
@@ -28,9 +31,7 @@ interface Props {
   rollPrompts: RollPromptResponse[];
   rulesetDefinition: RulesetDefinition | null;
   isBusy?: boolean;
-  /** Pre-filled resolution text. */
   resolutionText?: string;
-  /** Pre-selected stat change target entity id. */
   statTarget?: string;
   statHealthDelta?: string;
   statSetHealth?: string;
@@ -69,9 +70,21 @@ const emit = defineEmits<{
   }];
   reject: [reason: string];
   startChain: [];
-  sendRollPrompts: [payload: { prompts: Array<{ targetCharacterId: string; checkMode: string; actionKey?: string; skillKey?: string; attributeKey?: string; resultKind: string; dc?: number | null }> }];
+  sendRollPrompts: [payload: { prompts: Array<{
+    targetCharacterId: string;
+    checkMode: string;
+    actionKey?: string;
+    skillKey?: string;
+    attributeKey?: string;
+    customCheckText?: string;
+    promptLabel?: string;
+    guidanceText?: string;
+    resultKind: string;
+    dc?: number | null;
+    chainStepKey?: string;
+  }> }];
   cancelPrompt: [promptId: string];
-  dmRoll: [payload: { actionId: string; rollSummary: string; dc?: number | null }];
+  dmRoll: [payload: { actionId: string; rollSummary: string; rollResultJson?: string; dc?: number | null; chainStepKey?: string }];
   'update:resolutionText': [value: string];
   'update:statTarget': [value: string];
   'update:statHealthDelta': [value: string];
@@ -83,7 +96,6 @@ const emit = defineEmits<{
   'update:statStatusChanges': [value: StatChangeModel];
 }>();
 
-// Local mutable copies — update parent via events
 const resolutionTextModel = computed({
   get: () => props.resolutionText,
   set: (v) => emit('update:resolutionText', v),
@@ -138,7 +150,19 @@ const rollChainSteps = computed((): RulesetRollChainStepDefinition[] =>
 const hasRollChain = computed(() => rollChainSteps.value.length > 0);
 
 const actionPrompts = computed(() =>
-  rollPromptsForAction(props.action.id, props.rollPrompts),
+  rollPromptsForAction(props.action.id, props.rollPrompts, props.action.followUpRolls ?? []),
+);
+
+const rollChainProgress = computed(() =>
+  getRollChainProgress(props.rulesetDefinition, props.action, props.rollPrompts),
+);
+
+const canPublish = computed(() =>
+  canPublishActionResolution(props.rulesetDefinition, props.action, props.rollPrompts),
+);
+
+const chainStatusHint = computed(() =>
+  rollChainStatusHint(rollChainProgress.value, props.action.actorName),
 );
 
 const derivedOutcome = computed(() =>
@@ -146,36 +170,110 @@ const derivedOutcome = computed(() =>
     props.rulesetDefinition,
     props.action,
     props.rollPrompts,
+    { characters: props.characters, npcsAndMonsters: props.npcs },
   ),
 );
 
-// For roll-chain display: determine which step is current
+function latestPromptForStep(stepKey: string) {
+  return [...actionPrompts.value]
+    .reverse()
+    .find(prompt => prompt.chainStepKey === stepKey) ?? null;
+}
+
+function isStepCompleted(stepKey: string) {
+  return actionPrompts.value.some(
+    prompt => prompt.chainStepKey === stepKey && prompt.status === 'Completed',
+  );
+}
+
+const chainTerminatedEarly = computed(() => rollChainProgress.value?.terminatedEarly ?? false);
+
+const skippedStepKeys = computed(() => {
+  if (!chainTerminatedEarly.value) return new Set<string>();
+
+  const skipped = new Set<string>();
+  let foundFailure = false;
+  for (const step of rollChainSteps.value) {
+    if (foundFailure) {
+      skipped.add(step.step);
+      continue;
+    }
+    const prompt = latestPromptForStep(step.step);
+    if (prompt?.autoResolveOutcome === 'failure') {
+      foundFailure = true;
+    }
+  }
+  return skipped;
+});
+
 const currentChainStepKey = computed(() => {
-  try {
-    const json = props.action.rollChainStateJson;
-    if (!json) return null;
-    const parsed = JSON.parse(json) as { stepIndex?: number };
-    const idx = parsed.stepIndex ?? 0;
-    return rollChainSteps.value[idx]?.step ?? null;
-  } catch {
+  if (rollChainProgress.value?.hasPendingPrompt) {
+    return rollChainProgress.value.pendingStepKey;
+  }
+
+  if (rollChainProgress.value?.needsChainStart) {
     return null;
   }
+
+  if (rollChainProgress.value?.nextManualStepKey) {
+    return rollChainProgress.value.nextManualStepKey;
+  }
+
+  if (rollChainProgress.value?.isComplete) {
+    return null;
+  }
+
+  try {
+    const json = props.action.rollChainStateJson;
+    if (json) {
+      const parsed = JSON.parse(json) as { stepIndex?: number };
+      const idx = parsed.stepIndex ?? 0;
+      return rollChainSteps.value[idx]?.step ?? null;
+    }
+  } catch {
+    // ignore malformed state
+  }
+
+  return null;
 });
+
+const showStartChain = computed(() =>
+  hasRollChain.value
+  && Boolean(rollChainProgress.value?.needsChainStart)
+  && Boolean(props.action.actorCharacterId),
+);
+
+function allowManualPromptForStep(stepKey: string) {
+  if (!rollChainProgress.value || rollChainProgress.value.isComplete) return false;
+  if (rollChainProgress.value.hasPendingPrompt) return false;
+  if (showStartChain.value) return false;
+  return currentChainStepKey.value === stepKey;
+}
 
 function promptForStep(stepKey: string) {
   const character = props.characters.find(
     c => c.id === props.action.actorCharacterId,
   );
   if (!character || !props.action.actionKey) return;
-  const step = rollChainSteps.value.find(s => s.step === stepKey);
+
+  if (showStartChain.value && stepKey === rollChainSteps.value[0]?.step) {
+    emit('startChain');
+    return;
+  }
+
+  const step = rollChainSteps.value.find(item => item.step === stepKey);
   if (!step) return;
 
   emit('sendRollPrompts', {
     prompts: [{
       targetCharacterId: character.id,
       checkMode: step.checkMode ?? 'Action',
-      actionKey: props.action.actionKey,
+      actionKey: step.checkMode === 'Action' ? props.action.actionKey : undefined,
+      customCheckText: step.checkMode === 'Custom' ? step.label : undefined,
+      promptLabel: step.label,
+      guidanceText: step.guidanceText,
       resultKind: step.resultKind ?? 'PassFail',
+      chainStepKey: step.step,
     }],
   });
 }
@@ -184,6 +282,7 @@ const showRejectForm = ref(false);
 const rejectReason = ref('');
 
 function submitResolve() {
+  if (!canPublish.value) return;
   emit('resolve', {
     resolutionText: resolutionTextModel.value,
     outcome: derivedOutcome.value ?? undefined,
@@ -207,34 +306,50 @@ function submitReject() {
 
 <template>
   <div class="action-evaluation-panel">
-    <!-- Roll reference info -->
     <div v-if="actionDetail" class="alert info" style="margin-bottom: 0.75rem;">
       <strong>{{ actionDetail.dice }}</strong>
       <p class="text-sm muted">
         {{ actionDetail.attribute }} + {{ actionDetail.skill }} — {{ actionDetail.successRule }}
       </p>
+      <p v-if="action.targetName" class="text-sm" style="margin: 0.35rem 0 0;">
+        Target: <strong>{{ action.targetName }}</strong>
+      </p>
     </div>
 
-    <!-- Roll chain steps -->
     <div v-if="hasRollChain" class="roll-chain-steps" style="margin-bottom: 0.75rem;">
       <p class="text-sm muted" style="margin: 0 0 0.5rem;">Roll chain</p>
+
+      <div v-if="showStartChain" class="dm-action-roll-primary" style="margin-bottom: 0.75rem;">
+        <button type="button" class="btn" :disabled="isBusy || rollChainProgress?.hasPendingPrompt" @click="emit('startChain')">
+          Request {{ rollChainSteps[0]?.label ?? 'first roll' }} from {{ action.actorName }}
+        </button>
+        <p class="text-sm muted" style="margin: 0.35rem 0 0;">
+          Sends the first roll prompt to {{ action.actorName }}'s screen.
+        </p>
+      </div>
+
+      <p v-else-if="chainStatusHint" class="text-sm dm-action-roll-hint" style="margin: 0 0 0.75rem;">
+        {{ chainStatusHint }}
+      </p>
+
       <RollChainStepRow
-        v-for="(step, idx) in rollChainSteps"
+        v-for="step in rollChainSteps"
         :key="step.step"
         :step="step"
-        :prompt="actionPrompts.find(p => p.chainStepKey === step.step) ?? null"
+        :prompt="latestPromptForStep(step.step)"
         :is-current="step.step === currentChainStepKey"
-        :is-completed="actionPrompts.some(p => p.chainStepKey === step.step && p.status === 'Completed')"
+        :is-completed="isStepCompleted(step.step)"
+        :is-skipped="skippedStepKeys.has(step.step)"
         :is-dm-mode="true"
+        :actor-name="action.actorName"
+        :allow-manual-prompt="allowManualPromptForStep(step.step)"
         :is-busy="isBusy"
         :ruleset-definition="rulesetDefinition"
         @prompt-player="promptForStep"
-        @dm-roll="key => $emit('dmRoll', { actionId: action.id, rollSummary: key })"
-        @cancel-prompt="id => $emit('cancelPrompt', id)"
+        @cancel-prompt="id => emit('cancelPrompt', id)"
       />
     </div>
 
-    <!-- Standard roll prompts (non-chain) -->
     <DmFollowUpRollPanel
       v-if="!hasRollChain"
       :action="action"
@@ -248,24 +363,21 @@ function submitReject() {
       @dm-roll="payload => emit('dmRoll', payload)"
     />
 
-    <!-- Derived outcome -->
-    <p v-if="derivedOutcome" class="text-sm" style="margin: 0.5rem 0;">
+    <p v-if="derivedOutcome" class="roll-outcome-line" style="margin: 0.5rem 0;">
       Roll outcome:
       <span class="badge" :class="derivedOutcome === 'Pass' ? 'pass' : 'fail'">{{ derivedOutcome }}</span>
     </p>
 
-    <!-- Resolution text -->
     <label style="margin-top: 0.5rem;">
       Resolution note (optional)
       <input
         v-model="resolutionTextModel"
         type="text"
         placeholder="Narrate what happens…"
-        :disabled="isBusy"
+        :disabled="isBusy || !canPublish"
       />
     </label>
 
-    <!-- State changes -->
     <details class="dm-resolve-optional-card" style="margin-top: 0.75rem;">
       <summary>State changes <span class="optional-tag">(optional)</span></summary>
       <div class="dm-resolve-optional-body">
@@ -293,9 +405,14 @@ function submitReject() {
       </div>
     </details>
 
-    <!-- Resolve / Reject actions -->
     <div class="action-eval-footer" style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-      <button type="button" class="btn success" :disabled="isBusy" @click="submitResolve">
+      <button
+        type="button"
+        class="btn"
+        :class="{ success: canPublish }"
+        :disabled="isBusy || !canPublish"
+        @click="submitResolve"
+      >
         {{ isBusy ? 'Publishing…' : 'Publish Resolution' }}
       </button>
       <button
@@ -307,6 +424,10 @@ function submitReject() {
         {{ showRejectForm ? 'Cancel reject' : 'Reject' }}
       </button>
     </div>
+
+    <p v-if="!canPublish && chainStatusHint" class="text-sm muted" style="margin: 0.5rem 0 0;">
+      {{ chainStatusHint }}
+    </p>
 
     <div v-if="showRejectForm" class="panel nested" style="margin-top: 0.5rem;">
       <label class="text-sm">

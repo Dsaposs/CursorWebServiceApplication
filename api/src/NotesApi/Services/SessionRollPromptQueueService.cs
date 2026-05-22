@@ -62,8 +62,8 @@ public static class SessionRollPromptQueueService
     }
 
     private static string FormatSkillCheckLabel(string? label) =>
-        string.IsNullOrWhiteSpace(label) ? "Skill check" : $"{label} check";
+        string.IsNullOrWhiteSpace(label) ? "Skill check" : $"Skill check: {label}";
 
     private static string FormatAttributeCheckLabel(string? label) =>
-        string.IsNullOrWhiteSpace(label) ? "Attribute check" : $"{label} check";
+        string.IsNullOrWhiteSpace(label) ? "Attribute check" : $"Attribute check: {label}";
 }

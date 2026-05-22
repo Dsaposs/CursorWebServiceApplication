@@ -11,6 +11,11 @@ export interface FatalError {
   message: string;
 }
 
+export interface SessionRefreshOptions {
+  /** Wait for any in-flight refresh, then run again (use after roll submit). */
+  force?: boolean;
+}
+
 export function useSessionPolling(loadState: () => Promise<SessionStateResponse | null>, intervalMs = 3000) {
   const state = ref<SessionStateResponse | null>(null);
   const pollingError = ref('');
@@ -21,11 +26,10 @@ export function useSessionPolling(loadState: () => Promise<SessionStateResponse 
   let timer: ReturnType<typeof setTimeout> | null = null;
   let hasStarted = false;
   let failureCount = 0;
+  let refreshPromise: Promise<void> | null = null;
 
-  const maxIntervalMs = 30000;
-
-  async function refresh() {
-    if (isRefreshing.value || fatalError.value) return;
+  async function runRefresh() {
+    if (fatalError.value) return;
 
     isRefreshing.value = true;
     if (!state.value) {
@@ -41,7 +45,6 @@ export function useSessionPolling(loadState: () => Promise<SessionStateResponse 
       const status = error instanceof ApiError ? error.status : 0;
 
       if (FATAL_STATUSES.has(status)) {
-        // Stop polling — the page will handle navigation.
         fatalError.value = {
           status,
           message: error instanceof Error ? error.message : String(error),
@@ -59,9 +62,28 @@ export function useSessionPolling(loadState: () => Promise<SessionStateResponse 
     }
   }
 
+  async function refresh(options?: SessionRefreshOptions) {
+    if (fatalError.value) return;
+
+    if (refreshPromise) {
+      if (!options?.force) {
+        return refreshPromise;
+      }
+      await refreshPromise;
+    }
+
+    refreshPromise = runRefresh().finally(() => {
+      refreshPromise = null;
+    });
+
+    return refreshPromise;
+  }
+
   function nextInterval() {
     return Math.min(intervalMs * 2 ** Math.max(failureCount - 1, 0), maxIntervalMs);
   }
+
+  const maxIntervalMs = 30000;
 
   function clearTimer() {
     if (timer) {

@@ -156,6 +156,14 @@ export function isCombatAction(action: RulesetActionDefinition): boolean {
   return action.context === 'combat';
 }
 
+/** True when the player or DM must pick a target (attacks, targeted spells). */
+export function actionRequiresTarget(action: RulesetActionDefinition): boolean {
+  if (action.requiresTarget === false) return false;
+  if (action.requiresTarget === true) return true;
+  if (action.attackType) return true;
+  return isCombatAction(action);
+}
+
 export interface GroupedActions {
   normal: RulesetActionDefinition[];
   combat: RulesetActionDefinition[];

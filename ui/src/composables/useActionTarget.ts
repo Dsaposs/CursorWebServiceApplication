@@ -26,7 +26,10 @@ export function useActionTarget(
     [...toValue(npcs)].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
   );
 
-  function isValid(): boolean {
+  function isValid(options?: { required?: boolean }): boolean {
+    if (options?.required && !selection.value) {
+      return false;
+    }
     if (selection.value === '__other__') {
       return otherText.value.trim().length > 0;
     }

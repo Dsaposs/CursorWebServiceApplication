@@ -551,6 +551,32 @@ p:last-child { margin-bottom: 0; }
 
 .btn:active { transform: scale(0.98); }
 
+.btn:disabled,
+.btn:disabled:hover,
+.btn:disabled:active {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  background: var(--panel-alt);
+  border-color: var(--border);
+  color: var(--muted-light);
+}
+
+.btn.success:disabled,
+.btn.success:disabled:hover {
+  background: var(--panel-alt);
+  color: var(--muted-light);
+  border: 1px solid var(--border);
+}
+
+.btn.ghost:disabled,
+.btn.ghost:disabled:hover {
+  background: transparent;
+  color: var(--muted-light);
+  border-color: var(--border);
+}
+
 .btn.ghost {
   background: transparent;
   border-color: var(--border-strong);
@@ -1462,6 +1488,18 @@ select option {
   background: var(--panel-alt);
   color: var(--muted-light);
   border: 1px solid var(--border);
+}
+
+/* Roll outcome label (small) with enlarged pass/fail badge */
+.roll-outcome-line {
+  font-size: 0.82rem;
+  margin: 0.4rem 0 0.25rem;
+}
+
+.roll-outcome-line .badge {
+  font-size: 1.6rem;
+  line-height: 1;
+  padding: 0.35rem 0.75rem;
 }
 
 .action-card-header {

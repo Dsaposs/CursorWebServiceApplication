@@ -20,6 +20,8 @@ const summary = computed(() =>
   describeDamageRoll(props.damageRoll, props.definition, props.attributes),
 );
 
+const hasResult = computed(() => Boolean(props.modelValue?.trim()));
+
 function rollDamage() {
   const parsed = parseDiceNotation(props.damageRoll.notation);
   if (!parsed) {
@@ -50,13 +52,23 @@ function clear() {
     <div class="dr-header">
       <span class="dr-label">Damage roll</span>
     </div>
-    <p v-if="damageRoll.description" class="dr-success-hint">{{ damageRoll.description }}</p>
-    <p v-else class="dr-success-hint">Roll {{ summary }} on a hit.</p>
-    <div class="dr-panel">
-      <button type="button" class="btn dr-roll-btn" @click="rollDamage">Roll damage</button>
-      <button v-if="modelValue" type="button" class="btn ghost sm" @click="clear">Clear</button>
+
+    <template v-if="!hasResult">
+      <p v-if="damageRoll.description" class="dr-success-hint">{{ damageRoll.description }}</p>
+      <p v-else class="dr-success-hint">Roll {{ summary }} on a hit.</p>
+      <div class="dr-panel">
+        <button type="button" class="btn dr-roll-btn" @click="rollDamage">Roll damage</button>
+      </div>
+    </template>
+
+    <div v-else class="damage-roll-result-card">
+      <span class="damage-roll-result-label">Damage result</span>
+      <p class="damage-roll-result-value">{{ modelValue }}</p>
+      <div class="damage-roll-result-actions">
+        <button type="button" class="btn ghost sm" @click="rollDamage">Re-roll</button>
+        <button type="button" class="btn ghost sm" @click="clear">Clear</button>
+      </div>
     </div>
-    <div v-if="modelValue" class="dr-result-preview">{{ modelValue }}</div>
   </div>
 </template>
 

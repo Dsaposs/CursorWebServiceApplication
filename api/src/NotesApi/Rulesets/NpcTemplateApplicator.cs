@@ -74,13 +74,16 @@ public static class NpcTemplateApplicator
 
     private static int ReadRulesetDefaultArmor(RulesetDefinition definition)
     {
-        if (definition.Character.Vitals.TryGetValue("armor", out var armorNode)
-            && armorNode is JsonElement armorElement
-            && armorElement.ValueKind == JsonValueKind.Object
-            && armorElement.TryGetProperty("default", out var defaultElement)
-            && defaultElement.TryGetInt32(out var defaultArmor))
+        foreach (var vitalKey in new[] { "armor", "armorClass" })
         {
-            return defaultArmor;
+            if (definition.Character.Vitals.TryGetValue(vitalKey, out var armorNode)
+                && armorNode is JsonElement armorElement
+                && armorElement.ValueKind == JsonValueKind.Object
+                && armorElement.TryGetProperty("default", out var defaultElement)
+                && defaultElement.TryGetInt32(out var defaultArmor))
+            {
+                return defaultArmor;
+            }
         }
 
         return 0;

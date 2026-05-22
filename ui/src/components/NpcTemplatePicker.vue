@@ -33,7 +33,7 @@ function onChange(event: Event) {
     <label>
       Pregenerated template
       <select :value="modelValue" :disabled="disabled" @change="onChange">
-        <option value="">Custom (manual entry)</option>
+        <option value="">Manual entry</option>
         <optgroup v-for="group in templateGroups" :key="group.label" :label="group.label">
           <option v-for="template in group.templates" :key="template.key" :value="template.key">
             {{ template.label }}{{ template.kind === 'Monster' ? ' (Monster)' : '' }}

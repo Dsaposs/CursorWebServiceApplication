@@ -254,3 +254,37 @@
   font-variant-numeric: tabular-nums;
   word-break: break-word;
 }
+
+.damage-roll-result-card {
+  margin-top: 0.65rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm, 0.35rem);
+  border: 1px solid rgba(77, 220, 126, 0.45);
+  background: linear-gradient(135deg, rgba(77, 220, 126, 0.18), rgba(77, 220, 126, 0.06));
+  box-shadow: 0 0 0 1px rgba(77, 220, 126, 0.08), 0 8px 24px rgba(77, 220, 126, 0.12);
+}
+
+.damage-roll-result-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--success, #4ddc7e);
+  margin-bottom: 0.35rem;
+}
+
+.damage-roll-result-value {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-text, var(--text));
+  font-variant-numeric: tabular-nums;
+}
+
+.damage-roll-result-actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+}

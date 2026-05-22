@@ -27,6 +27,10 @@ public static class RollChainPromptBuilder
         {
             customCheckText = BuildWeaponDamageText(definitionJson, action, targetCharacter) ?? step.CustomCheckText ?? "Weapon damage";
         }
+        else if (checkMode == "Custom" && string.Equals(step.DiceSource, "actionDamage", StringComparison.OrdinalIgnoreCase))
+        {
+            customCheckText = BuildActionDamageText(definitionJson, action) ?? step.CustomCheckText ?? "Roll damage";
+        }
 
         return new ActionRollPrompt
         {
@@ -90,6 +94,31 @@ public static class RollChainPromptBuilder
 
         var notation = item.DamageRoll.Notation;
         var description = item.DamageRoll.Description;
+        return string.IsNullOrWhiteSpace(description)
+            ? $"Roll {notation} damage"
+            : $"{description} ({notation})";
+    }
+
+    private static string? BuildActionDamageText(string definitionJson, ActionRequest action)
+    {
+        var rulesetAction = RulesetActionCatalog.FindAction(definitionJson, action.ActionKey);
+        if (rulesetAction?.DamageRoll is null)
+        {
+            return null;
+        }
+
+        return FormatDamagePrompt(rulesetAction.DamageRoll);
+    }
+
+    private static string FormatDamagePrompt(RulesetDamageRollDefinition damageRoll)
+    {
+        var notation = damageRoll.Notation;
+        if (damageRoll.FlatBonus is > 0)
+        {
+            notation = $"{notation}+{damageRoll.FlatBonus}";
+        }
+
+        var description = damageRoll.Description;
         return string.IsNullOrWhiteSpace(description)
             ? $"Roll {notation} damage"
             : $"{description} ({notation})";

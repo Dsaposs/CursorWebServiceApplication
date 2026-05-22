@@ -39,7 +39,10 @@ const groupCount = computed(() =>
     <div class="panel-title">
       <div>
         <h2>Action Log</h2>
-        <p class="text-sm">Grouped by skill checks and combat encounters. Most recent groups appear first.</p>
+        <p class="text-sm">
+          Grouped by skill checks and combat encounters.
+          Most recent groups appear first, and newest actions are shown at the top.
+        </p>
       </div>
       <div class="btn-row">
         <span v-if="actions.length" class="badge published">{{ actions.length }} action{{ actions.length === 1 ? '' : 's' }}</span>

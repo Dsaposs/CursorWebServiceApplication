@@ -55,6 +55,7 @@ public class ActionsController : ControllerBase
     {
         var session = await _db.GameSessions
             .Include(s => s.Game).ThenInclude(g => g.Ruleset)
+            .Include(s => s.Game).ThenInclude(g => g.Characters)
             .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
             .Include(s => s.Actions)
             .Include(s => s.InitiativeEntries)
@@ -106,7 +107,7 @@ public class ActionsController : ControllerBase
                 return BadRequest(new { errors = new[] { "Selected action is not available for this ruleset." } });
             }
 
-            if (!RulesetActionCatalog.IsAllowedForClass(rulesetAction, actorClassKey))
+            if (!RulesetActionCatalog.IsAllowedForClass(rulesetAction, actorClassKey) && actorNpc is null)
             {
                 return BadRequest(new { errors = new[] { "Selected action is not available for this actor." } });
             }
@@ -126,6 +127,14 @@ public class ActionsController : ControllerBase
             }
 
             actionText = string.IsNullOrWhiteSpace(actionText) ? rulesetAction.Label : actionText;
+
+            if (RulesetActionCatalog.ActionRequiresTarget(rulesetAction)
+                && !request.TargetCharacterId.HasValue
+                && !request.TargetNpcId.HasValue
+                && string.IsNullOrWhiteSpace(request.TargetName))
+            {
+                return BadRequest(new { errors = new[] { "This action requires a target." } });
+            }
         }
 
         if (session.State == SessionMode.Combat)
@@ -191,7 +200,47 @@ public class ActionsController : ControllerBase
 
         _db.ActionRequests.Add(action);
         Touch(session);
+
+        if (session.State == SessionMode.Combat
+            && actorCharacterId.HasValue
+            && session.ActiveCombatEncounterId.HasValue)
+        {
+            var encounter = await _db.Set<CombatEncounter>().FindAsync(session.ActiveCombatEncounterId.Value);
+            if (encounter?.PromptedTurnCharacterId == actorCharacterId)
+            {
+                encounter.PromptedTurnCharacterId = null;
+            }
+        }
+
         await _db.SaveChangesAsync();
+
+        if (session.State == SessionMode.Combat
+            && actorCharacterId.HasValue
+            && !string.IsNullOrWhiteSpace(action.ActionKey))
+        {
+            var chain = RollChainCatalog.GetChain(session.Game.Ruleset.DefinitionJson, action.ActionKey);
+            if (chain.Count > 0)
+            {
+                var firstPrompt = RollChainOrchestrator.TryCreateFirstPrompt(
+                    action,
+                    session.Game,
+                    session.Game.Ruleset.DefinitionJson,
+                    now);
+
+                if (firstPrompt is not null)
+                {
+                    _db.ActionRollPrompts.Add(firstPrompt);
+                    action.Status = ActionStatus.AwaitingRoll;
+                    Touch(session);
+                    await _db.SaveChangesAsync();
+
+                    await _broadcaster.BroadcastToSessionAsync(
+                        session.Id,
+                        ActionEvents.ActionRollRequested,
+                        new { actionId = action.Id, promptIds = new[] { firstPrompt.Id } });
+                }
+            }
+        }
 
         await _broadcaster.BroadcastToSessionAsync(session.Id, ActionEvents.ActionSubmitted, new
         {
@@ -493,6 +542,8 @@ public class ActionsController : ControllerBase
     {
         var action = await _db.ActionRequests
             .Include(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Ruleset)
+            .Include(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Characters)
+            .Include(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
             .Include(a => a.Session).ThenInclude(s => s.InitiativeEntries)
             .Include(a => a.Resolution)
             .Include(a => a.RollPrompts)
@@ -522,9 +573,9 @@ public class ActionsController : ControllerBase
         var statChanges = request.StatChanges ?? [];
         var outcome = ActionOutcomeResolver.Resolve(
             action.Session.Game.Ruleset.DefinitionJson,
-            action.ActionKey,
-            action.Description,
-            action.RollPrompts);
+            action,
+            action.RollPrompts,
+            action.Session.Game);
 
         var now = DateTime.UtcNow;
         action.Status = ActionStatus.Published;
@@ -557,7 +608,7 @@ public class ActionsController : ControllerBase
             prompt.Status = RollPromptStatus.Cancelled;
         }
 
-        await CombatTurnAdvanceService.TryAdvanceAfterActionAsync(_db, action.Session, action);
+        await CombatTurnAdvanceService.CompleteResolvedActionAsync(_db, action.Session, action);
 
         Touch(action.Session);
         await _db.SaveChangesAsync();
@@ -631,7 +682,7 @@ public class ActionsController : ControllerBase
             prompt.Status = RollPromptStatus.Cancelled;
         }
 
-        await CombatTurnAdvanceService.TryAdvanceAfterActionAsync(_db, action.Session, action);
+        await CombatTurnAdvanceService.CompleteResolvedActionAsync(_db, action.Session, action);
 
         Touch(action.Session);
         await _db.SaveChangesAsync();
@@ -689,6 +740,7 @@ public class ActionsController : ControllerBase
         var action = await _db.ActionRequests
             .Include(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Ruleset)
             .Include(a => a.Session).ThenInclude(s => s.Game).ThenInclude(g => g.Characters)
+            .Include(a => a.RollPrompts)
             .FirstOrDefaultAsync(a => a.Id == actionId);
 
         if (action is null || action.Session?.Game is null)
@@ -701,9 +753,22 @@ public class ActionsController : ControllerBase
             return NotFound();
         }
 
-        if (action.Status != ActionStatus.Pending)
+        var promptableStatuses = new[]
+        {
+            ActionStatus.Pending,
+            ActionStatus.DmReviewing,
+            ActionStatus.AwaitingRoll,
+            ActionStatus.RollReceived,
+            ActionStatus.AwaitingFollowUpRoll,
+        };
+        if (!promptableStatuses.Contains(action.Status))
         {
             return BadRequest(new { errors = new[] { "Roll prompts can only be sent for pending actions still awaiting resolution." } });
+        }
+
+        if (action.RollPrompts.Any(p => p.Status == RollPromptStatus.Pending))
+        {
+            return BadRequest(new { errors = new[] { "A roll prompt is already waiting for this action." } });
         }
 
         var prompts = request.Prompts?.ToList() ?? [];
@@ -723,50 +788,89 @@ public class ActionsController : ControllerBase
                 return BadRequest(new { errors = new[] { "Target character was not found in this game." } });
             }
 
-            if (!RollPromptValidator.TryNormalizeCheckMode(item.CheckMode, out var checkMode))
+            ActionRollPrompt prompt;
+
+            if (!string.IsNullOrWhiteSpace(item.ChainStepKey))
             {
-                return BadRequest(new { errors = new[] { "CheckMode must be Action, Skill, Attribute, or Custom." } });
+                var chain = RollChainCatalog.GetChain(action.Session.Game.Ruleset.DefinitionJson, action.ActionKey);
+                var step = RollChainCatalog.GetStep(action.Session.Game.Ruleset.DefinitionJson, action.ActionKey, item.ChainStepKey.Trim());
+                if (step is null)
+                {
+                    return BadRequest(new { errors = new[] { $"Roll chain step '{item.ChainStepKey}' was not found for this action." } });
+                }
+
+                var stepIndex = RollChainCatalog.IndexOfStep(chain, step.Step);
+                action.RollChainStateJson = RollChainCatalog.SerializeState(new RollChainState
+                {
+                    StepIndex = stepIndex >= 0 ? stepIndex : 0,
+                });
+
+                prompt = RollChainPromptBuilder.CreatePrompt(
+                    step,
+                    action,
+                    character,
+                    action.Session.Game.Ruleset.DefinitionJson,
+                    now);
+
+                if (item.Dc.HasValue)
+                {
+                    prompt.Dc = item.Dc;
+                }
+            }
+            else
+            {
+                if (!RollPromptValidator.TryNormalizeCheckMode(item.CheckMode, out var checkMode))
+                {
+                    return BadRequest(new { errors = new[] { "CheckMode must be Action, Skill, Attribute, or Custom." } });
+                }
+
+                if (!RollPromptValidator.TryNormalizeResultKind(item.ResultKind, out var resultKind))
+                {
+                    return BadRequest(new { errors = new[] { "ResultKind must be PassFail or Total." } });
+                }
+
+                var validationError = RollPromptValidator.ValidateCheck(
+                    checkMode,
+                    item,
+                    action.Session.Game.Ruleset.DefinitionJson,
+                    character.ClassKey);
+                if (validationError is not null)
+                {
+                    return BadRequest(new { errors = new[] { validationError } });
+                }
+
+                prompt = new ActionRollPrompt
+                {
+                    Id = Guid.NewGuid(),
+                    ActionRequestId = action.Id,
+                    TargetCharacterId = character.Id,
+                    TargetCharacter = character,
+                    PromptLabel = string.IsNullOrWhiteSpace(item.PromptLabel) ? null : item.PromptLabel.Trim(),
+                    GuidanceText = string.IsNullOrWhiteSpace(item.GuidanceText) ? null : item.GuidanceText.Trim(),
+                    CheckMode = checkMode,
+                    ResultKind = resultKind,
+                    ActionKey = string.IsNullOrWhiteSpace(item.ActionKey) ? null : item.ActionKey.Trim(),
+                    SkillKey = string.IsNullOrWhiteSpace(item.SkillKey) ? null : item.SkillKey.Trim(),
+                    AttributeKey = string.IsNullOrWhiteSpace(item.AttributeKey) ? null : item.AttributeKey.Trim(),
+                    CustomCheckText = string.IsNullOrWhiteSpace(item.CustomCheckText) ? null : item.CustomCheckText.Trim(),
+                    Dc = item.Dc,
+                    Status = RollPromptStatus.Pending,
+                    CreatedAt = now,
+                };
             }
 
-            if (!RollPromptValidator.TryNormalizeResultKind(item.ResultKind, out var resultKind))
-            {
-                return BadRequest(new { errors = new[] { "ResultKind must be PassFail or Total." } });
-            }
-
-            var validationError = RollPromptValidator.ValidateCheck(
-                checkMode,
-                item,
-                action.Session.Game.Ruleset.DefinitionJson,
-                character.ClassKey);
-            if (validationError is not null)
-            {
-                return BadRequest(new { errors = new[] { validationError } });
-            }
-
-            var prompt = new ActionRollPrompt
-            {
-                Id = Guid.NewGuid(),
-                ActionRequestId = action.Id,
-                TargetCharacterId = character.Id,
-                TargetCharacter = character,
-                PromptLabel = string.IsNullOrWhiteSpace(item.PromptLabel) ? null : item.PromptLabel.Trim(),
-                GuidanceText = string.IsNullOrWhiteSpace(item.GuidanceText) ? null : item.GuidanceText.Trim(),
-                CheckMode = checkMode,
-                ResultKind = resultKind,
-                ActionKey = string.IsNullOrWhiteSpace(item.ActionKey) ? null : item.ActionKey.Trim(),
-                SkillKey = string.IsNullOrWhiteSpace(item.SkillKey) ? null : item.SkillKey.Trim(),
-                AttributeKey = string.IsNullOrWhiteSpace(item.AttributeKey) ? null : item.AttributeKey.Trim(),
-                CustomCheckText = string.IsNullOrWhiteSpace(item.CustomCheckText) ? null : item.CustomCheckText.Trim(),
-                Dc = item.Dc,
-                Status = RollPromptStatus.Pending,
-                CreatedAt = now,
-            };
             _db.ActionRollPrompts.Add(prompt);
             created.Add(prompt);
         }
 
         Touch(action.Session);
+        action.Status = ActionStatus.AwaitingRoll;
         await _db.SaveChangesAsync();
+
+        await _broadcaster.BroadcastToSessionAsync(
+            action.Session.Id,
+            ActionEvents.ActionRollRequested,
+            new { actionId = action.Id, promptIds = created.Select(p => p.Id) });
 
         return Ok(created.Select(p => ControllerHelpers.ToRollPromptResponse(p, action)));
     }
@@ -791,7 +895,14 @@ public class ActionsController : ControllerBase
             return NotFound();
         }
 
-        if (action.Status != ActionStatus.Pending)
+        var chainableStatuses = new[]
+        {
+            ActionStatus.Pending,
+            ActionStatus.DmReviewing,
+            ActionStatus.RollReceived,
+            ActionStatus.AwaitingFollowUpRoll,
+        };
+        if (!chainableStatuses.Contains(action.Status))
         {
             return BadRequest(new { errors = new[] { "Roll chains can only be started for pending actions." } });
         }
@@ -820,8 +931,14 @@ public class ActionsController : ControllerBase
         }
 
         _db.ActionRollPrompts.Add(prompt);
+        action.Status = ActionStatus.AwaitingRoll;
         Touch(action.Session);
         await _db.SaveChangesAsync();
+
+        await _broadcaster.BroadcastToSessionAsync(
+            action.Session.Id,
+            ActionEvents.ActionRollRequested,
+            new { actionId = action.Id, promptIds = new[] { prompt.Id } });
 
         return Ok(ControllerHelpers.ToRollPromptResponse(prompt, action));
     }
@@ -855,9 +972,13 @@ public class ActionsController : ControllerBase
             return Forbid();
         }
 
-        if (action.Status != ActionStatus.Pending)
+        if (action.Status != ActionStatus.Pending
+            && action.Status != ActionStatus.DmReviewing
+            && action.Status != ActionStatus.RollReceived
+            && action.Status != ActionStatus.AwaitingRoll
+            && action.Status != ActionStatus.AwaitingFollowUpRoll)
         {
-            return BadRequest(new { errors = new[] { "Can only roll for pending actions." } });
+            return BadRequest(new { errors = new[] { "Can only roll for actions still awaiting resolution." } });
         }
 
         if (action.RollPrompts.Any(p => p.Status == RollPromptStatus.Pending))
@@ -877,14 +998,50 @@ public class ActionsController : ControllerBase
 
         var rollSummary = request.RollSummary.Trim();
         var now = DateTime.UtcNow;
+        var definitionJson = action.Session.Game.Ruleset.DefinitionJson;
+        var chain = RollChainCatalog.GetChain(definitionJson, action.ActionKey);
+        RulesetRollChainStepDefinition? chainStep = null;
+
+        if (chain.Count > 0)
+        {
+            if (!string.IsNullOrWhiteSpace(request.ChainStepKey))
+            {
+                chainStep = RollChainCatalog.GetStep(definitionJson, action.ActionKey, request.ChainStepKey.Trim());
+            }
+            else if (!string.IsNullOrWhiteSpace(action.RollChainStateJson))
+            {
+                var state = RollChainCatalog.ParseState(action.RollChainStateJson);
+                chainStep = RollChainCatalog.GetStepAtIndex(definitionJson, action.ActionKey, state?.StepIndex ?? 0);
+            }
+            else
+            {
+                chainStep = chain[0];
+            }
+
+            if (chainStep is null)
+            {
+                return BadRequest(new { errors = new[] { "Could not determine which roll chain step to resolve." } });
+            }
+
+            var stepIndex = RollChainCatalog.IndexOfStep(chain, chainStep.Step);
+            action.RollChainStateJson = RollChainCatalog.SerializeState(new RollChainState
+            {
+                StepIndex = stepIndex >= 0 ? stepIndex : 0,
+            });
+        }
+
+        var resultKind = chainStep is not null
+            && string.Equals(chainStep.ResultKind, "Total", StringComparison.OrdinalIgnoreCase)
+            ? RollPromptResultKind.Total
+            : RollPromptResultKind.PassFail;
 
         // Resolve auto outcome from DC if provided.
         string? autoResolveOutcome = null;
         if (request.Dc.HasValue)
         {
             var rollData = RollResultParser.TryParseJson(request.RollResultJson)
-                ?? RollResultParser.ParseFromSummary(rollSummary, null, RollPromptResultKind.PassFail);
-            var primary = RollResultParser.GetPrimaryValue(rollData, RollPromptResultKind.PassFail, rollSummary);
+                ?? RollResultParser.ParseFromSummary(rollSummary, null, resultKind);
+            var primary = RollResultParser.GetPrimaryValue(rollData, resultKind, rollSummary);
             if (primary.HasValue)
             {
                 autoResolveOutcome = primary.Value >= request.Dc.Value
@@ -893,31 +1050,68 @@ public class ActionsController : ControllerBase
             }
         }
 
-        var prompt = new ActionRollPrompt
-        {
-            Id = Guid.NewGuid(),
-            ActionRequestId = action.Id,
-            TargetCharacterId = targetCharacter.Id,
-            TargetCharacter = targetCharacter,
-            CheckMode = "Action",
-            ResultKind = RollPromptResultKind.PassFail,
-            ActionKey = action.ActionKey,
-            PromptLabel = "DM roll",
-            Dc = request.Dc,
-            DmRolled = true,
-            RollSummary = rollSummary,
-            RollResultJson = string.IsNullOrWhiteSpace(request.RollResultJson) ? null : request.RollResultJson.Trim(),
-            AutoResolveOutcome = autoResolveOutcome,
-            Status = RollPromptStatus.Completed,
-            CreatedAt = now,
-            CompletedAt = now,
-        };
+        var prompt = chainStep is not null
+            ? RollChainPromptBuilder.CreatePrompt(chainStep, action, targetCharacter, definitionJson, now)
+            : new ActionRollPrompt
+            {
+                Id = Guid.NewGuid(),
+                ActionRequestId = action.Id,
+                TargetCharacterId = targetCharacter.Id,
+                TargetCharacter = targetCharacter,
+                CheckMode = "Action",
+                ResultKind = RollPromptResultKind.PassFail,
+                ActionKey = action.ActionKey,
+                PromptLabel = "DM roll",
+                CreatedAt = now,
+            };
+
+        prompt.Dc = request.Dc;
+        prompt.DmRolled = true;
+        prompt.RollSummary = rollSummary;
+        prompt.RollResultJson = string.IsNullOrWhiteSpace(request.RollResultJson) ? null : request.RollResultJson.Trim();
+        prompt.AutoResolveOutcome = autoResolveOutcome;
+        prompt.Status = RollPromptStatus.Completed;
+        prompt.CompletedAt = now;
 
         _db.ActionRollPrompts.Add(prompt);
+
+        ChainProcessResult? chainResult = null;
+        if (chainStep is not null)
+        {
+            chainResult = await RollChainOrchestrator.ProcessCompletedPromptAsync(
+                _db,
+                prompt,
+                action,
+                action.Session.Game,
+                definitionJson,
+                rollSummary,
+                prompt.RollResultJson,
+                now);
+
+            if (chainResult.QueuedNextPrompt is not null)
+            {
+                action.Status = ActionStatus.AwaitingFollowUpRoll;
+            }
+            else if (action.Status is ActionStatus.Pending or ActionStatus.AwaitingRoll or ActionStatus.AwaitingFollowUpRoll)
+            {
+                action.Status = ActionStatus.RollReceived;
+            }
+        }
+
         Touch(action.Session);
         await _db.SaveChangesAsync();
 
-        return Ok(ControllerHelpers.ToRollPromptResponse(prompt, action));
+        if (chainResult?.QueuedNextPrompt is not null)
+        {
+            await _broadcaster.BroadcastToSessionAsync(
+                action.Session.Id,
+                ActionEvents.ActionRollRequested,
+                new { actionId = action.Id, promptIds = new[] { chainResult.QueuedNextPrompt.Id } });
+        }
+
+        var response = ControllerHelpers.ToRollPromptResponse(prompt, action);
+        response.AutoResolveMessage = chainResult?.AutoResolveMessage;
+        return Ok(response);
     }
 
     [HttpPut("roll-prompts/{promptId:guid}/submit")]
@@ -943,7 +1137,21 @@ public class ActionsController : ControllerBase
                 return NotFound();
             }
 
-            if (!actionPrompt.ActionRequest.Session.IsActive || actionPrompt.ActionRequest.Status != ActionStatus.Pending)
+            if (!actionPrompt.ActionRequest.Session.IsActive)
+            {
+                return BadRequest(new { errors = new[] { "This roll prompt is no longer active." } });
+            }
+
+            var rollSubmittableActionStatuses = new[]
+            {
+                ActionStatus.Pending,
+                ActionStatus.DmReviewing,
+                ActionStatus.AwaitingRoll,
+                ActionStatus.AwaitingFollowUpRoll,
+                ActionStatus.RollReceived,
+                ActionStatus.Resolving,
+            };
+            if (!rollSubmittableActionStatuses.Contains(actionPrompt.ActionRequest.Status))
             {
                 return BadRequest(new { errors = new[] { "This roll prompt is no longer active." } });
             }
@@ -998,11 +1206,46 @@ public class ActionsController : ControllerBase
                 actionPrompt.RollResultJson,
                 now);
 
+            if (chainResult.QueuedNextPrompt is not null)
+            {
+                actionPrompt.ActionRequest.Status = ActionStatus.AwaitingFollowUpRoll;
+            }
+            else if (actionPrompt.ActionRequest.Status is ActionStatus.Pending
+                or ActionStatus.AwaitingRoll
+                or ActionStatus.AwaitingFollowUpRoll)
+            {
+                actionPrompt.ActionRequest.Status = ActionStatus.RollReceived;
+            }
+
             Touch(actionPrompt.ActionRequest.Session);
             await _db.SaveChangesAsync();
 
+            await _broadcaster.BroadcastToSessionAsync(
+                actionPrompt.ActionRequest.SessionId,
+                ActionEvents.ActionRollReceived,
+                new { actionId = actionPrompt.ActionRequestId, promptId = actionPrompt.Id });
+
+            if (chainResult.QueuedNextPrompt is not null)
+            {
+                await _broadcaster.BroadcastToSessionAsync(
+                    actionPrompt.ActionRequest.SessionId,
+                    ActionEvents.ActionRollRequested,
+                    new
+                    {
+                        actionId = actionPrompt.ActionRequestId,
+                        promptIds = new[] { chainResult.QueuedNextPrompt.Id },
+                    });
+            }
+
             var response = ControllerHelpers.ToRollPromptResponse(actionPrompt, actionPrompt.ActionRequest);
             response.AutoResolveMessage = chainResult.AutoResolveMessage;
+            if (chainResult.QueuedNextPrompt is not null)
+            {
+                response.NextPendingPrompt = ControllerHelpers.ToRollPromptResponse(
+                    chainResult.QueuedNextPrompt,
+                    actionPrompt.ActionRequest);
+            }
+
             return Ok(response);
         }
 

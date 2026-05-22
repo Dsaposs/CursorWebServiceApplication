@@ -24,7 +24,7 @@ function buildContext(params: BuildRollContextParams) {
       kind: 'd20-check' as const,
       sides: parts.sides,
       successRule: parts.successRule,
-      attackBonus: parts.itemAttackBonus,
+      attackBonus: mode === 'action' ? parts.itemAttackBonus : parts.statModifier,
     },
   };
 }

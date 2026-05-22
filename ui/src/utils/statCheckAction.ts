@@ -1,4 +1,4 @@
-import type { ActionQueueItemResponse, RulesetDefinition } from '~/types/api';
+import type { ActionQueueItemResponse, RollPromptResponse, RulesetDefinition } from '~/types/api';
 import { describeAttributeCheck, describeSkillCheck } from '~/utils/rulesets';
 
 export interface StatCheckRollRequest {
@@ -23,16 +23,27 @@ export function parseStatCheckFromAction(
   if (!text) return null;
 
   for (const skill of definition.character.skills) {
-    if (text === describeSkillCheck(skill, definition).actionText) {
+    if (text === describeSkillCheck(skill, definition).actionText || text === `${skill.label} check`) {
       return { checkMode: 'Skill', skillKey: skill.key };
     }
   }
 
   for (const attribute of definition.character.attributes) {
-    if (text === describeAttributeCheck(attribute).actionText) {
+    if (text === describeAttributeCheck(attribute).actionText || text === `${attribute.label} check`) {
       return { checkMode: 'Attribute', attributeKey: attribute.key };
     }
   }
 
   return null;
+}
+
+export function sessionPromptMatchesStatCheck(
+  prompt: RollPromptResponse,
+  statCheck: StatCheckRollRequest,
+): boolean {
+  if (statCheck.checkMode === 'Skill') {
+    return prompt.checkMode === 'Skill' && prompt.skillKey === statCheck.skillKey;
+  }
+
+  return prompt.checkMode === 'Attribute' && prompt.attributeKey === statCheck.attributeKey;
 }

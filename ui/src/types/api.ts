@@ -151,6 +151,7 @@ export interface RulesetClassDefinition {
   startingSkillPoints: number;
   maxSkillRank?: number;
   startingItemOptions?: string[];
+  spellcastingAttribute?: string;
 }
 
 export interface RulesetNpcTemplateDefinition {
@@ -241,6 +242,18 @@ export interface RulesetActionDefinition {
     difficultyClass?: number;
   };
   rollChain?: RulesetRollChainStepDefinition[];
+  /** weaponAttack | spellAttack | spellSave | autoHit */
+  attackType?: 'weaponAttack' | 'spellAttack' | 'spellSave' | 'autoHit';
+  /** When true, a target must be chosen (uses target AC or caster spell save DC). */
+  requiresTarget?: boolean;
+  /** Spellcasting ability for spell attacks and saves (e.g. intelligence). */
+  spellcastingAttribute?: string;
+  damageRoll?: {
+    notation: string;
+    bonusAttribute?: string;
+    flatBonus?: number;
+    description?: string;
+  };
 }
 
 export interface GameResponse {
@@ -376,6 +389,8 @@ export interface RollPromptResponse {
   dmRolled?: boolean;
   createdAt: string;
   completedAt?: string | null;
+  /** Returned when submitting a roll queues the next chain step. */
+  nextPendingPrompt?: RollPromptResponse | null;
 }
 
 export interface ActionRollData {

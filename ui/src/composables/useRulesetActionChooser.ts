@@ -9,7 +9,7 @@ import {
   findRulesetAction,
 } from '~/utils/rulesets';
 
-export type RulesetActionMode = 'action' | 'stat-check' | 'custom';
+export type RulesetActionMode = 'action' | 'stat-check';
 
 /**
  * A selectable entry in the unified stat-check picker (covers both skills and attributes).
@@ -29,22 +29,39 @@ export interface RulesetActionSubmitPayload {
   description?: string;
 }
 
+interface UseRulesetActionChooserOptions {
+  /**
+   * When true and class-filtered actions are empty, expose all ruleset actions
+   * (still inventory-gated) so DM-controlled actors can pick an explicit action.
+   */
+  allowAllActionsFallback?: boolean;
+}
+
 export function useRulesetActionChooser(
   definition: ComputedRef<RulesetDefinition | null>,
   classKey: ComputedRef<string | null | undefined>,
   inventory: ComputedRef<InventoryEntry[]> = computed(() => []),
   isEnabled: Ref<boolean> | ComputedRef<boolean> = computed(() => true),
+  options: UseRulesetActionChooserOptions = {},
 ) {
   const actionMode = ref<RulesetActionMode>('action');
   const selectedActionKey = ref('');
   /** Composite key: 'skill:<key>' or 'attribute:<key>'. */
   const selectedStatKey = ref('');
-  const customActionText = ref('');
 
   // Predefined actions filtered by class + inventory (existing behaviour).
-  const availableActions = computed(() => isEnabled.value
-    ? availableActionsForClass(definition.value, classKey.value, inventory.value)
-    : []);
+  const availableActions = computed(() => {
+    if (!isEnabled.value || !definition.value) return [];
+
+    const classFiltered = availableActionsForClass(definition.value, classKey.value, inventory.value);
+    if (classFiltered.length || !options.allowAllActionsFallback) {
+      return classFiltered;
+    }
+
+    return definition.value.actions.filter(action =>
+      !action.requiredItemKey || hasInventoryItem(inventory.value, action.requiredItemKey),
+    );
+  });
 
   /**
    * All skills from the ruleset (equipment-gated via requiredItemKey) plus all attributes.
@@ -99,7 +116,6 @@ export function useRulesetActionChooser(
     switch (actionMode.value) {
       case 'action': return selectedRulesetAction.value?.label ?? '';
       case 'stat-check': return selectedStatDetail.value?.actionText ?? '';
-      case 'custom': return customActionText.value;
       default: return '';
     }
   });
@@ -110,14 +126,17 @@ export function useRulesetActionChooser(
 
   function firstAvailableActionMode(): RulesetActionMode {
     if (availableActions.value.length) return 'action';
-    if (availableStatChecks.value.length) return 'stat-check';
-    return 'custom';
+    return 'stat-check';
   }
 
   function resetSelection() {
     selectedActionKey.value = '';
     selectedStatKey.value = '';
-    customActionText.value = '';
+  }
+
+  function resetForm() {
+    actionMode.value = firstAvailableActionMode();
+    resetSelection();
   }
 
   function buildDescription(description?: string) {
@@ -139,8 +158,7 @@ export function useRulesetActionChooser(
   watch([availableActions, availableStatChecks], () => {
     const modeIsAvailable =
       (actionMode.value === 'action' && availableActions.value.length > 0)
-      || (actionMode.value === 'stat-check' && availableStatChecks.value.length > 0)
-      || actionMode.value === 'custom';
+      || (actionMode.value === 'stat-check' && availableStatChecks.value.length > 0);
     if (!modeIsAvailable) actionMode.value = firstAvailableActionMode();
   }, { immediate: true });
 
@@ -150,7 +168,6 @@ export function useRulesetActionChooser(
     selectedStatKey,
     selectedStatType,
     selectedStatRawKey,
-    customActionText,
     availableActions,
     availableStatChecks,
     selectedActionDetail,
@@ -158,6 +175,7 @@ export function useRulesetActionChooser(
     resolvedActionText,
     suggestedRollSummary,
     resetSelection,
+    resetForm,
     buildDescription,
     buildSubmitPayload,
   };

@@ -1,12 +1,38 @@
 import type {
   ActionQueueItemResponse,
+  ActionStatus,
   CombatEncounterResponse,
   GameResponse,
   RulesetDefinition,
 } from '~/types/api';
 import { rollPromptCheckLabel } from '~/utils/rollPrompt';
 import type { RollPromptResponse } from '~/types/api';
+import { isStatCheckAction } from '~/utils/statCheckAction';
 import { findRulesetAttribute } from '~/utils/rulesets';
+
+/** Action statuses that still require DM resolution before the player can act again. */
+export const ACTIVE_ACTION_STATUSES: ActionStatus[] = [
+  'Pending',
+  'DmReviewing',
+  'AwaitingRoll',
+  'RollReceived',
+  'AwaitingReaction',
+  'ReactionPending',
+  'Resolving',
+  'AwaitingFollowUpRoll',
+];
+
+export function isUnresolvedActionStatus(status: ActionStatus | string): boolean {
+  return ACTIVE_ACTION_STATUSES.includes(status as ActionStatus);
+}
+
+/** Published actions shown in the player action feed and summary log. */
+export function isPlayerActionLogEntry(action: ActionQueueItemResponse): boolean {
+  if (action.status !== 'Published') return false;
+  // Exploration skill checks stay in their own DM groups; combat-turn checks belong in the feed.
+  if (isStatCheckAction(action) && !action.combatEncounterId) return false;
+  return true;
+}
 
 export interface ParsedActionDescription {
   playerRoll: string | null;
@@ -252,6 +278,18 @@ export function groupActionsByEncounter(
   let explorationIndex = 0;
 
   for (const action of sorted) {
+    const encounterId = action.combatEncounterId ?? null;
+
+    if (encounterId) {
+      const last = groups[groups.length - 1];
+      if (last?.kind === 'combat' && last.key === encounterId) {
+        last.actions.push(action);
+      } else {
+        groups.push(buildCombatGroup(encounterId, [action], combatEncounters));
+      }
+      continue;
+    }
+
     const batchId = action.skillCheckBatchId ?? null;
     if (batchId) {
       const batchKey = skillCheckGroupKey(batchId);
@@ -267,24 +305,12 @@ export function groupActionsByEncounter(
       continue;
     }
 
-    const encounterId = action.combatEncounterId ?? null;
-
-    if (!encounterId) {
-      const last = groups[groups.length - 1];
-      if (last?.kind === 'exploration') {
-        last.actions.push(action);
-      } else {
-        explorationIndex += 1;
-        groups.push(buildExplorationGroup([action], explorationIndex));
-      }
-      continue;
-    }
-
     const last = groups[groups.length - 1];
-    if (last?.kind === 'combat' && last.key === encounterId) {
+    if (last?.kind === 'exploration') {
       last.actions.push(action);
     } else {
-      groups.push(buildCombatGroup(encounterId, [action], combatEncounters));
+      explorationIndex += 1;
+      groups.push(buildExplorationGroup([action], explorationIndex));
     }
   }
 

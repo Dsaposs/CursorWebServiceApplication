@@ -26,6 +26,25 @@ export function isSameGuid(a?: string | null, b?: string | null): boolean {
   return Boolean(left && right && left === right);
 }
 
+/** Pending roll prompt for a player character, preferring the newest request. */
+export function findActivePlayerRollPrompt(
+  rollPrompts: RollPromptResponse[],
+  characterId?: string | null,
+  options?: { requireMyTurn?: boolean; isMyTurn?: boolean },
+): RollPromptResponse | null {
+  if (!characterId) return null;
+
+  const candidates = rollPrompts
+    .filter(prompt =>
+      prompt.status === 'Pending'
+      && isSameGuid(prompt.targetCharacterId, characterId)
+      && (!options?.requireMyTurn || options.isMyTurn === true),
+    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  return candidates[0] ?? null;
+}
+
 export function normalizeRollResultKind(raw?: string | null): RollResultKind {
   return raw === 'Total' ? 'Total' : 'PassFail';
 }
@@ -70,13 +89,15 @@ export function buildRollPromptContext(
   if (prompt.checkMode === 'Custom') {
     const label = rollPromptCheckLabel(prompt, definition);
     const rollerKey = resolveDiceRollerKey(definition);
+    const notationMatch = (prompt.customCheckText ?? label).match(/(\d+d\d+(?:\+\d+)?)/i);
     if (rollerKey === 'd20-check') {
+      const sides = notationMatch ? parseDiceSides(notationMatch[1]) : defaultDiceSides(definition);
       return {
         rollerKey,
         label,
         poolBreakdown: [label],
         resultKind,
-        config: { kind: 'd20-check', sides: defaultDiceSides(definition) },
+        config: { kind: 'd20-check', sides },
       };
     }
 

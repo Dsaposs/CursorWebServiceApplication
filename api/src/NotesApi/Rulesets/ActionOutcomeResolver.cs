@@ -41,10 +41,12 @@ public static class ActionOutcomeResolver
 
     public static ActionOutcome? Resolve(
         string definitionJson,
-        string? actionKey,
-        string? description,
-        IEnumerable<ActionRollPrompt>? rollPrompts = null)
+        ActionRequest action,
+        IEnumerable<ActionRollPrompt>? rollPrompts = null,
+        Game? game = null)
     {
+        var targetArmor = game is not null ? ActionTargetStats.ResolveTargetArmor(action, game) : null;
+
         var promptRoll = rollPrompts?
             .Where(p => p.Status == RollPromptStatus.Completed && !string.IsNullOrWhiteSpace(p.RollSummary))
             .Where(p => !string.Equals(p.ResultKind, RollPromptResultKind.Total, StringComparison.OrdinalIgnoreCase))
@@ -53,17 +55,90 @@ public static class ActionOutcomeResolver
 
         if (promptRoll is not null)
         {
-            return Resolve(
+            var fromAuto = MapAutoResolveOutcome(promptRoll.AutoResolveOutcome);
+            if (fromAuto.HasValue)
+            {
+                return fromAuto;
+            }
+
+            if (promptRoll.Dc is int promptDc)
+            {
+                var fromDc = ResolveAgainstDifficulty(
+                    promptRoll.RollSummary!,
+                    promptRoll.ResultKind,
+                    promptDc);
+                if (fromDc.HasValue)
+                {
+                    return fromDc;
+                }
+            }
+
+            return ResolveFromDescription(
                 definitionJson,
-                promptRoll.ActionKey ?? actionKey,
-                $"🎲 Roll: {promptRoll.RollSummary}");
+                promptRoll.ActionKey ?? action.ActionKey,
+                $"🎲 Roll: {promptRoll.RollSummary}",
+                targetArmor);
         }
 
-        return ResolveFromDescription(definitionJson, actionKey, description);
+        return ResolveFromDescription(definitionJson, action.ActionKey, action.Description, targetArmor);
     }
 
-    private static ActionOutcome? ResolveFromDescription(string definitionJson, string? actionKey, string? description)
+    private static ActionOutcome? MapAutoResolveOutcome(string? autoResolveOutcome)
     {
+        if (string.Equals(autoResolveOutcome, RollChainOutcomes.Success, StringComparison.OrdinalIgnoreCase))
+        {
+            return ActionOutcome.Pass;
+        }
+
+        if (string.Equals(autoResolveOutcome, RollChainOutcomes.Failure, StringComparison.OrdinalIgnoreCase))
+        {
+            return ActionOutcome.Fail;
+        }
+
+        return null;
+    }
+
+    private static ActionOutcome? ResolveAgainstDifficulty(string rollSummary, string? resultKind, int difficulty)
+    {
+        var primary = RollResultParser.GetPrimaryValue(
+            RollResultParser.ParseFromSummary(rollSummary, null, resultKind ?? RollPromptResultKind.PassFail),
+            resultKind ?? RollPromptResultKind.PassFail,
+            rollSummary);
+
+        if (!primary.HasValue)
+        {
+            return null;
+        }
+
+        return primary.Value >= difficulty ? ActionOutcome.Pass : ActionOutcome.Fail;
+    }
+
+    private static ActionOutcome? ResolveFromDescription(
+        string definitionJson,
+        string? actionKey,
+        string? description,
+        int? targetArmor)
+    {
+        var definition = JsonSerializer.Deserialize<RulesetDefinition>(definitionJson, JsonOptions);
+        if (definition is null)
+        {
+            return null;
+        }
+
+        var rulesetAction = RulesetActionCatalog.FindAction(definitionJson, actionKey);
+        var item = !string.IsNullOrWhiteSpace(rulesetAction?.RequiredItemKey)
+            ? RulesetActionCatalog.FindItem(definitionJson, rulesetAction.RequiredItemKey)
+            : null;
+        var effectiveRoll = rulesetAction is not null
+            ? RulesetActionCatalog.ResolveActionRoll(rulesetAction, item)
+            : null;
+        var successRule = effectiveRoll?.SuccessRule;
+
+        if (IsAutomaticSuccess(successRule))
+        {
+            return ActionOutcome.Pass;
+        }
+
         var rollLine = ExtractRollLine(description);
         if (string.IsNullOrWhiteSpace(rollLine))
         {
@@ -75,26 +150,12 @@ public static class ActionOutcomeResolver
             return null;
         }
 
-        var definition = JsonSerializer.Deserialize<RulesetDefinition>(definitionJson, JsonOptions);
-        if (definition is null)
-        {
-            return null;
-        }
-
         var rollerKey = ResolveRollerKey(definition);
-        var rulesetAction = RulesetActionCatalog.FindAction(definitionJson, actionKey);
-        var item = !string.IsNullOrWhiteSpace(rulesetAction?.RequiredItemKey)
-            ? RulesetActionCatalog.FindItem(definitionJson, rulesetAction.RequiredItemKey)
-            : null;
-        var effectiveRoll = rulesetAction is not null
-            ? RulesetActionCatalog.ResolveActionRoll(rulesetAction, item)
-            : null;
-        var successRule = effectiveRoll?.SuccessRule;
 
         return rollerKey switch
         {
             "d6-pool" => ResolveD6Pool(rollLine, successRule ?? string.Empty),
-            "d20-check" => ResolveD20Check(rollLine, effectiveRoll, definition.RollMechanics),
+            "d20-check" => ResolveD20Check(rollLine, effectiveRoll, definition.RollMechanics, targetArmor),
             _ => null,
         };
     }
@@ -181,7 +242,8 @@ public static class ActionOutcomeResolver
     private static ActionOutcome? ResolveD20Check(
         string rollLine,
         RulesetRollDefinition? roll,
-        RulesetRollMechanicsDefinition? rollMechanics)
+        RulesetRollMechanicsDefinition? rollMechanics,
+        int? targetArmor)
     {
         if (!rollLine.Contains("1d", StringComparison.OrdinalIgnoreCase))
         {
@@ -210,7 +272,7 @@ public static class ActionOutcomeResolver
             return ActionOutcome.Pass;
         }
 
-        var difficulty = ParseDifficulty(successRule, roll, rollMechanics);
+        var difficulty = ParseDifficulty(successRule, roll, rollMechanics, targetArmor);
         if (difficulty is null)
         {
             return null;
@@ -266,7 +328,8 @@ public static class ActionOutcomeResolver
     private static int? ParseDifficulty(
         string successRule,
         RulesetRollDefinition? roll,
-        RulesetRollMechanicsDefinition? rollMechanics)
+        RulesetRollMechanicsDefinition? rollMechanics,
+        int? targetArmor)
     {
         if (roll?.DifficultyClass is int actionDc)
         {
@@ -290,7 +353,7 @@ public static class ActionOutcomeResolver
             if (successRule.Contains("vs target AC", StringComparison.OrdinalIgnoreCase)
                 || successRule.Contains("meet or beat AC", StringComparison.OrdinalIgnoreCase))
             {
-                return null;
+                return targetArmor;
             }
         }
 

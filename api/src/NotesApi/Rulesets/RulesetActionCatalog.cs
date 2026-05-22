@@ -72,6 +72,26 @@ public static class RulesetActionCatalog
         return MergeRoll(action.Roll, item.Modifiers);
     }
 
+    public static bool ActionRequiresTarget(RulesetActionDefinition action)
+    {
+        if (action.RequiresTarget == false)
+        {
+            return false;
+        }
+
+        if (action.RequiresTarget == true)
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(action.AttackType))
+        {
+            return true;
+        }
+
+        return string.Equals(action.Context, "combat", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static RulesetRollDefinition MergeRoll(RulesetRollDefinition roll, IEnumerable<RulesetModifierDefinition> extraModifiers)
     {
         var merged = new RulesetRollDefinition

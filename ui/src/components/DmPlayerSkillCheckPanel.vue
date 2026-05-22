@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { CharacterResponse, RollPromptResponse, RulesetDefinition } from '~/types/api';
-import { availableSkillsForClass } from '~/utils/rulesets';
-import { rollPromptCheckLabel, rollPromptResultKindLabel, toApiCheckMode } from '~/utils/rollPrompt';
+import type { StatCheckOption } from '~/composables/useRulesetActionChooser';
+import { rollPromptCheckLabel, rollPromptResultKindLabel, normalizeRollResultKind, toApiCheckMode } from '~/utils/rollPrompt';
 import type { RollResultKind } from '~/dice-rollers/types';
-import { describeSkillCheck, findRulesetSkill } from '~/utils/rulesets';
+import { describeAttributeCheck, describeSkillCheck } from '~/utils/rulesets';
 
 interface Props {
   characters: CharacterResponse[];
@@ -22,6 +22,7 @@ const emit = defineEmits<{
       targetCharacterId: string;
       checkMode: string;
       skillKey?: string;
+      attributeKey?: string;
       promptLabel?: string;
       resultKind: string;
     }>;
@@ -31,7 +32,8 @@ const emit = defineEmits<{
 
 const showForm = ref(false);
 const selectedCharacterIds = ref<string[]>([]);
-const selectedSkillKey = ref('');
+/** Composite key: 'skill:<key>' or 'attribute:<key>'. */
+const selectedStatKey = ref('');
 const promptLabel = ref('');
 const resultKind = ref<RollResultKind>('PassFail');
 
@@ -39,34 +41,46 @@ const awaitingPlayerPrompts = computed(() =>
   props.rollPrompts.filter(p => p.status === 'Pending'),
 );
 
-const availableSkills = computed(() => {
-  if (!props.rulesetDefinition) return [];
+const availableStatChecks = computed((): StatCheckOption[] => {
+  const def = props.rulesetDefinition;
+  if (!def) return [];
 
-  const targets = selectedCharacterIds.value.length
-    ? props.characters.filter(c => selectedCharacterIds.value.includes(c.id))
-    : [];
+  const skillOptions: StatCheckOption[] = def.character.skills.map(skill => {
+    const detail = describeSkillCheck(skill, def);
+    return {
+      key: `skill:${skill.key}`,
+      label: skill.label,
+      type: 'skill',
+      rollSummary: detail.rollSummary,
+      actionText: detail.actionText,
+    };
+  });
 
-  if (!targets.length) return [];
+  const attributeOptions: StatCheckOption[] = def.character.attributes.map(attr => {
+    const detail = describeAttributeCheck(attr);
+    return {
+      key: `attribute:${attr.key}`,
+      label: attr.label,
+      type: 'attribute',
+      rollSummary: detail.rollSummary,
+      actionText: detail.actionText,
+    };
+  });
 
-  const seen = new Set<string>();
-  const skills = [];
-
-  for (const character of targets) {
-    for (const skill of availableSkillsForClass(props.rulesetDefinition, character.classKey)) {
-      if (seen.has(skill.key)) continue;
-      seen.add(skill.key);
-      skills.push(skill);
-    }
-  }
-
-  return skills.sort((a, b) => a.label.localeCompare(b.label));
+  return [...skillOptions, ...attributeOptions];
 });
 
-const selectedSkillDetail = computed(() => {
-  const skill = findRulesetSkill(props.rulesetDefinition, selectedSkillKey.value);
-  if (!skill || !props.rulesetDefinition) return null;
-  return describeSkillCheck(skill, props.rulesetDefinition);
-});
+const skillStatChecks = computed(() =>
+  availableStatChecks.value.filter(stat => stat.type === 'skill'),
+);
+
+const attributeStatChecks = computed(() =>
+  availableStatChecks.value.filter(stat => stat.type === 'attribute'),
+);
+
+const selectedStatDetail = computed(
+  () => availableStatChecks.value.find(stat => stat.key === selectedStatKey.value) ?? null,
+);
 
 const allSelected = computed(() =>
   props.characters.length > 0
@@ -78,9 +92,6 @@ function toggleCharacter(characterId: string) {
   if (set.has(characterId)) set.delete(characterId);
   else set.add(characterId);
   selectedCharacterIds.value = [...set];
-  if (!availableSkills.value.some(s => s.key === selectedSkillKey.value)) {
-    selectedSkillKey.value = '';
-  }
 }
 
 function toggleAllPlayers() {
@@ -89,28 +100,45 @@ function toggleAllPlayers() {
   } else {
     selectedCharacterIds.value = props.characters.map(c => c.id);
   }
-  selectedSkillKey.value = '';
 }
 
 function canSend(): boolean {
-  return selectedCharacterIds.value.length > 0 && Boolean(selectedSkillKey.value);
+  return selectedCharacterIds.value.length > 0 && Boolean(selectedStatKey.value);
+}
+
+function buildPromptFields(stat: StatCheckOption) {
+  if (stat.type === 'skill') {
+    const skillKey = stat.key.slice('skill:'.length);
+    return {
+      checkMode: toApiCheckMode('skill'),
+      skillKey,
+    };
+  }
+
+  const attributeKey = stat.key.slice('attribute:'.length);
+  return {
+    checkMode: toApiCheckMode('attribute'),
+    attributeKey,
+  };
 }
 
 function sendPrompts() {
-  if (!canSend()) return;
+  const stat = selectedStatDetail.value;
+  if (!stat || !canSend()) return;
+
+  const fields = buildPromptFields(stat);
 
   emit('send', {
     prompts: selectedCharacterIds.value.map(targetCharacterId => ({
       targetCharacterId,
-      checkMode: toApiCheckMode('skill'),
-      skillKey: selectedSkillKey.value,
+      ...fields,
       promptLabel: promptLabel.value.trim() || undefined,
       resultKind: resultKind.value,
     })),
   });
 
   promptLabel.value = '';
-  selectedSkillKey.value = '';
+  selectedStatKey.value = '';
   resultKind.value = 'PassFail';
   showForm.value = false;
 }
@@ -121,7 +149,7 @@ function promptSummary(prompt: RollPromptResponse) {
 
 function resetForm() {
   selectedCharacterIds.value = [];
-  selectedSkillKey.value = '';
+  selectedStatKey.value = '';
   promptLabel.value = '';
   showForm.value = false;
 }
@@ -131,17 +159,17 @@ function resetForm() {
   <div class="panel">
     <div class="panel-title">
       <div>
-        <h2>Player Skill Checks</h2>
-        <p class="text-sm">Prompt players to roll; responses appear in Pending Actions for you to resolve individually.</p>
+        <h2>Player Stat Checks</h2>
+        <p class="text-sm">Prompt players to roll a skill or attribute; responses appear in Pending Actions for you to resolve individually.</p>
       </div>
       <button
         v-if="!showForm"
         class="btn"
         type="button"
-        :disabled="isBusy || !characters.length"
+        :disabled="isBusy || !characters.length || !availableStatChecks.length"
         @click="showForm = true"
       >
-        Request Skill Check
+        Request Stat Check
       </button>
     </div>
 
@@ -158,6 +186,9 @@ function resetForm() {
         </div>
         <div class="follow-up-roll-item-meta">
           <span class="badge pending">Awaiting roll</span>
+          <span class="badge" style="margin-left: 0.25rem;">
+            {{ rollPromptResultKindLabel(normalizeRollResultKind(prompt.resultKind)) }}
+          </span>
           <button
             type="button"
             class="btn ghost sm"
@@ -205,17 +236,33 @@ function resetForm() {
       </label>
 
       <label>
-        Skill
-        <select v-model="selectedSkillKey" required :disabled="isBusy || !selectedCharacterIds.length">
-          <option value="">Choose a skill</option>
-          <option v-for="skill in availableSkills" :key="skill.key" :value="skill.key">
-            {{ skill.label }}
-          </option>
+        Stat
+        <select v-model="selectedStatKey" required :disabled="isBusy || !selectedCharacterIds.length">
+          <option value="">Choose a stat</option>
+          <optgroup v-if="skillStatChecks.length" label="Skills">
+            <option
+              v-for="stat in skillStatChecks"
+              :key="stat.key"
+              :value="stat.key"
+            >
+              {{ stat.label }}
+            </option>
+          </optgroup>
+          <optgroup v-if="attributeStatChecks.length" label="Attributes">
+            <option
+              v-for="stat in attributeStatChecks"
+              :key="stat.key"
+              :value="stat.key"
+            >
+              {{ stat.label }}
+            </option>
+          </optgroup>
         </select>
       </label>
 
-      <div v-if="selectedSkillDetail" class="alert info">
-        <p class="text-sm">{{ selectedSkillDetail.rollSummary }}</p>
+      <div v-if="selectedStatDetail" class="alert info">
+        <strong>{{ selectedStatDetail.actionText }}</strong>
+        <p class="text-sm muted">{{ selectedStatDetail.rollSummary }}</p>
       </div>
 
       <label>

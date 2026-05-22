@@ -38,4 +38,19 @@ describe('statCheckAction', () => {
       skillKey: 'rangedCombat',
     });
   });
+
+  it('does not require a second roll after a stat check response is queued', () => {
+    const action = {
+      actionText: skillCheckText,
+      actorCharacterId: 'char-1',
+      isSkillCheckResponse: true,
+      description: '🎲 Roll: 2 successes',
+    } as ActionQueueItemResponse;
+
+    expect(actionNeedsPlayerRoll(action, testRuleset)).toBe(false);
+    expect(parseStatCheckFromAction(action, testRuleset)).toEqual({
+      checkMode: 'Skill',
+      skillKey: 'rangedCombat',
+    });
+  });
 });

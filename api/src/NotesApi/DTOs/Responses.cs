@@ -175,6 +175,9 @@ public class RollPromptResponse
     public bool DmRolled { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+
+    /// <summary>When a roll-chain step completes and queues another prompt, returned on submit only.</summary>
+    public RollPromptResponse? NextPendingPrompt { get; set; }
 }
 
 public class ActionQueueItemResponse

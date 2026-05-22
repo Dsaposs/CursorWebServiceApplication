@@ -34,7 +34,7 @@ export function resolveEffectiveActionRoll(
 
   return {
     roll: { ...baseRoll, modifiers: mergedModifiers },
-    damageRoll: item?.damageRoll,
+    damageRoll: item?.damageRoll ?? action.damageRoll,
     item,
     itemAttackBonus,
   };

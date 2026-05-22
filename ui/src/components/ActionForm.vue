@@ -3,7 +3,7 @@ import type { CharacterResponse, NpcResponse, RulesetDefinition } from '~/types/
 import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
 import { useActionTarget } from '~/composables/useActionTarget';
 import { parseInventory } from '~/utils/inventory';
-import { groupActions, isCombatAction, findRulesetAction } from '~/utils/rulesets';
+import { isCombatAction, actionRequiresTarget, findRulesetAction } from '~/utils/rulesets';
 
 interface Props {
   rulesetDefinition: RulesetDefinition | null;
@@ -49,17 +49,15 @@ const {
   actionMode,
   selectedActionKey,
   selectedStatKey,
-  customActionText,
   availableActions,
   availableStatChecks,
   selectedActionDetail,
   selectedStatDetail,
   resolvedActionText,
   resetSelection,
+  resetForm,
   buildSubmitPayload,
 } = useRulesetActionChooser(definitionRef, classKeyRef, inventory, isEnabled);
-
-const grouped = computed(() => groupActions(availableActions.value));
 
 const selectedAction = computed(() =>
   findRulesetAction(props.rulesetDefinition, selectedActionKey.value),
@@ -81,10 +79,17 @@ const {
 } = useActionTarget(() => props.characters, () => props.npcs);
 
 const needsTarget = computed(() =>
-  props.requireTargetForCombat && isCombatActionSelected.value,
+  props.requireTargetForCombat && selectedAction.value
+    ? actionRequiresTarget(selectedAction.value)
+    : false,
 );
 
-const hasValidTarget = computed(() => targetIsValid());
+const hasValidTarget = computed(() => {
+  if (!needsTarget.value) return true;
+  if (!targetIsValid({ required: true })) return false;
+  const fields = targetToSubmitFields();
+  return Boolean(fields.targetCharacterId || fields.targetNpcId || fields.targetName);
+});
 
 const canSubmit = computed(() => {
   if (props.disabled || props.isSubmitting) return false;
@@ -108,7 +113,7 @@ function handleSubmit() {
 }
 
 function reset() {
-  resetSelection();
+  resetForm();
   resetTarget();
 }
 
@@ -117,89 +122,16 @@ defineExpose({ reset });
 
 <template>
   <form class="action-form" @submit.prevent="handleSubmit">
-    <!-- Roll Type -->
-    <label>
-      Roll Type
-      <select v-model="actionMode" :disabled="disabled">
-        <option v-if="availableActions.length" value="action">Action</option>
-        <option v-if="availableStatChecks.length" value="stat-check">Stat Check</option>
-        <option value="custom">Custom</option>
-      </select>
-    </label>
-
-    <!-- Action picker — grouped by Normal / Combat -->
-    <template v-if="actionMode === 'action'">
-      <label>
-        Action
-        <select v-model="selectedActionKey" required :disabled="disabled">
-          <option value="">Choose an action</option>
-          <optgroup v-if="grouped.normal.length" label="Normal Actions">
-            <option v-for="action in grouped.normal" :key="action.key" :value="action.key">
-              {{ action.label }}
-            </option>
-          </optgroup>
-          <optgroup v-if="grouped.combat.length" label="Combat Actions">
-            <option v-for="action in grouped.combat" :key="action.key" :value="action.key">
-              {{ action.label }}
-            </option>
-          </optgroup>
-        </select>
-      </label>
-
-      <div v-if="selectedActionDetail" class="alert info">
-        <strong>{{ selectedActionDetail.dice }}</strong>
-        <p class="text-sm muted">
-          Roll {{ selectedActionDetail.attribute }} + {{ selectedActionDetail.skill }}.
-        </p>
-        <p class="text-sm">{{ selectedActionDetail.successRule }}</p>
-      </div>
-    </template>
-
-    <!-- Stat check picker -->
-    <template v-else-if="actionMode === 'stat-check'">
-      <label>
-        Stat
-        <select v-model="selectedStatKey" required :disabled="disabled">
-          <option value="">Choose a stat</option>
-          <optgroup label="Skills">
-            <option
-              v-for="stat in availableStatChecks.filter(s => s.type === 'skill')"
-              :key="stat.key"
-              :value="stat.key"
-            >
-              {{ stat.label }}
-            </option>
-          </optgroup>
-          <optgroup label="Attributes">
-            <option
-              v-for="stat in availableStatChecks.filter(s => s.type === 'attribute')"
-              :key="stat.key"
-              :value="stat.key"
-            >
-              {{ stat.label }}
-            </option>
-          </optgroup>
-        </select>
-      </label>
-      <div v-if="selectedStatDetail" class="alert info">
-        <strong>{{ selectedStatDetail.actionText }}</strong>
-        <p class="text-sm muted">{{ selectedStatDetail.rollSummary }}</p>
-      </div>
-    </template>
-
-    <!-- Custom action text -->
-    <template v-else>
-      <label>
-        Describe your action
-        <input
-          v-model="customActionText"
-          type="text"
-          placeholder="e.g. Pick the lock, distract the guard…"
-          :disabled="disabled"
-          required
-        />
-      </label>
-    </template>
+    <RulesetActionFields
+      v-model:action-mode="actionMode"
+      v-model:selected-action-key="selectedActionKey"
+      v-model:selected-stat-key="selectedStatKey"
+      :available-actions="availableActions"
+      :available-stat-checks="availableStatChecks"
+      :selected-action-detail="selectedActionDetail"
+      :selected-stat-detail="selectedStatDetail"
+      :disabled="disabled"
+    />
 
     <!-- Target picker — required for combat actions, optional for others -->
     <div v-if="isCombatActionSelected || (actionMode === 'action' && selectedActionKey)" class="action-form-target">

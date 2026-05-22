@@ -7,6 +7,57 @@ namespace NotesApi.Services;
 public static class CombatTurnAdvanceService
 {
     /// <summary>
+    /// Clears turn prompts and optionally advances initiative after an action is resolved or rejected.
+    /// Combat stat checks defer turn advance until the player's primary combat action is also finished.
+    /// </summary>
+    public static async Task CompleteResolvedActionAsync(
+        ApplicationDbContext db,
+        GameSession session,
+        ActionRequest action)
+    {
+        await ClearPromptForActorAsync(db, session, action);
+
+        if (await ShouldAdvanceTurnAfterActionAsync(db, action))
+        {
+            await TryAdvanceAfterActionAsync(db, session, action);
+        }
+    }
+
+    /// <summary>
+    /// Returns false when a combat stat check was resolved but the same actor still has a primary
+    /// combat action awaiting DM resolution in the same encounter.
+    /// </summary>
+    public static async Task<bool> ShouldAdvanceTurnAfterActionAsync(
+        ApplicationDbContext db,
+        ActionRequest action)
+    {
+        if (!action.SkillCheckBatchId.HasValue || !action.CombatEncounterId.HasValue)
+        {
+            return true;
+        }
+
+        var awaitingResolution = new[]
+        {
+            ActionStatus.Pending,
+            ActionStatus.DmReviewing,
+            ActionStatus.AwaitingRoll,
+            ActionStatus.RollReceived,
+            ActionStatus.AwaitingReaction,
+            ActionStatus.ReactionPending,
+            ActionStatus.Resolving,
+            ActionStatus.AwaitingFollowUpRoll,
+        };
+
+        return !await db.ActionRequests.AnyAsync(a =>
+            a.SessionId == action.SessionId
+            && a.Id != action.Id
+            && a.CombatEncounterId == action.CombatEncounterId
+            && a.ActorCharacterId == action.ActorCharacterId
+            && !a.SkillCheckBatchId.HasValue
+            && awaitingResolution.Contains(a.Status));
+    }
+
+    /// <summary>
     /// After an action is resolved or rejected, advance initiative if the actor's turn has concluded.
     /// </summary>
     public static async Task<bool> TryAdvanceAfterActionAsync(
@@ -53,6 +104,31 @@ public static class CombatTurnAdvanceService
             : null;
 
         return AdvanceTurn(entries, encounter);
+    }
+
+    /// <summary>
+    /// Clears an active turn prompt when the prompted character's action is resolved or rejected.
+    /// </summary>
+    public static async Task ClearPromptForActorAsync(
+        ApplicationDbContext db,
+        GameSession session,
+        ActionRequest action)
+    {
+        if (!action.ActorCharacterId.HasValue || !session.ActiveCombatEncounterId.HasValue)
+        {
+            return;
+        }
+
+        var encounter = await db.Set<CombatEncounter>().FindAsync(session.ActiveCombatEncounterId.Value);
+        if (encounter is null)
+        {
+            return;
+        }
+
+        if (encounter.PromptedTurnCharacterId == action.ActorCharacterId.Value)
+        {
+            encounter.PromptedTurnCharacterId = null;
+        }
     }
 
     /// <summary>

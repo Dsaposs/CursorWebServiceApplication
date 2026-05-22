@@ -24,166 +24,56 @@
       }
     },
     "attributes": [
-      {
-        "key": "strength",
-        "label": "Strength",
-        "default": 10,
-        "min": 3,
-        "max": 20
-      },
-      {
-        "key": "dexterity",
-        "label": "Dexterity",
-        "default": 10,
-        "min": 3,
-        "max": 20
-      },
-      {
-        "key": "constitution",
-        "label": "Constitution",
-        "default": 10,
-        "min": 3,
-        "max": 20
-      },
-      {
-        "key": "intelligence",
-        "label": "Intelligence",
-        "default": 10,
-        "min": 3,
-        "max": 20
-      },
-      {
-        "key": "wisdom",
-        "label": "Wisdom",
-        "default": 10,
-        "min": 3,
-        "max": 20
-      },
-      {
-        "key": "charisma",
-        "label": "Charisma",
-        "default": 10,
-        "min": 3,
-        "max": 20
-      }
+      { "key": "strength", "label": "Strength", "default": 10, "min": 3, "max": 20 },
+      { "key": "dexterity", "label": "Dexterity", "default": 10, "min": 3, "max": 20 },
+      { "key": "constitution", "label": "Constitution", "default": 10, "min": 3, "max": 20 },
+      { "key": "intelligence", "label": "Intelligence", "default": 10, "min": 3, "max": 20 },
+      { "key": "wisdom", "label": "Wisdom", "default": 10, "min": 3, "max": 20 },
+      { "key": "charisma", "label": "Charisma", "default": 10, "min": 3, "max": 20 }
     ],
     "gameValues": [
-      {
-        "key": "proficiencyBonus",
-        "label": "Proficiency Bonus",
-        "type": "number",
-        "default": 2,
-        "min": 2
-      },
-      {
-        "key": "level",
-        "label": "Level",
-        "type": "number",
-        "default": 1,
-        "min": 1
-      }
+      { "key": "proficiencyBonus", "label": "Proficiency Bonus", "type": "number", "default": 2, "min": 2 },
+      { "key": "level", "label": "Level", "type": "number", "default": 1, "min": 1 }
     ],
     "classes": [
       {
         "key": "fighter",
         "label": "Fighter",
         "description": "A master of martial combat, skilled with a variety of weapons and armor.",
-        "availableSkills": [
-          "athletics",
-          "acrobatics",
-          "perception"
-        ],
+        "availableSkills": ["athletics", "acrobatics", "perception"],
         "startingSkillPoints": 2,
         "maxSkillRank": 1,
-        "startingItemOptions": [
-          "longsword",
-          "shortsword"
-        ]
+        "startingItemOptions": ["longsword", "shortsword"]
       },
       {
         "key": "rogue",
         "label": "Rogue",
         "description": "A scoundrel who uses stealth and trickery to overcome obstacles and enemies.",
-        "availableSkills": [
-          "acrobatics",
-          "stealth",
-          "deception",
-          "perception"
-        ],
+        "availableSkills": ["acrobatics", "stealth", "deception", "perception"],
         "startingSkillPoints": 2,
         "maxSkillRank": 1,
-        "startingItemOptions": [
-          "shortsword",
-          "dagger",
-          "lightCrossbow"
-        ]
+        "startingItemOptions": ["shortsword", "dagger", "lightCrossbow"]
       },
       {
         "key": "wizard",
         "label": "Wizard",
         "description": "A scholarly magic-user capable of manipulating the structures of reality.",
-        "availableSkills": [
-          "arcana",
-          "investigation",
-          "insight"
-        ],
+        "availableSkills": ["arcana", "investigation", "insight"],
         "startingSkillPoints": 2,
         "maxSkillRank": 1,
-        "startingItemOptions": [
-          "arcaneFocus",
-          "dagger"
-        ]
+        "startingItemOptions": ["arcaneFocus", "dagger"],
+        "spellcastingAttribute": "intelligence"
       }
     ],
     "skills": [
-      {
-        "key": "athletics",
-        "label": "Athletics",
-        "attribute": "strength",
-        "default": 0
-      },
-      {
-        "key": "acrobatics",
-        "label": "Acrobatics",
-        "attribute": "dexterity",
-        "default": 0
-      },
-      {
-        "key": "stealth",
-        "label": "Stealth",
-        "attribute": "dexterity",
-        "default": 0
-      },
-      {
-        "key": "arcana",
-        "label": "Arcana",
-        "attribute": "intelligence",
-        "default": 0
-      },
-      {
-        "key": "investigation",
-        "label": "Investigation",
-        "attribute": "intelligence",
-        "default": 0
-      },
-      {
-        "key": "perception",
-        "label": "Perception",
-        "attribute": "wisdom",
-        "default": 0
-      },
-      {
-        "key": "insight",
-        "label": "Insight",
-        "attribute": "wisdom",
-        "default": 0
-      },
-      {
-        "key": "deception",
-        "label": "Deception",
-        "attribute": "charisma",
-        "default": 0
-      }
+      { "key": "athletics", "label": "Athletics", "attribute": "strength", "default": 0 },
+      { "key": "acrobatics", "label": "Acrobatics", "attribute": "dexterity", "default": 0 },
+      { "key": "stealth", "label": "Stealth", "attribute": "dexterity", "default": 0 },
+      { "key": "arcana", "label": "Arcana", "attribute": "intelligence", "default": 0 },
+      { "key": "investigation", "label": "Investigation", "attribute": "intelligence", "default": 0 },
+      { "key": "perception", "label": "Perception", "attribute": "wisdom", "default": 0 },
+      { "key": "insight", "label": "Insight", "attribute": "wisdom", "default": 0 },
+      { "key": "deception", "label": "Deception", "attribute": "charisma", "default": 0 }
     ]
   },
   "items": [
@@ -264,6 +154,25 @@
       }
     },
     {
+      "key": "greatsword",
+      "label": "Greatsword",
+      "description": "Heavy two-handed martial weapon.",
+      "category": "weapon",
+      "modifiers": [],
+      "attackRoll": {
+        "dice": "d20",
+        "attribute": "strength",
+        "skill": "athletics",
+        "modifiers": [],
+        "successRule": "Roll 1d20 + Strength modifier + proficiency vs target AC."
+      },
+      "damageRoll": {
+        "notation": "2d6",
+        "bonusAttribute": "strength",
+        "description": "Slashing damage on a hit."
+      }
+    },
+    {
       "key": "healingPotion",
       "label": "Potion of Healing",
       "description": "Magical red liquid that restores vitality.",
@@ -280,22 +189,19 @@
       "label": "Arcane Focus",
       "description": "Crystal orb used to channel arcane spells.",
       "category": "gear",
-      "modifiers": [
-        {
-          "source": "item",
-          "key": "arcaneFocus",
-          "attackBonus": 0
-        }
-      ]
+      "modifiers": [{ "source": "item", "key": "arcaneFocus", "attackBonus": 0 }]
     }
   ],
   "actions": [
     {
       "key": "longswordAttack",
       "label": "Longsword Attack",
-      "description": "Attack with a longsword.",
+      "description": "Melee weapon attack with a longsword.",
       "allowedClasses": [],
       "requiredItemKey": "longsword",
+      "attackType": "weaponAttack",
+      "requiresTarget": true,
+      "context": "combat",
       "roll": {
         "dice": "d20",
         "attribute": "strength",
@@ -303,14 +209,40 @@
         "modifiers": [],
         "successRule": "Roll 1d20 + Strength modifier + proficiency vs target AC. Meet or beat AC to hit."
       },
-      "context": "combat"
+      "rollChain": [
+        {
+          "step": "attack",
+          "label": "Longsword attack roll",
+          "checkMode": "Action",
+          "resultKind": "Total",
+          "guidanceText": "Roll 1d20 + Strength modifier + proficiency. Compare the total to the target's AC.",
+          "autoResolve": { "condition": "total >= target.armor", "fallback": "dm_input" },
+          "onSuccess": "damage",
+          "onFailure": "end"
+        },
+        {
+          "step": "damage",
+          "label": "Longsword damage",
+          "checkMode": "Custom",
+          "resultKind": "Total",
+          "diceSource": "equippedWeapon",
+          "guidanceText": "You hit! Roll longsword damage.",
+          "applyEffects": [
+            { "target": "action.target", "stat": "health", "operation": "subtract", "value": "roll.total", "minResult": 0 }
+          ],
+          "onComplete": "end"
+        }
+      ]
     },
     {
       "key": "crossbowAttack",
       "label": "Light Crossbow Attack",
-      "description": "Fire the light crossbow at a target.",
+      "description": "Ranged weapon attack with a light crossbow.",
       "allowedClasses": [],
       "requiredItemKey": "lightCrossbow",
+      "attackType": "weaponAttack",
+      "requiresTarget": true,
+      "context": "combat",
       "roll": {
         "dice": "d20",
         "attribute": "dexterity",
@@ -318,7 +250,30 @@
         "modifiers": [],
         "successRule": "Roll 1d20 + Dexterity modifier + proficiency vs target AC."
       },
-      "context": "combat"
+      "rollChain": [
+        {
+          "step": "attack",
+          "label": "Crossbow attack roll",
+          "checkMode": "Action",
+          "resultKind": "Total",
+          "guidanceText": "Roll 1d20 + Dexterity modifier + proficiency vs the target's AC.",
+          "autoResolve": { "condition": "total >= target.armor", "fallback": "dm_input" },
+          "onSuccess": "damage",
+          "onFailure": "end"
+        },
+        {
+          "step": "damage",
+          "label": "Crossbow damage",
+          "checkMode": "Custom",
+          "resultKind": "Total",
+          "diceSource": "equippedWeapon",
+          "guidanceText": "You hit! Roll crossbow damage.",
+          "applyEffects": [
+            { "target": "action.target", "stat": "health", "operation": "subtract", "value": "roll.total", "minResult": 0 }
+          ],
+          "onComplete": "end"
+        }
+      ]
     },
     {
       "key": "drinkHealingPotion",
@@ -326,118 +281,175 @@
       "description": "Consume a potion of healing.",
       "allowedClasses": [],
       "requiredItemKey": "healingPotion",
+      "requiresTarget": false,
+      "context": "exploration",
       "roll": {
         "dice": "d20",
         "attribute": "constitution",
         "skill": "athletics",
         "modifiers": [],
         "successRule": "Restore 2d4 + 2 hit points."
-      },
-      "context": "exploration"
+      }
     },
     {
       "key": "greatWeaponAttack",
       "label": "Great Weapon Attack",
       "description": "Swing a heavy melee weapon with devastating force.",
-      "allowedClasses": [
-        "fighter"
-      ],
+      "allowedClasses": ["fighter"],
+      "attackType": "weaponAttack",
+      "requiresTarget": true,
+      "context": "combat",
       "roll": {
         "dice": "d20",
         "attribute": "strength",
         "skill": "athletics",
         "modifiers": [],
-        "successRule": "Roll 1d20 + Strength modifier + proficiency vs target AC. Meet or beat AC to hit; add weapon damage on a hit."
+        "successRule": "Roll 1d20 + Strength modifier + proficiency vs target AC."
       },
-      "context": "combat"
+      "damageRoll": {
+        "notation": "2d6",
+        "bonusAttribute": "strength",
+        "description": "Slashing damage on a hit."
+      },
+      "rollChain": [
+        {
+          "step": "attack",
+          "label": "Great weapon attack roll",
+          "checkMode": "Action",
+          "resultKind": "Total",
+          "guidanceText": "Roll 1d20 + Strength modifier + proficiency vs the target's AC.",
+          "autoResolve": { "condition": "total >= target.armor", "fallback": "dm_input" },
+          "onSuccess": "damage",
+          "onFailure": "end"
+        },
+        {
+          "step": "damage",
+          "label": "Great weapon damage",
+          "checkMode": "Custom",
+          "resultKind": "Total",
+          "diceSource": "actionDamage",
+          "guidanceText": "You hit! Roll great weapon damage.",
+          "applyEffects": [
+            { "target": "action.target", "stat": "health", "operation": "subtract", "value": "roll.total", "minResult": 0 }
+          ],
+          "onComplete": "end"
+        }
+      ]
     },
     {
       "key": "secondWind",
       "label": "Second Wind",
       "description": "Regain stamina in the heat of battle.",
-      "allowedClasses": [
-        "fighter"
-      ],
+      "allowedClasses": ["fighter"],
+      "requiresTarget": false,
+      "context": "combat",
       "roll": {
         "dice": "d20",
         "attribute": "constitution",
         "skill": "athletics",
         "modifiers": [],
         "successRule": "Recover 1d10 + fighter level hit points. Usable once per short rest."
-      },
-      "context": "combat"
+      }
     },
     {
       "key": "actionSurge",
       "label": "Action Surge",
       "description": "Push beyond your limits to act again immediately.",
-      "allowedClasses": [
-        "fighter"
-      ],
+      "allowedClasses": ["fighter"],
+      "requiresTarget": false,
+      "context": "combat",
       "roll": {
         "dice": "d20",
         "attribute": "strength",
         "skill": "athletics",
         "modifiers": [],
         "successRule": "Take one additional action on your turn. Usable once per short rest."
-      },
-      "context": "combat"
+      }
     },
     {
       "key": "sneakAttack",
       "label": "Sneak Attack",
       "description": "Strike when the enemy is distracted or you have advantage.",
-      "allowedClasses": [
-        "rogue"
-      ],
+      "allowedClasses": ["rogue"],
+      "attackType": "weaponAttack",
+      "requiresTarget": true,
+      "context": "combat",
       "roll": {
         "dice": "d20",
         "attribute": "dexterity",
         "skill": "stealth",
         "modifiers": [],
-        "successRule": "On a hit with a finesse or ranged weapon, add extra damage (1d6 at level 1). Requires advantage or an ally adjacent to the target."
+        "successRule": "Roll 1d20 + Dexterity modifier + proficiency vs target AC. On a hit with a finesse or ranged weapon, add 1d6 extra damage."
       },
-      "context": "combat"
+      "damageRoll": {
+        "notation": "1d6",
+        "bonusAttribute": "dexterity",
+        "description": "Sneak attack damage on a hit (in addition to weapon damage)."
+      },
+      "rollChain": [
+        {
+          "step": "attack",
+          "label": "Sneak attack roll",
+          "checkMode": "Action",
+          "resultKind": "Total",
+          "guidanceText": "Roll 1d20 + Dexterity modifier + proficiency vs the target's AC.",
+          "autoResolve": { "condition": "total >= target.armor", "fallback": "dm_input" },
+          "onSuccess": "damage",
+          "onFailure": "end"
+        },
+        {
+          "step": "damage",
+          "label": "Weapon + sneak attack damage",
+          "checkMode": "Custom",
+          "resultKind": "Total",
+          "diceSource": "equippedWeapon",
+          "guidanceText": "You hit! Roll weapon damage, then add sneak attack dice.",
+          "applyEffects": [
+            { "target": "action.target", "stat": "health", "operation": "subtract", "value": "roll.total", "minResult": 0 }
+          ],
+          "onComplete": "end"
+        }
+      ]
     },
     {
       "key": "cunningAction",
       "label": "Cunning Action",
       "description": "Dash, Disengage, or Hide as a bonus action.",
-      "allowedClasses": [
-        "rogue"
-      ],
+      "allowedClasses": ["rogue"],
+      "requiresTarget": false,
+      "context": "combat",
       "roll": {
         "dice": "d20",
         "attribute": "dexterity",
         "skill": "acrobatics",
         "modifiers": [],
         "successRule": "Use Dash, Disengage, or Hide as a bonus action on your turn."
-      },
-      "context": "combat"
+      }
     },
     {
       "key": "thievesTools",
       "label": "Thieves' Tools",
       "description": "Pick a lock or disarm a trap with practiced hands.",
-      "allowedClasses": [
-        "rogue"
-      ],
+      "allowedClasses": ["rogue"],
+      "requiresTarget": false,
+      "context": "exploration",
       "roll": {
         "dice": "d20",
         "attribute": "dexterity",
         "skill": "investigation",
         "modifiers": [],
-        "successRule": "Roll 1d20 + Dexterity modifier + proficiency vs DC set by the DM. Success opens the lock or disables the trap."
-      },
-      "context": "exploration"
+        "successRule": "Roll 1d20 + Dexterity modifier + proficiency vs DC set by the DM."
+      }
     },
     {
       "key": "fireBolt",
       "label": "Fire Bolt",
       "description": "Hurl a mote of fire at a creature in range.",
-      "allowedClasses": [
-        "wizard"
-      ],
+      "allowedClasses": ["wizard"],
+      "attackType": "spellAttack",
+      "spellcastingAttribute": "intelligence",
+      "requiresTarget": true,
+      "context": "combat",
       "roll": {
         "dice": "d20",
         "attribute": "intelligence",
@@ -445,15 +457,44 @@
         "modifiers": [],
         "successRule": "Ranged spell attack: roll 1d20 + Intelligence modifier + proficiency vs target AC. On a hit, deal 1d10 fire damage."
       },
-      "context": "combat"
+      "damageRoll": {
+        "notation": "1d10",
+        "description": "Fire damage on a hit."
+      },
+      "rollChain": [
+        {
+          "step": "attack",
+          "label": "Fire Bolt attack roll",
+          "checkMode": "Action",
+          "resultKind": "Total",
+          "guidanceText": "Roll 1d20 + Intelligence modifier + proficiency (spell attack) vs the target's AC.",
+          "autoResolve": { "condition": "total >= target.armor", "fallback": "dm_input" },
+          "onSuccess": "damage",
+          "onFailure": "end"
+        },
+        {
+          "step": "damage",
+          "label": "Fire Bolt damage",
+          "checkMode": "Custom",
+          "resultKind": "Total",
+          "diceSource": "actionDamage",
+          "guidanceText": "The spell hits! Roll fire damage.",
+          "applyEffects": [
+            { "target": "action.target", "stat": "health", "operation": "subtract", "value": "roll.total", "minResult": 0 }
+          ],
+          "onComplete": "end"
+        }
+      ]
     },
     {
       "key": "magicMissile",
       "label": "Magic Missile",
       "description": "Create three glowing darts of magical force that unerringly strike your target.",
-      "allowedClasses": [
-        "wizard"
-      ],
+      "allowedClasses": ["wizard"],
+      "attackType": "autoHit",
+      "spellcastingAttribute": "intelligence",
+      "requiresTarget": true,
+      "context": "combat",
       "roll": {
         "dice": "d20",
         "attribute": "intelligence",
@@ -461,26 +502,190 @@
         "modifiers": [],
         "successRule": "Automatically hits. Three darts each deal 1d4 + 1 force damage (no attack roll required)."
       },
-      "context": "combat"
+      "damageRoll": {
+        "notation": "3d4",
+        "flatBonus": 3,
+        "description": "Force damage (three darts)."
+      },
+      "rollChain": [
+        {
+          "step": "damage",
+          "label": "Magic Missile damage",
+          "checkMode": "Custom",
+          "resultKind": "Total",
+          "diceSource": "actionDamage",
+          "guidanceText": "Magic Missile automatically hits. Roll damage for all three darts.",
+          "applyEffects": [
+            { "target": "action.target", "stat": "health", "operation": "subtract", "value": "roll.total", "minResult": 0 }
+          ],
+          "onComplete": "end"
+        }
+      ]
     },
     {
       "key": "burningHands",
       "label": "Burning Hands",
       "description": "Sweep flames from your fingertips in a 15-foot cone.",
-      "allowedClasses": [
-        "wizard"
-      ],
+      "allowedClasses": ["wizard"],
+      "attackType": "spellSave",
+      "spellcastingAttribute": "intelligence",
+      "requiresTarget": true,
+      "context": "combat",
       "roll": {
         "dice": "d20",
         "attribute": "intelligence",
         "skill": "arcana",
         "modifiers": [],
-        "successRule": "Creatures in the cone make a Dexterity saving throw vs your spell save DC. On a failed save, take 3d6 fire damage; half on a success."
+        "successRule": "Creatures in the cone make a Dexterity saving throw vs your spell save DC (8 + proficiency + Intelligence modifier). On a failed save, take 3d6 fire damage; half on a success."
       },
-      "context": "combat"
+      "damageRoll": {
+        "notation": "3d6",
+        "description": "Fire damage on a failed Dexterity save."
+      },
+      "rollChain": [
+        {
+          "step": "damage",
+          "label": "Burning Hands damage",
+          "checkMode": "Custom",
+          "resultKind": "Total",
+          "diceSource": "actionDamage",
+          "guidanceText": "After resolving saves against your spell save DC, roll fire damage for creatures that failed.",
+          "applyEffects": [
+            { "target": "action.target", "stat": "health", "operation": "subtract", "value": "roll.total", "minResult": 0 }
+          ],
+          "onComplete": "end"
+        }
+      ]
     }
   ],
-  "npcTemplates": [],
+  "npcTemplates": [
+    {
+      "key": "goblin",
+      "label": "Goblin",
+      "kind": "Monster",
+      "description": "Small, sneaky humanoid raider.",
+      "maxHealth": 7,
+      "health": 7,
+      "armor": 15,
+      "defaultStats": {
+        "attributes": {
+          "strength": 8,
+          "dexterity": 14,
+          "constitution": 10,
+          "intelligence": 10,
+          "wisdom": 8,
+          "charisma": 8
+        },
+        "skills": { "stealth": 1, "acrobatics": 1 },
+        "gameValues": { "proficiencyBonus": 2, "level": 1 }
+      }
+    },
+    {
+      "key": "hobgoblin",
+      "label": "Hobgoblin",
+      "kind": "Monster",
+      "description": "Disciplined martial humanoid soldier.",
+      "maxHealth": 11,
+      "health": 11,
+      "armor": 18,
+      "defaultStats": {
+        "attributes": {
+          "strength": 13,
+          "dexterity": 12,
+          "constitution": 12,
+          "intelligence": 10,
+          "wisdom": 10,
+          "charisma": 9
+        },
+        "skills": { "athletics": 1, "perception": 1 },
+        "gameValues": { "proficiencyBonus": 2, "level": 1 }
+      }
+    },
+    {
+      "key": "skeleton",
+      "label": "Skeleton",
+      "kind": "Monster",
+      "description": "Animated bones compelled to fight.",
+      "maxHealth": 13,
+      "health": 13,
+      "armor": 13,
+      "defaultStats": {
+        "attributes": {
+          "strength": 10,
+          "dexterity": 14,
+          "constitution": 15,
+          "intelligence": 6,
+          "wisdom": 8,
+          "charisma": 5
+        },
+        "skills": {},
+        "gameValues": { "proficiencyBonus": 2, "level": 1 }
+      }
+    },
+    {
+      "key": "wolf",
+      "label": "Wolf",
+      "kind": "Monster",
+      "description": "Pack hunter with keen senses.",
+      "maxHealth": 11,
+      "health": 11,
+      "armor": 13,
+      "defaultStats": {
+        "attributes": {
+          "strength": 12,
+          "dexterity": 15,
+          "constitution": 12,
+          "intelligence": 3,
+          "wisdom": 12,
+          "charisma": 6
+        },
+        "skills": { "perception": 1, "stealth": 1 },
+        "gameValues": { "proficiencyBonus": 2, "level": 1 }
+      }
+    },
+    {
+      "key": "cultist",
+      "label": "Cultist",
+      "kind": "NPC",
+      "description": "Fanatical devotee with basic weapon training.",
+      "maxHealth": 9,
+      "health": 9,
+      "armor": 12,
+      "defaultStats": {
+        "attributes": {
+          "strength": 11,
+          "dexterity": 10,
+          "constitution": 10,
+          "intelligence": 10,
+          "wisdom": 11,
+          "charisma": 10
+        },
+        "skills": { "deception": 1, "insight": 1 },
+        "gameValues": { "proficiencyBonus": 2, "level": 1 }
+      }
+    },
+    {
+      "key": "mageApprentice",
+      "label": "Mage Apprentice",
+      "kind": "NPC",
+      "description": "Novice spellcaster who knows a handful of cantrips.",
+      "maxHealth": 8,
+      "health": 8,
+      "armor": 11,
+      "defaultStats": {
+        "attributes": {
+          "strength": 8,
+          "dexterity": 12,
+          "constitution": 10,
+          "intelligence": 14,
+          "wisdom": 10,
+          "charisma": 11
+        },
+        "skills": { "arcana": 1, "investigation": 1 },
+        "gameValues": { "proficiencyBonus": 2, "level": 1 }
+      }
+    }
+  ],
   "rollMechanics": {
     "skillCheck": {
       "diceKey": "d20",

@@ -195,6 +195,10 @@ public class CreateRollPromptRequest
     /// </summary>
     [Range(1, 100)]
     public int? Dc { get; set; }
+
+    /// <summary>When set, builds the prompt from the matching rollChain step on the action.</summary>
+    [MaxLength(80)]
+    public string? ChainStepKey { get; set; }
 }
 
 public class CreateRollPromptsRequest
@@ -284,6 +288,10 @@ public class DmRollRequest
     /// </summary>
     [Range(1, 100)]
     public int? Dc { get; set; }
+
+    /// <summary>Roll chain step this DM roll satisfies (required when the action has a roll chain).</summary>
+    [MaxLength(80)]
+    public string? ChainStepKey { get; set; }
 }
 
 public class SetSessionDiceModeRequest

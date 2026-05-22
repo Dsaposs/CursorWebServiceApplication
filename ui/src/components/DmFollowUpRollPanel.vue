@@ -6,7 +6,7 @@ import {
   actionRollFlowLabel,
   formatRollFlowHint,
   getActionRollFlowStatus,
-  rollPromptsForAction,
+  relatedRollPromptsForAction,
 } from '~/utils/actionRolls';
 import { parseCharacterStats } from '~/utils/dice';
 import { normalizeRollResultKind, rollPromptCheckLabel, rollPromptResultKindLabel } from '~/utils/rollPrompt';
@@ -34,7 +34,7 @@ const emit = defineEmits<{
 }>();
 
 const actionPrompts = computed(() =>
-  rollPromptsForAction(props.action.id, props.rollPrompts),
+  relatedRollPromptsForAction(props.action, props.rollPrompts, props.rulesetDefinition),
 );
 
 const rollFlowStatus = computed(() =>
@@ -61,23 +61,21 @@ const hasRollChain = computed(() => {
   return Boolean(actionDef?.rollChain?.length);
 });
 
-const hasPendingPrompt = computed(() =>
-  actionPrompts.value.some(p => p.status === 'Pending'),
-);
-
 const statCheckRollRequest = computed(() =>
   parseStatCheckFromAction(props.action, props.rulesetDefinition),
 );
 
 const canRequestActorRoll = computed(() =>
-  Boolean(actorCharacter.value)
+  rollFlowStatus.value === 'awaiting-dm-request'
+  && Boolean(actorCharacter.value)
   && (props.action.actionKey || statCheckRollRequest.value)
-  && !hasPendingPrompt.value
   && !hasRollChain.value,
 );
 
 const showStartChain = computed(() =>
-  hasRollChain.value && !hasPendingPrompt.value && Boolean(actorCharacter.value),
+  hasRollChain.value
+  && rollFlowStatus.value === 'awaiting-dm-request'
+  && Boolean(actorCharacter.value),
 );
 
 /** Parsed stats for the actor character — used to build the dice roll context. */
@@ -195,7 +193,7 @@ function promptSummary(prompt: RollPromptResponse) {
     </div>
 
     <!-- DC row — shown whenever the DM can send a roll or roll directly -->
-    <div v-if="(showStartChain || canRequestActorRoll) && !hasPendingPrompt" class="dm-action-roll-dc-row">
+    <div v-if="showStartChain || canRequestActorRoll" class="dm-action-roll-dc-row">
       <label class="text-sm" for="dm-roll-dc">DC (optional)</label>
       <input
         id="dm-roll-dc"

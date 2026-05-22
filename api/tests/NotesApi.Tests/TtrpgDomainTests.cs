@@ -70,6 +70,34 @@ public class TtrpgDomainTests
     }
 
     [Fact]
+    public void RulesetValidator_AcceptsBundledDnd5eDefinition()
+    {
+        var definitionPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..", "..",
+            "api", "src", "NotesApi", "Rulesets", "Definitions", "dnd-5e.v1.json"));
+        Assert.True(File.Exists(definitionPath), $"Expected bundled ruleset at {definitionPath}");
+
+        var json = File.ReadAllText(definitionPath);
+        var validator = new RulesetDefinitionValidator();
+        var result = validator.Validate(json);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors));
+        Assert.Equal("dnd-5e", result.Definition?.Code);
+
+        var fireBolt = result.Definition!.Actions.Single(action => action.Key == "fireBolt");
+        Assert.Equal("spellAttack", fireBolt.AttackType);
+        Assert.True(fireBolt.RequiresTarget);
+        Assert.Equal(2, fireBolt.RollChain.Count());
+
+        var wizard = result.Definition.Character.Classes.Single(c => c.Key == "wizard");
+        Assert.Equal("intelligence", wizard.SpellcastingAttribute);
+
+        Assert.Equal(6, result.Definition.NpcTemplates.Count());
+        Assert.Contains(result.Definition.NpcTemplates, template => template.Key == "goblin" && template.Armor == 15);
+    }
+
+    [Fact]
     public async Task RulesetsImport_UpsertsByCode()
     {
         await using var db = CreateDbContext();

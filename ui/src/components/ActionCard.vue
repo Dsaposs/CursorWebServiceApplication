@@ -6,6 +6,7 @@ import {
   formatFollowUpRollLabel,
   splitActionDescription,
 } from '~/utils/actionLog';
+import { evaluatePublishedActionOutcome } from '~/utils/actionOutcome';
 
 interface Props {
   action: ActionQueueItemResponse;
@@ -47,10 +48,12 @@ const submittedLabel = computed(() => formatActionTimestamp(props.action.submitt
 const publishedLabel = computed(() => formatActionTimestamp(props.action.publishedAt));
 
 const outcomeBadge = computed(() => {
-  if (isPublished.value && props.action.outcome === 'Pass') {
+  const outcome = props.action.outcome
+    ?? evaluatePublishedActionOutcome(props.rulesetDefinition ?? null, props.action, props.game);
+  if (isPublished.value && outcome === 'Pass') {
     return { label: 'Pass', className: 'pass' };
   }
-  if (isPublished.value && props.action.outcome === 'Fail') {
+  if (isPublished.value && outcome === 'Fail') {
     return { label: 'Fail', className: 'fail' };
   }
   if (isRejected.value) {

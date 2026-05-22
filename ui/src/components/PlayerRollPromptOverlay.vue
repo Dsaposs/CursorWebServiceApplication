@@ -30,6 +30,20 @@ const emit = defineEmits<{
 const rollResult = ref('');
 const pushRoll = ref(false);
 const hasPushed = ref(false);
+const hasSubmittedLocally = ref(false);
+
+const isPromptPending = computed(() => props.prompt.status === 'Pending');
+
+/** Roll controls lock after submit or when the prompt is no longer pending. */
+const isRollLocked = computed(() =>
+  props.isSubmitting
+  || hasSubmittedLocally.value
+  || !isPromptPending.value,
+);
+
+const canSubmitRoll = computed(() =>
+  !isRollLocked.value && Boolean(rollResult.value.trim()),
+);
 
 /** Push the Roll is available only for d6-pool rulesets, after a previous failure, once per roll. */
 const showPushOption = computed(() =>
@@ -61,7 +75,7 @@ const queueHint = computed(() => {
 });
 
 function submitRoll() {
-  if (!rollResult.value.trim() || !rollContext.value) return;
+  if (!rollResult.value.trim() || !rollContext.value || isRollLocked.value) return;
   const summary = rollResult.value.trim();
   const rollResultJson = buildRollResultJson(
     summary,
@@ -70,6 +84,7 @@ function submitRoll() {
     { pushed: pushRoll.value, stressGained: pushRoll.value ? 1 : 0 },
   );
   if (pushRoll.value) hasPushed.value = true;
+  hasSubmittedLocally.value = true;
   emit('submit', {
     rollSummary: summary,
     rollResultJson,
@@ -83,6 +98,16 @@ watch(
     rollResult.value = '';
     pushRoll.value = false;
     hasPushed.value = false;
+    hasSubmittedLocally.value = false;
+  },
+);
+
+watch(
+  () => props.prompt.status,
+  (status) => {
+    if (status !== 'Pending') {
+      hasSubmittedLocally.value = true;
+    }
   },
 );
 </script>
@@ -114,24 +139,31 @@ watch(
           </label>
         </div>
 
-        <RulesetDiceRoller
-          v-if="rollContext"
-          v-model="rollResult"
-          :context="rollContext"
-        />
+        <fieldset class="roll-prompt-fieldset" :disabled="isRollLocked">
+          <RulesetDiceRoller
+            v-if="rollContext"
+            v-model="rollResult"
+            :context="rollContext"
+          />
 
-        <div v-else class="alert info">
-          <p class="text-sm">Could not load dice roller for this check. Describe your roll result below.</p>
-          <label>
-            Roll result
-            <input v-model.trim="rollResult" placeholder="Enter your roll result…" />
-          </label>
-        </div>
+          <div v-else class="alert info">
+            <p class="text-sm">Could not load dice roller for this check. Describe your roll result below.</p>
+            <label>
+              Roll result
+              <input v-model.trim="rollResult" placeholder="Enter your roll result…" />
+            </label>
+          </div>
+        </fieldset>
+
+        <p v-if="isRollLocked && !isSubmitting && hasSubmittedLocally" class="text-sm muted" style="margin: 0.75rem 0 0;">
+          Roll submitted — waiting for the next step.
+        </p>
 
         <button
           type="button"
           class="btn roll-prompt-submit"
-          :disabled="isSubmitting || !rollResult.trim()"
+          :class="{ success: canSubmitRoll }"
+          :disabled="!canSubmitRoll"
           @click="submitRoll"
         >
           {{ isSubmitting ? 'Submitting…' : 'Submit roll to DM' }}
@@ -165,25 +197,32 @@ watch(
       </label>
     </div>
 
-    <RulesetDiceRoller
-      v-if="rollContext"
-      v-model="rollResult"
-      :context="rollContext"
-    />
+    <fieldset class="roll-prompt-fieldset" :disabled="isRollLocked">
+      <RulesetDiceRoller
+        v-if="rollContext"
+        v-model="rollResult"
+        :context="rollContext"
+      />
 
-    <div v-else class="alert info">
-      <p class="text-sm">Could not load dice roller for this check. Describe your roll result below.</p>
-      <label>
-        Roll result
-        <input v-model.trim="rollResult" placeholder="Enter your roll result…" />
-      </label>
-    </div>
+      <div v-else class="alert info">
+        <p class="text-sm">Could not load dice roller for this check. Describe your roll result below.</p>
+        <label>
+          Roll result
+          <input v-model.trim="rollResult" placeholder="Enter your roll result…" />
+        </label>
+      </div>
+    </fieldset>
+
+    <p v-if="isRollLocked && !isSubmitting && hasSubmittedLocally" class="text-sm muted" style="margin: 0.75rem 0 0;">
+      Roll submitted — waiting for the next step.
+    </p>
 
     <button
       type="button"
       class="btn roll-prompt-submit"
+      :class="{ success: canSubmitRoll }"
       style="margin-top: 0.5rem;"
-      :disabled="isSubmitting || !rollResult.trim()"
+      :disabled="!canSubmitRoll"
       @click="submitRoll"
     >
       {{ isSubmitting ? 'Submitting…' : 'Submit roll to DM' }}

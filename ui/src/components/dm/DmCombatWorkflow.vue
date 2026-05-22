@@ -28,17 +28,8 @@ const emit = defineEmits<{
   moveKeyboard: [entryId: string, offset: -1 | 1];
   activateEntry: [entry: InitiativeEntryResponse];
   promptTurn: [entry: InitiativeEntryResponse];
-  skipTurnDm: [];
 }>();
 
-/** True when the current turn belongs to an NPC that the DM must resolve. */
-const isNpcTurn = computed(() =>
-  props.currentTurn?.combatantType === 'NpcOrMonster',
-);
-
-/** DM skip turn is available whenever it is an NPC's turn (DM controls NPC).
- *  For player turns the player uses the Skip Turn button on their screen. */
-const canDmSkip = computed(() => isNpcTurn.value);
 
 function entryButtonLabel(entry: InitiativeEntryResponse): string {
   if (entry.id === props.expandedEntryId) return 'Close';
@@ -49,13 +40,14 @@ function entryButtonLabel(entry: InitiativeEntryResponse): string {
 }
 
 function handleEntryButton(entry: InitiativeEntryResponse) {
-  if (entry.combatantType === 'Character' && entry.id !== props.expandedEntryId && props.promptedTurnCharacterId !== entry.combatantId) {
-    // Prompt the player and expand the resolution panel in one click.
+  const shouldPromptPlayer = entry.combatantType === 'Character'
+    && props.promptedTurnCharacterId !== entry.combatantId;
+
+  if (shouldPromptPlayer) {
     emit('promptTurn', entry);
-  } else {
-    // NPC entry, or toggling an already-expanded / already-prompted character panel.
-    emit('activateEntry', entry);
   }
+
+  emit('activateEntry', entry);
 }
 </script>
 
@@ -70,10 +62,18 @@ function handleEntryButton(entry: InitiativeEntryResponse) {
             : 'Rolls initiative for all characters and NPCs per the ruleset.' }}
         </p>
       </div>
-      <div class="btn-row" style="align-items: center; gap: 0.5rem;">
+      <button
+        v-if="!isCombat"
+        class="btn"
+        type="button"
+        :disabled="isSaving"
+        @click="emit('setupCombat')"
+      >
+        {{ isSaving ? 'Starting…' : 'Start combat' }}
+      </button>
+      <div v-if="isCombat" class="btn-row" style="align-items: center; gap: 0.5rem;">
         <!-- Round badge -->
         <span
-          v-if="isCombat"
           class="badge"
           style="font-weight: 600; font-size: 0.8rem;"
         >
@@ -81,33 +81,13 @@ function handleEntryButton(entry: InitiativeEntryResponse) {
         </span>
 
         <button
-          v-if="isCombat && canDmSkip"
-          class="btn ghost sm"
-          type="button"
-          :disabled="isSaving"
-          @click="emit('skipTurnDm')"
-        >
-          Skip Turn
-        </button>
-
-        <button
-          v-if="isCombat && displayedInitiative.length"
+          v-if="displayedInitiative.length"
           class="btn ghost sm"
           type="button"
           :disabled="isSaving"
           @click="emit('advanceTurn')"
         >
           Next Turn →
-        </button>
-
-        <button
-          v-if="!isCombat"
-          class="btn ghost sm"
-          type="button"
-          :disabled="isSaving"
-          @click="emit('setupCombat')"
-        >
-          {{ isSaving ? 'Starting…' : 'Start combat' }}
         </button>
       </div>
     </div>

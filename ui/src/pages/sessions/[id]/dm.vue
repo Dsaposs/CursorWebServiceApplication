@@ -14,7 +14,7 @@ import SessionConnectionStatus from '~/components/SessionConnectionStatus.vue';
 import SkeletonBlock from '~/components/SkeletonBlock.vue';
 import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
 import type { ActionQueueItemResponse, GameResponse, InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
-import { evaluateActionOutcome } from '~/utils/actionOutcome';
+import { evaluateActionOutcome, resolveTargetArmor } from '~/utils/actionOutcome';
 import {
   actionRollFlowBadgeClass,
   actionRollFlowLabel,
@@ -28,15 +28,15 @@ import {
   buildDiceRollContext,
   describeRulesetAction,
   findRulesetAction,
+  isCombatAction,
+  actionRequiresTarget,
   parseActorClassKey,
   parseRulesetDefinition,
-  availableSkillsForClass,
   type DiceRollMode,
 } from '~/utils/rulesets';
 import { useRulesetTheme } from '~/composables/useRulesetTheme';
 import { useThemePreference } from '~/composables/useThemePreference';
 import { isStatCheckAction } from '~/utils/statCheckAction';
-import { toApiCheckMode } from '~/utils/rollPrompt';
 
 const route = useRoute();
 const { api, token, loadSession, clearSession } = useApi();
@@ -62,6 +62,7 @@ const rejectReason = ref<Record<string, string>>({});
 // NPC action form
 const selectedNpcId = ref('');
 const npcActionTargetPickerRef = ref<{ isValid: () => boolean; reset: () => void; toSubmitFields: () => { targetCharacterId?: string; targetNpcId?: string; targetName?: string } } | null>(null);
+const npcTargetPickerRevision = ref(0);
 const npcRollResult = ref('');
 const npcDamageRollResult = ref('');
 const showNpcActionForm = ref(false);
@@ -151,9 +152,6 @@ const currentNpcPendingAction = computed(() => {
 
 const npcTurnActionQueued = computed(() => Boolean(currentNpcPendingAction.value));
 
-// Track whether the target picker has a valid target (gates dice rollers)
-const npcHasTarget = ref(false);
-
 // Inline NPC action-resolution form refs (combat only — create + resolve in a single submit)
 const npcInlineResolutionText = ref('');
 const npcInlineStatTarget = ref<string | undefined>(undefined);
@@ -186,14 +184,19 @@ const {
   selectedStatKey: selectedNpcStatKey,
   selectedStatType: selectedNpcStatType,
   selectedStatRawKey: selectedNpcStatRawKey,
-  customActionText: npcAction,
   availableActions: availableNpcActions,
   availableStatChecks: availableNpcStatChecks,
   selectedActionDetail: selectedNpcActionDetail,
   selectedStatDetail: selectedNpcStatDetail,
   resetSelection: resetNpcActionSelection,
   buildSubmitPayload: buildNpcActionSubmitPayload,
-} = useRulesetActionChooser(rulesetDefinition, selectedNpcClassKey, selectedNpcInventory, isNpcActionActorSelected);
+} = useRulesetActionChooser(
+  rulesetDefinition,
+  selectedNpcClassKey,
+  selectedNpcInventory,
+  isNpcActionActorSelected,
+  { allowAllActionsFallback: true },
+);
 const {
   displayedInitiative,
   draggedEntry,
@@ -317,6 +320,14 @@ function buildNpcInlineStatChanges() {
 /** Create the NPC action and immediately resolve it — used by the inline combat form. */
 async function submitAndResolveNpcAction() {
   if (!state.value || !selectedNpcId.value) return;
+  if (!canResolveNpcInlineAction.value) {
+    if (!buildNpcActionSubmitPayload()) toastError('Choose or describe an NPC action first.');
+    else if (npcTargetMissing.value) toastError('Select a target for this combat action.');
+    else if (npcActionNeedsRoll.value && !npcHasPrimaryRoll.value) toastError('Roll the NPC action before resolving.');
+    else if (npcNeedsFollowUpRoll.value && !npcHasFollowUpRoll.value) toastError('Roll damage before resolving this hit.');
+    else if (!npcActionTargetPickerRef.value?.isValid()) toastError('Enter a target name for Other.');
+    return;
+  }
   const payload = buildNpcActionSubmitPayload();
   if (!payload) { toastError('Choose or describe an NPC action first.'); return; }
   if (!npcActionTargetPickerRef.value?.isValid()) { toastError('Enter a target name for Other.'); return; }
@@ -348,7 +359,6 @@ async function submitAndResolveNpcAction() {
     });
     resetNpcActionSelection();
     npcActionTargetPickerRef.value?.reset();
-    npcHasTarget.value = false;
     npcRollResult.value = '';
     npcDamageRollResult.value = '';
     resetNpcInlineFields();
@@ -371,6 +381,7 @@ async function sendSessionRollPrompts(payload: {
     targetCharacterId: string;
     checkMode: string;
     skillKey?: string;
+    attributeKey?: string;
     promptLabel?: string;
     resultKind: string;
   }>;
@@ -380,7 +391,7 @@ async function sendSessionRollPrompts(payload: {
   try {
     await api(`/api/sessions/${state.value.id}/roll-prompts`, { method: 'POST', body: payload });
     await refresh();
-    toastSuccess('Skill check sent to player(s).');
+    toastSuccess('Stat check sent to player(s).');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
@@ -433,8 +444,10 @@ async function sendRollPrompts(
       attributeKey?: string;
       customCheckText?: string;
       promptLabel?: string;
+      guidanceText?: string;
       resultKind: string;
       dc?: number | null;
+      chainStepKey?: string;
     }>;
   },
 ) {
@@ -450,12 +463,23 @@ async function sendRollPrompts(
   }
 }
 
-async function dmRollForPlayer(payload: { actionId: string; rollSummary: string; dc?: number | null }) {
+async function dmRollForPlayer(payload: {
+  actionId: string;
+  rollSummary: string;
+  rollResultJson?: string;
+  dc?: number | null;
+  chainStepKey?: string;
+}) {
   isSaving.value = true;
   try {
     await api(`/api/actions/${payload.actionId}/roll-prompts/dm-roll`, {
       method: 'POST',
-      body: { rollSummary: payload.rollSummary, dc: payload.dc ?? null },
+      body: {
+        rollSummary: payload.rollSummary,
+        rollResultJson: payload.rollResultJson,
+        dc: payload.dc ?? null,
+        chainStepKey: payload.chainStepKey,
+      },
     });
     await refresh();
     toastSuccess('Roll recorded for player.');
@@ -484,6 +508,7 @@ function derivedActionOutcome(action: ActionQueueItemResponse): 'Pass' | 'Fail' 
     rulesetDefinition.value,
     action,
     state.value?.rollPrompts ?? [],
+    game.value,
   );
 }
 
@@ -688,11 +713,6 @@ async function advanceTurn() {
   }
 }
 
-/** DM skips the current NPC turn — advances initiative without resolving an action. */
-async function skipTurnDm() {
-  await advanceTurn();
-}
-
 /** DM prompts the current-turn character to take their action — opens the action form on the player's device. */
 async function promptPlayerTurn(characterId: string) {
   if (!state.value) return;
@@ -711,10 +731,8 @@ async function promptPlayerTurn(characterId: string) {
   }
 }
 
-/** Called when DM clicks the Prompt button on a character's initiative entry.
- *  Sends the prompt-turn request and auto-expands the resolution panel. */
+/** Called when DM clicks Prompt/Act on a character's initiative entry. */
 async function handlePromptTurn(entry: InitiativeEntryResponse) {
-  activeCombatEntryId.value = entry.id;
   await promptPlayerTurn(entry.combatantId);
 }
 
@@ -796,45 +814,6 @@ function pendingCombatActionsForCharacter(characterId: string) {
   );
 }
 
-const combatTurnSkillKey = ref('');
-const combatTurnSkillPromptLabel = ref('');
-
-const combatTurnCharacter = computed(() => {
-  if (!isCombat.value || currentTurn.value?.combatantType !== 'Character') return null;
-  return game.value?.characters.find(c => c.id === currentTurn.value?.combatantId) ?? null;
-});
-
-const combatTurnAvailableSkills = computed(() => {
-  if (!rulesetDefinition.value || !combatTurnCharacter.value) return [];
-  return availableSkillsForClass(rulesetDefinition.value, combatTurnCharacter.value.classKey);
-});
-
-const awaitingCombatTurnRollPrompts = computed(() => {
-  const characterId = currentTurn.value?.combatantId;
-  if (!characterId) return [];
-  return sessionRollPrompts.value.filter(p =>
-    p.status === 'Pending' && p.targetCharacterId === characterId,
-  );
-});
-
-async function promptCombatTurnStatCheck(characterId: string) {
-  if (!state.value || !combatTurnSkillKey.value) {
-    toastError('Choose a skill first.');
-    return;
-  }
-  await sendSessionRollPrompts({
-    prompts: [{
-      targetCharacterId: characterId,
-      checkMode: toApiCheckMode('skill'),
-      skillKey: combatTurnSkillKey.value,
-      promptLabel: combatTurnSkillPromptLabel.value.trim() || undefined,
-      resultKind: 'PassFail',
-    }],
-  });
-  combatTurnSkillKey.value = '';
-  combatTurnSkillPromptLabel.value = '';
-}
-
 function collapseAllPendingActions() {
   expandedPendingActions.value = new Set();
 }
@@ -864,7 +843,6 @@ function handleActivateEntry(entry: InitiativeEntryResponse) {
     // Pre-select this NPC and reset both the action form and inline resolution fields
     selectedNpcId.value = entry.combatantId;
     resetNpcActionSelection();
-    npcHasTarget.value = false;
     npcRollResult.value = '';
     npcDamageRollResult.value = '';
     resetNpcInlineFields();
@@ -909,16 +887,39 @@ const selectedNpcActionDef = computed(() =>
 const effectiveNpcActionRoll = computed(() =>
   resolveEffectiveActionRoll(rulesetDefinition.value, selectedNpcActionDef.value),
 );
+const npcTargetArmor = computed(() => {
+  void npcTargetPickerRevision.value;
+  const fields = npcActionTargetPickerRef.value?.toSubmitFields();
+  if (!fields || !game.value) return null;
+  return resolveTargetArmor(
+    {
+      targetCharacterId: fields.targetCharacterId,
+      targetNpcId: fields.targetNpcId,
+    },
+    game.value,
+  );
+});
 const npcAttackOutcome = computed(() => {
   if (!npcRollResult.value || npcActionMode.value !== 'action') return null;
   return evaluateActionOutcome(
     rulesetDefinition.value,
     selectedNpcActionKey.value,
     `🎲 Roll: ${npcRollResult.value}`,
+    npcTargetArmor.value,
   );
 });
-const showNpcDamageRoll = computed(() =>
-  Boolean(effectiveNpcActionRoll.value?.damageRoll && npcAttackOutcome.value === 'Pass'),
+const showNpcDamageRoll = computed(() => {
+  if (npcActionMode.value !== 'action' || npcAttackOutcome.value !== 'Pass') return false;
+  return Boolean(
+    effectiveNpcActionRoll.value?.damageRoll
+    ?? selectedNpcActionDef.value?.damageRoll,
+  );
+});
+
+const npcDamageRollDefinition = computed(() =>
+  effectiveNpcActionRoll.value?.damageRoll
+  ?? selectedNpcActionDef.value?.damageRoll
+  ?? null,
 );
 const npcActionNeedsRoll = computed(() =>
   npcActionMode.value === 'action' && Boolean(selectedNpcActionDef.value?.roll),
@@ -931,6 +932,36 @@ const npcHasFollowUpRoll = computed(() => Boolean(npcDamageRollResult.value.trim
 const npcNeedsFollowUpRoll = computed(() =>
   npcActionHasRollChain.value && showNpcDamageRoll.value,
 );
+
+function bumpNpcTargetPickerRevision() {
+  npcTargetPickerRevision.value += 1;
+}
+
+function npcTargetFieldsSelected() {
+  void npcTargetPickerRevision.value;
+  const fields = npcActionTargetPickerRef.value?.toSubmitFields();
+  return Boolean(fields?.targetCharacterId || fields?.targetNpcId || fields?.targetName);
+}
+
+const npcCombatActionSelected = computed(() => {
+  if (npcActionMode.value !== 'action' || !selectedNpcActionDef.value) return false;
+  return actionRequiresTarget(selectedNpcActionDef.value);
+});
+
+const npcTargetMissing = computed(() =>
+  npcCombatActionSelected.value && !npcTargetFieldsSelected(),
+);
+
+const canResolveNpcInlineAction = computed(() => {
+  void npcTargetPickerRevision.value;
+  if (isSaving.value || !selectedNpcId.value) return false;
+  if (!buildNpcActionSubmitPayload()) return false;
+  if (!npcActionTargetPickerRef.value?.isValid()) return false;
+  if (npcTargetMissing.value) return false;
+  if (npcActionNeedsRoll.value && !npcHasPrimaryRoll.value) return false;
+  if (npcNeedsFollowUpRoll.value && !npcHasFollowUpRoll.value) return false;
+  return true;
+});
 
 function validateNpcRollRequirements() {
   if (!npcActionNeedsRoll.value) return true;
@@ -1118,10 +1149,9 @@ onUnmounted(() => {
             @move-keyboard="moveInitiativeByKeyboard"
             @activate-entry="handleActivateEntry"
             @prompt-turn="handlePromptTurn"
-            @skip-turn-dm="skipTurnDm"
           >
             <template v-if="state" #entry-action="{ entry }">
-              <!-- Player turn — evaluate submitted action or wait; DM can also prompt a stat check -->
+              <!-- Player turn — evaluate submitted action or wait -->
               <div v-if="entry.combatantType === 'Character'" class="turn-inline-body">
 
                 <!-- Player-submitted combat action: evaluate inline -->
@@ -1176,50 +1206,7 @@ onUnmounted(() => {
                   </p>
                 </div>
 
-                <!-- DM-initiated stat check prompt (independent of player action) -->
-                <details class="dm-stat-check-prompt" style="margin-bottom: 0.75rem;">
-                  <summary class="text-sm" style="cursor: pointer; user-select: none;">Prompt stat check</summary>
-                  <div style="margin-top: 0.5rem;">
-                    <div v-if="awaitingCombatTurnRollPrompts.length" class="follow-up-roll-list" style="margin-bottom: 0.75rem;">
-                      <p class="text-sm muted" style="margin: 0 0 0.5rem;">Waiting for rolls</p>
-                      <div
-                        v-for="prompt in awaitingCombatTurnRollPrompts"
-                        :key="prompt.id"
-                        class="follow-up-roll-item"
-                      >
-                        <span class="text-sm">{{ prompt.promptLabel || prompt.skillKey || 'Skill check' }}</span>
-                        <span class="badge pending">Awaiting roll</span>
-                      </div>
-                    </div>
-                    <label>
-                      Skill
-                      <select v-model="combatTurnSkillKey" :disabled="isSaving">
-                        <option value="">Choose a skill</option>
-                        <option
-                          v-for="skill in combatTurnAvailableSkills"
-                          :key="skill.key"
-                          :value="skill.key"
-                        >
-                          {{ skill.label }}
-                        </option>
-                      </select>
-                    </label>
-                    <label>
-                      Note (optional)
-                      <input v-model.trim="combatTurnSkillPromptLabel" placeholder="e.g. Perception to spot the trap…" :disabled="isSaving" />
-                    </label>
-                    <button
-                      class="btn sm"
-                      type="button"
-                      :disabled="isSaving || !combatTurnSkillKey"
-                      @click="promptCombatTurnStatCheck(entry.combatantId)"
-                    >
-                      Prompt {{ entry.combatantName }} to roll
-                    </button>
-                  </div>
-                </details>
-
-                <!-- Resolve DM-prompted stat checks -->
+                <!-- Resolve in-flight stat checks from earlier sessions -->
                 <div
                   v-for="action in pendingStatChecksForCharacter(entry.combatantId)"
                   :key="action.id"
@@ -1269,53 +1256,20 @@ onUnmounted(() => {
                     </button>
                   </form>
                 </div>
-
-                <button class="btn ghost sm" type="button" :disabled="isSaving" @click="advanceTurn">
-                  Skip turn →
-                </button>
               </div>
 
               <!-- NPC card — single combined action + resolution form -->
-              <form v-else class="turn-inline-body" @submit.prevent="submitAndResolveNpcAction">
-                <label>
-                  Action type
-                  <select v-model="npcActionMode" :disabled="!selectedNpcId">
-                    <option v-if="availableNpcActions.length" value="action">Action</option>
-                    <option value="stat-check">Stat check</option>
-                  </select>
-                </label>
-                <label v-if="npcActionMode === 'action'">
-                  Action
-                  <select v-model="selectedNpcActionKey" required>
-                    <option value="">Choose an action</option>
-                    <option v-for="action in availableNpcActions" :key="action.key" :value="action.key">
-                      {{ action.label }}
-                    </option>
-                  </select>
-                </label>
-                <label v-else>
-                  Stat
-                  <select v-model="selectedNpcStatKey" required>
-                    <option value="">Choose a stat</option>
-                    <optgroup label="Skills">
-                      <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'skill')" :key="stat.key" :value="stat.key">
-                        {{ stat.label }}
-                      </option>
-                    </optgroup>
-                    <optgroup label="Attributes">
-                      <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'attribute')" :key="stat.key" :value="stat.key">
-                        {{ stat.label }}
-                      </option>
-                    </optgroup>
-                  </select>
-                </label>
-                <div v-if="npcActionMode === 'action' && selectedNpcActionDetail" class="alert info">
-                  <strong>{{ selectedNpcActionDetail.dice }}</strong>
-                  <p class="text-sm muted">{{ selectedNpcActionDetail.attribute }} + {{ selectedNpcActionDetail.skill }} · {{ selectedNpcActionDetail.successRule }}</p>
-                </div>
-                <div v-else-if="npcActionMode === 'stat-check' && selectedNpcStatDetail" class="alert info">
-                  <p class="text-sm muted">{{ selectedNpcStatDetail.rollSummary }}</p>
-                </div>
+              <form v-else class="turn-inline-body" novalidate @submit.prevent="submitAndResolveNpcAction">
+                <RulesetActionFields
+                  v-model:action-mode="npcActionMode"
+                  v-model:selected-action-key="selectedNpcActionKey"
+                  v-model:selected-stat-key="selectedNpcStatKey"
+                  :available-actions="availableNpcActions"
+                  :available-stat-checks="availableNpcStatChecks"
+                  :selected-action-detail="selectedNpcActionDetail"
+                  :selected-stat-detail="selectedNpcStatDetail"
+                  :disabled="!selectedNpcId || isSaving"
+                />
 
                 <!-- Target must be set before dice rollers appear -->
                 <ActionTargetPicker
@@ -1323,23 +1277,37 @@ onUnmounted(() => {
                   :characters="state.game.characters"
                   :npcs="state.game.npcsAndMonsters"
                   :disabled="isSaving"
-                  @change="npcHasTarget = $event"
+                  @change="bumpNpcTargetPickerRevision"
                 />
 
-                <template v-if="npcHasTarget">
-                  <p class="text-sm muted" style="margin: 0.25rem 0 0.25rem;">
+                <p
+                  v-if="npcTargetMissing"
+                  class="text-sm"
+                  style="color: var(--danger); margin: 0.5rem 0 0;"
+                >
+                  A target is required for combat actions.
+                </p>
+
+                <template v-if="npcRollContext">
+                  <p class="text-sm muted" style="margin: 0.5rem 0 0.25rem;">
                     {{ npcActionNeedsRoll ? 'Roll before resolving this NPC action.' : 'Roll on the table (optional).' }}
                   </p>
-                  <RulesetDiceRoller v-if="npcRollContext" v-model="npcRollResult" :context="npcRollContext" />
+                  <RulesetDiceRoller v-model="npcRollResult" :context="npcRollContext" />
+                  <p v-if="npcActionMode === 'action' && npcAttackOutcome" class="roll-outcome-line">
+                    Roll outcome:
+                    <span class="badge" :class="npcAttackOutcome === 'Pass' ? 'pass' : 'fail'">{{ npcAttackOutcome }}</span>
+                  </p>
                   <DamageRollRoller
-                    v-if="showNpcDamageRoll && effectiveNpcActionRoll?.damageRoll && rulesetDefinition"
+                    v-if="showNpcDamageRoll && npcDamageRollDefinition && rulesetDefinition"
                     v-model="npcDamageRollResult"
-                    :damage-roll="effectiveNpcActionRoll.damageRoll"
+                    :damage-roll="npcDamageRollDefinition"
                     :definition="rulesetDefinition"
                     :attributes="npcStats.attributes"
                   />
                 </template>
-                <p v-else class="text-sm muted" style="margin: 0.25rem 0 0;">Select a target above to unlock dice rolls.</p>
+                <p v-else-if="npcNeedsFollowUpRoll && !npcHasFollowUpRoll" class="text-sm muted" style="margin: 0.5rem 0 0;">
+                  This attack hit — roll damage before resolving.
+                </p>
 
                 <hr style="margin: 0.75rem 0; border-color: var(--border);" />
 
@@ -1365,9 +1333,10 @@ onUnmounted(() => {
                   @update:status-changes="npcInlineStatusChanges = $event"
                 />
                 <button
-                  class="btn success"
+                  class="btn"
+                  :class="{ success: canResolveNpcInlineAction && !isSaving }"
                   type="submit"
-                  :disabled="isSaving || (npcActionNeedsRoll && !npcHasPrimaryRoll) || (npcNeedsFollowUpRoll && !npcHasFollowUpRoll)"
+                  :disabled="!canResolveNpcInlineAction || isSaving"
                   style="margin-top: 0.75rem;"
                 >
                   {{ isSaving ? 'Resolving…' : 'Resolve NPC action' }}
@@ -1408,7 +1377,7 @@ onUnmounted(() => {
                   <div>
                     <div class="action-card-actor">
                       {{ action.actorName }}
-                      <span v-if="action.isSkillCheckResponse" class="badge" style="margin-left: 0.35rem;">Skill check</span>
+                      <span v-if="action.isSkillCheckResponse" class="badge" style="margin-left: 0.35rem;">Stat check</span>
                     </div>
                     <div class="action-card-target">
                       uses <strong>{{ action.actionText }}</strong>
@@ -1479,7 +1448,7 @@ onUnmounted(() => {
           />
         </div><!-- /dm-action-column -->
 
-        <!-- RIGHT: Reference column — participants, skill checks, exploration NPC form -->
+        <!-- RIGHT: Reference column — participants, stat checks, exploration NPC form -->
         <div class="dm-reference-column">
           <div v-if="!isCombat" class="dm-exploration-tools">
             <DmPlayerSkillCheckPanel
@@ -1516,54 +1485,17 @@ onUnmounted(() => {
                     <option v-for="npc in game.npcsAndMonsters" :key="npc.id" :value="npc.id">{{ npc.name }}</option>
                   </select>
                 </label>
-                <label>
-                  Action type
-                  <select v-model="npcActionMode" :disabled="!selectedNpcId">
-                    <option v-if="availableNpcActions.length" value="action">Action</option>
-                    <option value="stat-check">Stat check</option>
-                  </select>
-                </label>
-                <label v-if="npcActionMode === 'action'">
-                  Action
-                  <select v-model="selectedNpcActionKey" required>
-                    <option value="">Choose an action</option>
-                    <option v-for="action in availableNpcActions" :key="action.key" :value="action.key">
-                      {{ action.label }}
-                    </option>
-                  </select>
-                </label>
-                <label v-else>
-                  Stat
-                  <select v-model="selectedNpcStatKey" required>
-                    <option value="">Choose a stat</option>
-                    <optgroup label="Skills">
-                      <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'skill')" :key="stat.key" :value="stat.key">
-                        {{ stat.label }}
-                      </option>
-                    </optgroup>
-                    <optgroup label="Attributes">
-                      <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'attribute')" :key="stat.key" :value="stat.key">
-                        {{ stat.label }}
-                      </option>
-                    </optgroup>
-                  </select>
-                </label>
-                <div v-if="npcActionMode === 'action' && selectedNpcActionDetail" class="alert info">
-                  <div>
-                    <strong>{{ selectedNpcActionDetail.dice }}</strong>
-                    <p class="text-sm">
-                      Roll {{ selectedNpcActionDetail.attribute }} + {{ selectedNpcActionDetail.skill }}.
-                      Modifiers: {{ selectedNpcActionDetail.modifiers }}.
-                    </p>
-                    <p class="text-sm">{{ selectedNpcActionDetail.successRule }}</p>
-                  </div>
-                </div>
-                <div v-else-if="npcActionMode === 'stat-check' && selectedNpcStatDetail" class="alert info">
-                  <div>
-                    <strong>{{ selectedNpcStatDetail.actionText }}</strong>
-                    <p class="text-sm">Suggested roll: {{ selectedNpcStatDetail.rollSummary }}.</p>
-                  </div>
-                </div>
+                <RulesetActionFields
+                  v-model:action-mode="npcActionMode"
+                  v-model:selected-action-key="selectedNpcActionKey"
+                  v-model:selected-stat-key="selectedNpcStatKey"
+                  :available-actions="availableNpcActions"
+                  :available-stat-checks="availableNpcStatChecks"
+                  :selected-action-detail="selectedNpcActionDetail"
+                  :selected-stat-detail="selectedNpcStatDetail"
+                  :disabled="!selectedNpcId || isSaving"
+                  show-modifiers
+                />
                 <p class="text-sm muted" style="margin: 0 0 0.75rem;">
                   {{ npcActionNeedsRoll
                     ? 'Roll before sending this NPC action. Dice are recorded in the queue for your review workflow.'
@@ -1574,14 +1506,18 @@ onUnmounted(() => {
                   v-model="npcRollResult"
                   :context="npcRollContext"
                 />
+                <p v-if="npcActionMode === 'action' && npcAttackOutcome" class="roll-outcome-line">
+                  Roll outcome:
+                  <span class="badge" :class="npcAttackOutcome === 'Pass' ? 'pass' : 'fail'">{{ npcAttackOutcome }}</span>
+                </p>
 
-                <DamageRollRoller
-                  v-if="showNpcDamageRoll && effectiveNpcActionRoll?.damageRoll && rulesetDefinition"
-                  v-model="npcDamageRollResult"
-                  :damage-roll="effectiveNpcActionRoll.damageRoll"
-                  :definition="rulesetDefinition"
-                  :attributes="npcStats.attributes"
-                />
+                  <DamageRollRoller
+                    v-if="showNpcDamageRoll && npcDamageRollDefinition && rulesetDefinition"
+                    v-model="npcDamageRollResult"
+                    :damage-roll="npcDamageRollDefinition"
+                    :definition="rulesetDefinition"
+                    :attributes="npcStats.attributes"
+                  />
 
                 <ActionTargetPicker
                   v-if="game"
