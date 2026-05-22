@@ -35,7 +35,7 @@ public class RulesetsController : ControllerBase
     }
 
     [HttpGet("{code}")]
-    public async Task<ActionResult<RulesetDetailResponse>> Get(string code)
+    public async Task<ActionResult<RulesetResponse>> Get(string code)
     {
         var ruleset = await _db.Rulesets
             .AsNoTracking()
@@ -46,7 +46,7 @@ public class RulesetsController : ControllerBase
             return NotFound();
         }
 
-        return Ok(ControllerHelpers.ToRulesetDetailResponse(ruleset));
+        return Ok(ControllerHelpers.ToRulesetResponse(ruleset));
     }
 
     [Authorize(Roles = "Admin")]
@@ -80,7 +80,7 @@ public class RulesetsController : ControllerBase
 
         return Ok(new RulesetImportResponse
         {
-            Ruleset = ControllerHelpers.ToRulesetDetailResponse(ruleset),
+            Ruleset = ControllerHelpers.ToRulesetResponse(ruleset),
             Created = created,
         });
     }

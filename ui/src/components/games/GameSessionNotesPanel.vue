@@ -77,6 +77,12 @@ function onDraftInput(sessionId: string) {
 }
 
 watch(() => props.gameId, () => { void loadNotes(); }, { immediate: true });
+
+onUnmounted(() => {
+  for (const id of Object.keys(saveTimers)) {
+    clearTimeout(saveTimers[id]);
+  }
+});
 </script>
 
 <template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+definePageMeta({ middleware: 'guest-only' });
 import type { AuthResponse } from '~/types/api';
 
 const { api, setSession, loadSession, token } = useApi();
@@ -101,7 +102,7 @@ async function submit() {
           Confirm password
           <input
             v-model="confirmPassword"
-            type="text"
+            type="password"
             autocomplete="new-password"
             placeholder="Re-enter password"
             minlength="7"

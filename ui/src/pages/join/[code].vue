@@ -36,7 +36,7 @@ onMounted(async () => {
     joinMode.value = options.availableCharacters.length ? 'existing' : 'new';
     selectedClassKey.value = rulesetDefinition.value?.character.classes[0]?.key ?? '';
   } catch (err) {
-    fieldError.value = 'Session not found or no longer active.';
+    fieldError.value = extractError(err);
   } finally {
     isLoading.value = false;
   }

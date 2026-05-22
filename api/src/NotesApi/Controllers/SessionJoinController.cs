@@ -42,7 +42,7 @@ public class SessionJoinController : ControllerBase
         return Ok(new SessionJoinOptionsResponse
         {
             Session = this.ToSessionSummaryResponse(session),
-            Ruleset = ControllerHelpers.ToRulesetDetailResponse(session.Game.Ruleset),
+            Ruleset = ControllerHelpers.ToRulesetResponse(session.Game.Ruleset),
             AvailableCharacters = session.Game.Characters
                 .Where(c => !claimedCharacterIds.Contains(c.Id))
                 .OrderBy(c => c.Name)

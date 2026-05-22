@@ -1,4 +1,5 @@
 <script setup lang="ts">
+definePageMeta({ middleware: 'auth' });
 import ConfirmModal from '~/components/ConfirmModal.vue';
 import GameNpcManager from '~/components/games/GameNpcManager.vue';
 import GameSessionNotesPanel from '~/components/games/GameSessionNotesPanel.vue';

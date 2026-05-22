@@ -19,14 +19,48 @@ interface ApiOptions {
 const authToken = () => useState<string | null>('auth-token', () => null);
 const authEmail = () => useState<string>('auth-email', () => '');
 
+/**
+ * Decodes the `exp` claim from a JWT without any external library.
+ * Returns the expiry as a Unix timestamp in seconds, or null if unparseable.
+ */
+export function decodeJwtExp(token: string): number | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const padded = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = atob(padded);
+    const parsed = JSON.parse(decoded);
+    return typeof parsed.exp === 'number' ? parsed.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns true if the token is expired or within 60 seconds of expiry.
+ */
+export function isTokenExpired(token: string): boolean {
+  const exp = decodeJwtExp(token);
+  if (exp === null) return true;
+  return Date.now() / 1000 >= exp - 60;
+}
+
 export function useApi() {
   const token = authToken();
   const email = authEmail();
 
   function loadSession() {
-    if (import.meta.client) {
-      token.value = localStorage.getItem('ttrpg_token');
+    if (!import.meta.client) return;
+    const stored = localStorage.getItem('ttrpg_token');
+    if (stored && !isTokenExpired(stored)) {
+      token.value = stored;
       email.value = localStorage.getItem('ttrpg_email') || '';
+    } else if (stored) {
+      // Token exists but is expired — clear it proactively
+      localStorage.removeItem('ttrpg_token');
+      localStorage.removeItem('ttrpg_email');
+      token.value = null;
+      email.value = '';
     }
   }
 
@@ -68,6 +102,12 @@ export function useApi() {
     } catch (fetchError) {
       const err = fetchError as { status?: number; statusCode?: number };
       const status = err.status ?? err.statusCode ?? 0;
+
+      if (status === 401 && import.meta.client) {
+        clearSession();
+        await navigateTo('/login');
+      }
+
       throw new ApiError(status, extractError(fetchError));
     }
   }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+definePageMeta({ middleware: 'auth' });
 import type { RulesetImportResponse, RulesetResponse } from '~/types/api';
 import { parseRulesetDefinition } from '~/utils/rulesets';
 

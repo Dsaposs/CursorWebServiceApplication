@@ -238,12 +238,7 @@ public class ActionsController : ControllerBase
         action.Resolution.StatChangesJson = JsonSerializer.Serialize(statChanges);
         action.Resolution.PublishedAt = now;
 
-        foreach (var statChange in statChanges)
-        {
-            await ApplyStatChangeAsync(action.Session.GameId, statChange);
-        }
-
-        await ApplyThresholdStatusesAsync(action.Session.GameId, statChanges);
+        await ApplyAllStatChangesAsync(action.Session.GameId, statChanges);
 
         foreach (var prompt in action.RollPrompts.Where(p => p.Status == RollPromptStatus.Pending))
         {
@@ -835,29 +830,69 @@ public class ActionsController : ControllerBase
 
     private bool IsDm(string dmUserId) => User.Identity?.IsAuthenticated == true && this.UserId() == dmUserId;
 
-    private async Task ApplyStatChangeAsync(Guid gameId, StatChangeRequest statChange)
+    /// <summary>
+    /// Pre-loads all characters and NPCs referenced by <paramref name="statChanges"/> in two
+    /// bulk queries, applies every change in memory, then lets the caller's SaveChangesAsync
+    /// flush everything in a single round-trip.
+    /// </summary>
+    private async Task ApplyAllStatChangesAsync(Guid gameId, IEnumerable<StatChangeRequest> statChanges)
     {
-        if (statChange.TargetType.Equals("Character", StringComparison.OrdinalIgnoreCase))
+        var changes = statChanges.ToList();
+        if (changes.Count == 0) return;
+
+        var characterIds = changes
+            .Where(c => c.TargetType.Equals("Character", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c.TargetId)
+            .Distinct()
+            .ToList();
+
+        var npcIds = changes
+            .Where(c => c.TargetType.Equals("NpcOrMonster", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c.TargetId)
+            .Distinct()
+            .ToList();
+
+        var characters = characterIds.Count > 0
+            ? (await _db.Characters.Where(c => c.GameId == gameId && characterIds.Contains(c.Id)).ToListAsync())
+              .ToDictionary(c => c.Id)
+            : new Dictionary<Guid, Character>();
+
+        var npcs = npcIds.Count > 0
+            ? (await _db.NpcsAndMonsters.Where(n => n.GameId == gameId && npcIds.Contains(n.Id)).ToListAsync())
+              .ToDictionary(n => n.Id)
+            : new Dictionary<Guid, NpcOrMonster>();
+
+        foreach (var change in changes)
         {
-            var character = await _db.Characters.FirstOrDefaultAsync(c => c.GameId == gameId && c.Id == statChange.TargetId);
-            if (character is null) return;
-            ApplyHealthAndArmor(character, statChange);
-            if (statChange.SetGameValues is { Count: > 0 } || statChange.GameValueDeltas is { Count: > 0 })
-                RulesetCharacterData.ApplyGameValues(character, statChange.SetGameValues, statChange.GameValueDeltas);
-            if (statChange.AttributeDeltas is { Count: > 0 })
-                RulesetCharacterData.ApplyNestedDeltas(character, "attributes", statChange.AttributeDeltas);
-            if (statChange.InventoryDeltas is { Count: > 0 })
-                CharacterInventory.ApplyDeltas(character, statChange.InventoryDeltas);
-            if (statChange.AddStatusKeys is { Count: > 0 } || statChange.RemoveStatusKeys is { Count: > 0 })
-                RulesetCharacterData.ApplyStatusChanges(character, statChange.AddStatusKeys, statChange.RemoveStatusKeys);
-        }
-        else if (statChange.TargetType.Equals("NpcOrMonster", StringComparison.OrdinalIgnoreCase))
-        {
-            var npc = await _db.NpcsAndMonsters.FirstOrDefaultAsync(n => n.GameId == gameId && n.Id == statChange.TargetId);
-            if (npc is null) return;
-            ApplyHealthAndArmor(npc, statChange);
-            if (statChange.AddStatusKeys is { Count: > 0 } || statChange.RemoveStatusKeys is { Count: > 0 })
-                RulesetCharacterData.ApplyStatusChanges(npc, statChange.AddStatusKeys, statChange.RemoveStatusKeys);
+            if (change.TargetType.Equals("Character", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!characters.TryGetValue(change.TargetId, out var character)) continue;
+                ApplyHealthAndArmor(character, change);
+                if (change.SetGameValues is { Count: > 0 } || change.GameValueDeltas is { Count: > 0 })
+                    RulesetCharacterData.ApplyGameValues(character, change.SetGameValues, change.GameValueDeltas);
+                if (change.AttributeDeltas is { Count: > 0 })
+                    RulesetCharacterData.ApplyNestedDeltas(character, "attributes", change.AttributeDeltas);
+                if (change.InventoryDeltas is { Count: > 0 })
+                    CharacterInventory.ApplyDeltas(character, change.InventoryDeltas);
+                if (change.AddStatusKeys is { Count: > 0 } || change.RemoveStatusKeys is { Count: > 0 })
+                    RulesetCharacterData.ApplyStatusChanges(character, change.AddStatusKeys, change.RemoveStatusKeys);
+
+                // Auto-apply threshold status effects after HP changes.
+                if (change.HealthDelta.HasValue || change.SetHealth.HasValue)
+                {
+                    if (character.Health <= 0)
+                        RulesetCharacterData.ApplyStatusChanges(character, ["broken"], null);
+                    else
+                        RulesetCharacterData.ApplyStatusChanges(character, null, ["broken"]);
+                }
+            }
+            else if (change.TargetType.Equals("NpcOrMonster", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!npcs.TryGetValue(change.TargetId, out var npc)) continue;
+                ApplyHealthAndArmor(npc, change);
+                if (change.AddStatusKeys is { Count: > 0 } || change.RemoveStatusKeys is { Count: > 0 })
+                    RulesetCharacterData.ApplyStatusChanges(npc, change.AddStatusKeys, change.RemoveStatusKeys);
+            }
         }
     }
 
@@ -873,29 +908,6 @@ public class ActionsController : ControllerBase
         RulesetCharacterData.ApplyGameValues(character, null, new Dictionary<string, int> { ["stress"] = 1 });
         character.UpdatedAt = DateTime.UtcNow;
         return Task.CompletedTask;
-    }
-
-    /// <summary>
-    /// After stat changes are applied, automatically add threshold-based statuses
-    /// (e.g. "broken" when a character reaches 0 HP) based on the ruleset definition.
-    /// </summary>
-    private async Task ApplyThresholdStatusesAsync(Guid gameId, IEnumerable<StatChangeRequest> statChanges)
-    {
-        foreach (var change in statChanges)
-        {
-            if (change.TargetType.Equals("Character", StringComparison.OrdinalIgnoreCase)
-                && (change.HealthDelta.HasValue || change.SetHealth.HasValue))
-            {
-                var character = await _db.Characters.FirstOrDefaultAsync(c => c.GameId == gameId && c.Id == change.TargetId);
-                if (character is null) continue;
-
-                // Auto-apply "broken" when HP drops to 0; auto-remove when HP is restored.
-                if (character.Health <= 0)
-                    RulesetCharacterData.ApplyStatusChanges(character, ["broken"], null);
-                else
-                    RulesetCharacterData.ApplyStatusChanges(character, null, ["broken"]);
-            }
-        }
     }
 
     private static void ApplyHealthAndArmor(Character character, StatChangeRequest statChange)

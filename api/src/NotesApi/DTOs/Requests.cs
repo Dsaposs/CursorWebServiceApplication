@@ -109,12 +109,6 @@ public class UpdateNpcRequest : CreateNpcRequest
 {
 }
 
-public class StartSessionRequest
-{
-    [MaxLength(160)]
-    public string? Title { get; set; }
-}
-
 public class ChangeSessionStateRequest
 {
     [Required]

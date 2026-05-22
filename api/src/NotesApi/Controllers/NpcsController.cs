@@ -30,9 +30,10 @@ public class NpcsController : ControllerBase
             return NotFound();
         }
 
-        if (!TryResolveCreateRequest(game, request, out var resolved, out var resolveError))
+        var (resolved, resolveError) = await TryResolveCreateRequestAsync(game, request);
+        if (resolveError is not null)
         {
-            return BadRequest(new { error = resolveError });
+            return BadRequest(new { errors = new[] { resolveError } });
         }
 
         var now = DateTime.UtcNow;
@@ -125,25 +126,19 @@ public class NpcsController : ControllerBase
         return NoContent();
     }
 
-    private bool TryResolveCreateRequest(
+    private async Task<(CreateNpcRequest Resolved, string? Error)> TryResolveCreateRequestAsync(
         Game game,
-        CreateNpcRequest request,
-        out CreateNpcRequest resolved,
-        out string? error)
+        CreateNpcRequest request)
     {
-        resolved = request;
-        error = null;
-
         if (string.IsNullOrWhiteSpace(request.TemplateKey))
         {
-            return true;
+            return (request, null);
         }
 
-        var ruleset = _db.Rulesets.AsNoTracking().FirstOrDefault(r => r.Code == game.RulesetCode);
+        var ruleset = await _db.Rulesets.AsNoTracking().FirstOrDefaultAsync(r => r.Code == game.RulesetCode);
         if (ruleset is null)
         {
-            error = $"Ruleset '{game.RulesetCode}' is not available.";
-            return false;
+            return (request, $"Ruleset '{game.RulesetCode}' is not available.");
         }
 
         RulesetDefinition? definition;
@@ -155,14 +150,12 @@ public class NpcsController : ControllerBase
         }
         catch
         {
-            error = "Ruleset definition could not be parsed.";
-            return false;
+            return (request, "Ruleset definition could not be parsed.");
         }
 
         if (definition is null)
         {
-            error = "Ruleset definition could not be parsed.";
-            return false;
+            return (request, "Ruleset definition could not be parsed.");
         }
 
         if (!NpcTemplateApplicator.TryBuildCreateRequest(
@@ -170,17 +163,17 @@ public class NpcsController : ControllerBase
                 request.TemplateKey,
                 request.Name,
                 out var fromTemplate,
-                out error))
+                out var error))
         {
-            return false;
+            return (request, error);
         }
 
-        resolved = fromTemplate;
+        var resolved = fromTemplate;
         if (!string.IsNullOrWhiteSpace(request.Name))
         {
             resolved.Name = request.Name.Trim();
         }
 
-        return true;
+        return (resolved, null);
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NotesApi.DTOs;
 using NotesApi.Models;
 using NotesApi.Services;
@@ -8,6 +9,7 @@ namespace NotesApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[EnableRateLimiting("auth")]
 public class AuthController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
@@ -43,7 +45,7 @@ public class AuthController : ControllerBase
             ?? await _userManager.FindByNameAsync(request.Email);
         if (user is null) return Unauthorized(new { errors = new[] { "Invalid email or password." } });
 
-        var result = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: false);
+        var result = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
         if (!result.Succeeded) return Unauthorized(new { errors = new[] { "Invalid email or password." } });
 
         var (token, expiresAt) = await _jwtTokenService.CreateTokenAsync(user);

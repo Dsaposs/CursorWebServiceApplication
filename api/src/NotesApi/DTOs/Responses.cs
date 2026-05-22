@@ -23,13 +23,9 @@ public class RulesetResponse
     public string DefinitionJson { get; set; } = "{}";
 }
 
-public class RulesetDetailResponse : RulesetResponse
-{
-}
-
 public class RulesetImportResponse
 {
-    public RulesetDetailResponse Ruleset { get; set; } = new();
+    public RulesetResponse Ruleset { get; set; } = new();
     public bool Created { get; set; }
 }
 
@@ -93,13 +89,13 @@ public class GameJoinOptionsResponse
     public string InviteCode { get; set; } = string.Empty;
     public string GameName { get; set; } = string.Empty;
     public string RulesetCode { get; set; } = string.Empty;
-    public RulesetDetailResponse Ruleset { get; set; } = new();
+    public RulesetResponse Ruleset { get; set; } = new();
 }
 
 public class SessionJoinOptionsResponse
 {
     public SessionSummaryResponse Session { get; set; } = new();
-    public RulesetDetailResponse Ruleset { get; set; } = new();
+    public RulesetResponse Ruleset { get; set; } = new();
     public IEnumerable<CharacterResponse> AvailableCharacters { get; set; } = Array.Empty<CharacterResponse>();
 }
 

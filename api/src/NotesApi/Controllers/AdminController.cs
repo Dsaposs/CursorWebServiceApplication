@@ -23,15 +23,19 @@ public class AdminController : ControllerBase
     {
         var users = await _db.Users
             .AsNoTracking()
-            .OrderBy(user => user.UserName)
-            .Select(user => new AdminUserReportResponse
-            {
-                UserId = user.Id,
-                UserName = user.UserName ?? string.Empty,
-                Email = user.Email,
-                HasPasswordHash = user.PasswordHash != null,
-                GamesHostedCount = _db.Games.Count(game => game.DmUserId == user.Id),
-            })
+            .OrderBy(u => u.UserName)
+            .GroupJoin(
+                _db.Games.AsNoTracking(),
+                u => u.Id,
+                g => g.DmUserId,
+                (u, games) => new AdminUserReportResponse
+                {
+                    UserId = u.Id,
+                    UserName = u.UserName ?? string.Empty,
+                    Email = u.Email,
+                    HasPasswordHash = u.PasswordHash != null,
+                    GamesHostedCount = games.Count(),
+                })
             .ToListAsync();
 
         return Ok(users);

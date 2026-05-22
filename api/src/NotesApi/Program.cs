@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +34,9 @@ builder.Services
         options.Password.RequireDigit = true;
         options.Password.RequireLowercase = false;
         options.Password.RequireNonAlphanumeric = false;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.AllowedForNewUsers = true;
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
@@ -71,6 +75,21 @@ builder.Services.AddCors(options =>
             .AllowAnyHeader()
             .AllowAnyMethod());
 });
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = 10,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0,
+            }));
+});
+
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddSingleton<RulesetDefinitionValidator>();
 builder.Services.AddHostedService<SessionTimeoutService>();
@@ -121,6 +140,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+else
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
 
 app.UseExceptionHandler(errorApp =>
 {
@@ -149,6 +173,7 @@ app.UseExceptionHandler(errorApp =>
 });
 
 app.UseCors(FrontendCorsPolicy);
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
@@ -868,6 +893,14 @@ static async Task SeedRulesetsAsync(ApplicationDbContext db)
         if (existing is null)
         {
             db.Rulesets.Add(ruleset);
+            continue;
+        }
+
+        // Skip update when nothing has changed — avoids a write on every startup.
+        if (existing.DefinitionJson == ruleset.DefinitionJson
+            && existing.CharacterTemplateJson == ruleset.CharacterTemplateJson
+            && existing.DisplayName == ruleset.DisplayName)
+        {
             continue;
         }
 

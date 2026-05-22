@@ -22,7 +22,7 @@ public static partial class ControllerHelpers
         RulesetCode = game.RulesetCode,
         RulesetName = game.Ruleset?.DisplayName ?? game.RulesetCode,
         InviteCode = game.InviteCode,
-        InviteUrl = controller.JoinUrl($"/join/game/{game.InviteCode}"),
+        InviteUrl = $"/join/game/{game.InviteCode}",
         CreatedAt = game.CreatedAt,
         UpdatedAt = game.UpdatedAt,
         Characters = game.Characters.OrderBy(c => c.Name).Select(ToCharacterResponse),
@@ -44,21 +44,6 @@ public static partial class ControllerHelpers
         CharacterTemplateJson = ruleset.CharacterTemplateJson,
         DefinitionJson = ruleset.DefinitionJson,
     };
-
-    public static RulesetDetailResponse ToRulesetDetailResponse(Ruleset ruleset)
-    {
-        var response = ToRulesetResponse(ruleset);
-        return new RulesetDetailResponse
-        {
-            Code = response.Code,
-            DisplayName = response.DisplayName,
-            Description = response.Description,
-            DiceNotation = response.DiceNotation,
-            IsPlaceholder = response.IsPlaceholder,
-            CharacterTemplateJson = response.CharacterTemplateJson,
-            DefinitionJson = response.DefinitionJson,
-        };
-    }
 
     public static CharacterResponse ToCharacterResponse(Character character) => new()
     {
@@ -92,7 +77,7 @@ public static partial class ControllerHelpers
         Id = session.Id,
         GameId = session.GameId,
         JoinCode = session.JoinCode,
-        JoinUrl = controller.JoinUrl($"/join/{session.JoinCode}"),
+        JoinUrl = $"/join/{session.JoinCode}",
         IsActive = session.IsActive,
         State = session.State.ToString(),
         Version = session.Version,

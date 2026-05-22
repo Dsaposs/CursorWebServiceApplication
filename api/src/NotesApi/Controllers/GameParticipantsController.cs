@@ -139,7 +139,7 @@ public class GameParticipantsController : ControllerBase
             InviteCode = game.InviteCode,
             GameName = game.Name,
             RulesetCode = game.RulesetCode,
-            Ruleset = ControllerHelpers.ToRulesetDetailResponse(game.Ruleset),
+            Ruleset = ControllerHelpers.ToRulesetResponse(game.Ruleset),
         });
     }
 }

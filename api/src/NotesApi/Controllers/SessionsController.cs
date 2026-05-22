@@ -21,7 +21,7 @@ public class SessionsController : ControllerBase
     }
 
     [HttpPost("games/{gameId:guid}/sessions")]
-    public async Task<ActionResult<SessionSummaryResponse>> StartSession(Guid gameId, StartSessionRequest request)
+    public async Task<ActionResult<SessionSummaryResponse>> StartSession(Guid gameId)
     {
         var game = await _db.GetOwnedGameAsync(gameId, this.UserId());
         if (game is null)

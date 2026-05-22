@@ -16,8 +16,6 @@ public static partial class ControllerHelpers
 
     public static string NewToken() => Convert.ToHexString(Guid.NewGuid().ToByteArray()).ToLowerInvariant();
 
-    public static string JoinUrl(this ControllerBase controller, string path) => path;
-
     public const string NpcVisibilityVisible = "Visible";
     public const string NpcVisibilityHidden = "Hidden";
 

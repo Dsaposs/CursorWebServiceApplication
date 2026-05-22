@@ -1,4 +1,5 @@
 <script setup lang="ts">
+definePageMeta({ middleware: 'player-auth' });
 import type { InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
 import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
 import { parseCharacterStats } from '~/utils/dice';
@@ -206,7 +207,6 @@ async function withdrawAction(actionId: string) {
 }
 
 const playerStats = computed(() => parseCharacterStats(state.value?.character?.rulesetDataJson));
-const playerAttributes = computed(() => playerStats.value.attributes);
 
 onMounted(async () => {
   playerToken.value = getSessionPlayerToken(route.params.code);

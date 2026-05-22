@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ActionCard from '~/components/ActionCard.vue';
+definePageMeta({ middleware: 'auth' });
 import ActionEvaluationPanel from '~/components/ActionEvaluationPanel.vue';
 import ConfirmModal from '~/components/ConfirmModal.vue';
 import DmActionLog from '~/components/dm/DmActionLog.vue';
@@ -130,16 +130,10 @@ const {
 const rulesetDefinition = computed(() => parseRulesetDefinition(ruleset.value));
 const currentTurn = computed<InitiativeEntryResponse | null>(() => state.value?.initiative.find(e => e.isCurrentTurn) ?? null);
 const isCombat = computed(() => state.value?.state === 'Combat');
-const sessionEnded = computed(() => state.value && !state.value.isActive);
 const joinLink = computed(() => {
   if (!state.value) return '';
   return import.meta.client ? `${window.location.origin}${state.value.joinUrl}` : state.value.joinUrl;
 });
-const currentTurnNpc = computed(() => {
-  if (!game.value || currentTurn.value?.combatantType !== 'NpcOrMonster') return null;
-  return game.value.npcsAndMonsters.find(npc => npc.id === currentTurn.value?.combatantId) ?? null;
-});
-
 // Which initiative entry has its inline form expanded (DM manually activates per-entry)
 const activeCombatEntryId = ref<string | null>(null);
 
@@ -198,25 +192,6 @@ const {
   resetSelection: resetNpcActionSelection,
   buildSubmitPayload: buildNpcActionSubmitPayload,
 } = useRulesetActionChooser(rulesetDefinition, selectedNpcClassKey, selectedNpcInventory, isNpcActionActorSelected);
-const combatSetupEntries = computed(() => {
-  if (!state.value) return [];
-
-  return [
-    ...state.value.game.characters.map(character => ({
-      type: 'Character',
-      id: character.id,
-      name: character.name,
-      detail: character.playerName || 'Character',
-    })),
-    ...state.value.game.npcsAndMonsters.map(npc => ({
-      type: 'NpcOrMonster',
-      id: npc.id,
-      name: npc.name,
-      detail: npc.kind,
-    })),
-  ];
-});
-
 const {
   displayedInitiative,
   draggedEntry,
@@ -906,24 +881,6 @@ function rulesetActionDetail(action: ActionQueueItemResponse) {
   return rulesetAction && rulesetDefinition.value
     ? describeRulesetAction(rulesetAction, rulesetDefinition.value)
     : null;
-}
-
-/** Resolve actor stats for a pending action (character or NPC). */
-function actorStats(action: ActionQueueItemResponse) {
-  if (action.actorCharacterId) {
-    const char = state.value?.game.characters.find(c => c.id === action.actorCharacterId);
-    return char
-      ? parseCharacterStats(char.rulesetDataJson)
-      : null;
-  }
-  if (action.actorNpcId) {
-    const npc = state.value?.game.npcsAndMonsters.find(n => n.id === action.actorNpcId);
-    if (npc) {
-      const stats = parseStatMap(npc.statBlockJson);
-      return { attributes: stats, skills: stats, gameValues: {} as Record<string, number> };
-    }
-  }
-  return null;
 }
 
 /** Roll context for the NPC action form (uses the selected NPC's stats). */
