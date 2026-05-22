@@ -8,6 +8,7 @@
 |---------|------|-------------|------|
 | API | ASP.NET Core 8 + EF Core + SQLite | `dotnet run --project api/src/NotesApi/NotesApi.csproj --urls "http://0.0.0.0:5294"` | 5294 |
 | UI | Nuxt 4 (Vue 3, TypeScript) | `NUXT_API_BASE_URL=http://localhost:5294 npm run dev` (from `ui/src/`) | 3000 |
+| Mobile | Nuxt 3 + Ionic + Capacitor | `NUXT_API_BASE_URL=http://localhost:5294 npm run dev` (from `mobile/src/`) | 3001 |
 
 ### Running services
 
@@ -29,3 +30,5 @@
 - Health check: `GET http://localhost:5294/health` → "Healthy"
 - Swagger UI available at `http://localhost:5294/swagger` in Development mode.
 - The D&D 5e character creation flow requires `classKey`, `skillAllocations`, and `startingItemKey` fields — partial requests are rejected with validation errors.
+- Mobile app runs with SSR disabled (Capacitor requirement). Capacitor native platforms (iOS/Android) are **not** committed; run `npx cap add ios` / `npx cap add android` locally after `npm install` in `mobile/src/`.
+- All docker services can be started together with `docker compose up -d` from the repo root.

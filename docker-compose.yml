@@ -8,6 +8,7 @@ version: "3.9"
 #   redis     — SignalR backplane + cache (port 6379)
 #   api       — ASP.NET Core 8 backend (port 5294)
 #   ui        — Nuxt 4 BFF + frontend (port 3000)
+#   mobile    — Nuxt 3 + Ionic mobile web preview (port 3001)
 #   ollama    — local LLM server (port 11434)
 #   llm       — FastAPI oracle microservice (port 8000)
 #
@@ -108,6 +109,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  mobile:
+    build:
+      context: ./mobile
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      NUXT_API_BASE_URL: "http://api:5294"
+    ports:
+      - "3001:3001"
+    depends_on:
+      - api
 
 volumes:
   postgres_data:
