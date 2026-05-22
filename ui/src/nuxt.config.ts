@@ -3,6 +3,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/app.css'],
   runtimeConfig: {
     apiBaseUrl: process.env.NUXT_API_BASE_URL || 'http://localhost:5294',
+    llmBaseUrl: process.env.NUXT_LLM_BASE_URL || '',
   },
   app: {
     head: {

@@ -1,38 +1,114 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TTRPG Table — local development stack
+#
+# Services:
+#   postgres  — primary database (port 5432)
+#   redis     — SignalR backplane + cache (port 6379)
+#   api       — ASP.NET Core 8 backend (port 5294)
+#   ui        — Nuxt 4 BFF + frontend (port 3000)
+#   ollama    — local LLM server (port 11434)
+#   llm       — FastAPI oracle microservice (port 8000)
+#
+# Start everything:  docker compose up -d
+# Stop:              docker compose down
+# ─────────────────────────────────────────────────────────────────────────────
+
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ttrpg
+      POSTGRES_PASSWORD: ttrpg_dev
+      POSTGRES_DB: ttrpg
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ttrpg"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   api:
     build:
-      context: .
+      context: ./api
       dockerfile: Dockerfile
-    container_name: ttrpg-api
-    ports:
-      - "5294:8080"
-    volumes:
-      - ttrpg-data:/data
     environment:
-      ASPNETCORE_URLS: "http://+:8080"
-      ASPNETCORE_ENVIRONMENT: "Production"
-      ConnectionStrings__DefaultConnection: "Data Source=/data/ttrpg.db"
+      ASPNETCORE_ENVIRONMENT: Development
+      DATABASE_URL: "Host=postgres;Port=5432;Database=ttrpg;Username=ttrpg;Password=ttrpg_dev"
+      ConnectionStrings__Redis: "redis:6379"
+      Jwt__Key: "TtrpgApi-Dev-Signing-Key-Min-32-Chars-Long!"
       Jwt__Issuer: "TtrpgApi"
       Jwt__Audience: "TtrpgApi"
-      Jwt__Key: "${TTRPG_JWT_KEY}"
-      Seed__AdminPassword: "${TTRPG_SEED_ADMIN_PASSWORD}"
-      Cors__AllowedOrigins__0: "http://localhost:3000"
-    restart: unless-stopped
+      Seed__AdminPassword: "Password1"
+    ports:
+      - "5294:5294"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5294/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   ui:
     build:
-      context: ./ui/src
+      context: ./ui
       dockerfile: Dockerfile
-    container_name: ttrpg-ui
+    environment:
+      NUXT_API_BASE_URL: http://api:5294
+      NUXT_LLM_BASE_URL: http://llm:8000
     ports:
       - "3000:3000"
-    environment:
-      NUXT_API_BASE_URL: "http://ttrpg-api:8080"
-      HOST: "0.0.0.0"
-      PORT: "3000"
     depends_on:
-      - api
-    restart: unless-stopped
+      api:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Pull the default models on first start — comment out to skip
+    # entrypoint: ["sh", "-c", "ollama serve & sleep 5 && ollama pull mistral:7b-instruct && ollama pull nomic-embed-text && wait"]
+
+  llm:
+    build:
+      context: ./llm
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://ttrpg:ttrpg_dev@postgres:5432/ttrpg"
+      OLLAMA_URL: http://ollama:11434
+      EMBED_MODEL: nomic-embed-text
+      LLM_MODEL: "mistral:7b-instruct"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
-  ttrpg-data:
+  postgres_data:
+  ollama_data:
