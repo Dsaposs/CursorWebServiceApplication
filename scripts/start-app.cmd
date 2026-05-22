@@ -14,5 +14,11 @@ docker compose up --build -d
 if errorlevel 1 exit /b 1
 
 echo.
-echo UI: http://localhost:3000
-echo API: http://localhost:5294
+echo  API:    http://localhost:5294
+echo  UI:     http://localhost:3000
+echo  Mobile: http://localhost:3001
+echo  LLM:    http://localhost:8000
+echo  Ollama: http://localhost:11434
+echo.
+echo  Swagger: http://localhost:5294/swagger
+echo  Health:  http://localhost:5294/health
