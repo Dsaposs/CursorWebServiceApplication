@@ -178,10 +178,13 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     // EF Core migrations handle schema creation and upgrades for both SQLite (dev) and PostgreSQL (prod).
-    // For existing SQLite databases that were created with EnsureCreated before migrations were introduced,
-    // we still run the legacy raw-SQL helper to pick up any columns that EF doesn't know were already added.
     await db.Database.MigrateAsync();
-    await ApplySchemaUpdatesAsync(db);
+    // ApplySchemaUpdatesAsync uses SQLite PRAGMA statements and must only run on SQLite.
+    // PostgreSQL databases are always fully managed by EF Core migrations.
+    if (db.Database.IsSqlite())
+    {
+        await ApplySchemaUpdatesAsync(db);
+    }
     await SeedRulesetsAsync(db);
 
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
