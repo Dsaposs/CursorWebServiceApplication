@@ -1,6 +1,11 @@
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Models;
 using NotesApi.Services;
@@ -15,12 +20,18 @@ public class AuthController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly JwtTokenService _jwtTokenService;
+    private readonly ApplicationDbContext _db;
 
-    public AuthController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, JwtTokenService jwtTokenService)
+    public AuthController(
+        UserManager<ApplicationUser> userManager,
+        SignInManager<ApplicationUser> signInManager,
+        JwtTokenService jwtTokenService,
+        ApplicationDbContext db)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _jwtTokenService = jwtTokenService;
+        _db = db;
     }
 
     [HttpPost("register")]
@@ -39,7 +50,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
+    public async Task<ActionResult<AuthWithRefreshResponse>> Login(LoginRequest request)
     {
         var user = await _userManager.FindByEmailAsync(request.Email)
             ?? await _userManager.FindByNameAsync(request.Email);
@@ -49,6 +60,79 @@ public class AuthController : ControllerBase
         if (!result.Succeeded) return Unauthorized(new { errors = new[] { "Invalid email or password." } });
 
         var (token, expiresAt) = await _jwtTokenService.CreateTokenAsync(user);
-        return Ok(new AuthResponse { Token = token, ExpiresAt = expiresAt });
+        var refreshToken = await IssueRefreshTokenAsync(user.Id);
+
+        return Ok(new AuthWithRefreshResponse
+        {
+            Token = token,
+            ExpiresAt = expiresAt,
+            RefreshToken = refreshToken,
+        });
     }
+
+    /// <summary>
+    /// Exchanges a valid, non-expired refresh token for a new JWT + rotated refresh token.
+    /// Implements rotate-on-use: each token may only be used once.
+    /// </summary>
+    [HttpPost("refresh")]
+    public async Task<ActionResult<AuthWithRefreshResponse>> Refresh(RefreshTokenRequest request)
+    {
+        var hash = HashToken(request.RefreshToken);
+        var stored = await _db.RefreshTokens
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.TokenHash == hash && !t.IsRevoked && t.ExpiresAt > DateTime.UtcNow);
+
+        if (stored is null)
+            return Unauthorized(new { errors = new[] { "Refresh token is invalid or expired." } });
+
+        // Rotate: revoke old token and issue a fresh pair
+        stored.IsRevoked = true;
+        await _db.SaveChangesAsync();
+
+        var (token, expiresAt) = await _jwtTokenService.CreateTokenAsync(stored.User);
+        var newRefreshToken = await IssueRefreshTokenAsync(stored.UserId);
+
+        return Ok(new AuthWithRefreshResponse
+        {
+            Token = token,
+            ExpiresAt = expiresAt,
+            RefreshToken = newRefreshToken,
+        });
+    }
+
+    /// <summary>Revokes the given refresh token (logout).</summary>
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<IActionResult> Logout(RefreshTokenRequest request)
+    {
+        var hash = HashToken(request.RefreshToken);
+        var stored = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
+        if (stored is not null)
+        {
+            stored.IsRevoked = true;
+            await _db.SaveChangesAsync();
+        }
+
+        return NoContent();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    private async Task<string> IssueRefreshTokenAsync(string userId)
+    {
+        var raw = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            TokenHash = HashToken(raw),
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+        });
+        await _db.SaveChangesAsync();
+        return raw;
+    }
+
+    private static string HashToken(string token) =>
+        Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 }

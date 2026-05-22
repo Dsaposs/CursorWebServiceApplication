@@ -565,6 +565,30 @@ public class ActionResolution
     public DateTime PublishedAt { get; set; }
 }
 
+/// <summary>Stores rotate-on-use refresh tokens for JWT refresh without re-login.</summary>
+public class RefreshToken
+{
+    public Guid Id { get; set; }
+
+    [Required]
+    public string UserId { get; set; } = string.Empty;
+
+    public ApplicationUser User { get; set; } = null!;
+
+    /// <summary>The opaque token value presented by the client. Stored as a SHA-256 hash.</summary>
+    [Required, MaxLength(128)]
+    public string TokenHash { get; set; } = string.Empty;
+
+    /// <summary>Replaces the previous token on rotation; used to detect replay attacks.</summary>
+    public Guid? ReplacedById { get; set; }
+
+    public bool IsRevoked { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime ExpiresAt { get; set; }
+}
+
 public class InitiativeEntry
 {
     public Guid Id { get; set; }

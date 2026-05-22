@@ -6,6 +6,11 @@ public class AuthResponse
     public DateTime ExpiresAt { get; set; }
 }
 
+public class AuthWithRefreshResponse : AuthResponse
+{
+    public string RefreshToken { get; set; } = string.Empty;
+}
+
 public class RegisterResponse
 {
     public string UserId { get; set; } = string.Empty;

@@ -19,6 +19,8 @@ interface ApiOptions {
 const authToken = () => useState<string | null>('auth-token', () => null);
 const authEmail = () => useState<string>('auth-email', () => '');
 
+const REFRESH_TOKEN_KEY = 'ttrpg_refresh_token';
+
 /**
  * Decodes the `exp` claim from a JWT without any external library.
  * Returns the expiry as a Unix timestamp in seconds, or null if unparseable.
@@ -56,20 +58,42 @@ export function useApi() {
       token.value = stored;
       email.value = localStorage.getItem('ttrpg_email') || '';
     } else if (stored) {
-      // Token exists but is expired — clear it proactively
+      // Token is expired but we may have a refresh token — try a silent refresh
       localStorage.removeItem('ttrpg_token');
-      localStorage.removeItem('ttrpg_email');
       token.value = null;
       email.value = '';
+      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+      if (refreshToken) {
+        void silentRefresh(refreshToken);
+      }
     }
   }
 
-  function setSession(nextToken: string, nextEmail: string) {
+  async function silentRefresh(refreshToken: string): Promise<boolean> {
+    if (!import.meta.client) return false;
+    try {
+      const result = await $fetch<{ token: string; expiresAt: string; refreshToken: string }>('/api/auth/refresh', {
+        method: 'POST',
+        body: { refreshToken },
+      });
+      const storedEmail = localStorage.getItem('ttrpg_email') || '';
+      setSession(result.token, storedEmail, result.refreshToken);
+      return true;
+    } catch {
+      clearSession();
+      return false;
+    }
+  }
+
+  function setSession(nextToken: string, nextEmail: string, nextRefreshToken?: string) {
     token.value = nextToken;
     email.value = nextEmail;
     if (import.meta.client) {
       localStorage.setItem('ttrpg_token', nextToken);
       localStorage.setItem('ttrpg_email', nextEmail);
+      if (nextRefreshToken) {
+        localStorage.setItem(REFRESH_TOKEN_KEY, nextRefreshToken);
+      }
     }
   }
 
@@ -79,10 +103,23 @@ export function useApi() {
     if (import.meta.client) {
       localStorage.removeItem('ttrpg_token');
       localStorage.removeItem('ttrpg_email');
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
     }
   }
 
   async function api<T>(path: string, options: ApiOptions = {}) {
+    // Proactively refresh the JWT before making a request if it's about to expire
+    if (import.meta.client && token.value && isTokenExpired(token.value)) {
+      const rt = localStorage.getItem(REFRESH_TOKEN_KEY);
+      if (rt) {
+        const refreshed = await silentRefresh(rt);
+        if (!refreshed) {
+          await navigateTo('/login');
+          throw new ApiError(401, 'Session expired. Please log in again.');
+        }
+      }
+    }
+
     const headers = new Headers();
 
     if (token.value) {
@@ -112,7 +149,7 @@ export function useApi() {
     }
   }
 
-  return { api, token, email, loadSession, setSession, clearSession };
+  return { api, token, email, loadSession, setSession, clearSession, silentRefresh };
 }
 
 export function extractError(fetchError: unknown) {

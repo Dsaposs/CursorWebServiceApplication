@@ -23,6 +23,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SessionRollPrompt> SessionRollPrompts => Set<SessionRollPrompt>();
     public DbSet<CombatEncounter> CombatEncounters => Set<CombatEncounter>();
     public DbSet<SessionNote> SessionNotes => Set<SessionNote>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -118,7 +119,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(a => a.ActionKey).HasMaxLength(80);
             entity.Property(a => a.TargetName).HasMaxLength(160);
             entity.Property(a => a.Description).HasMaxLength(1000);
+            entity.Property(a => a.FollowUpType).HasMaxLength(20);
+            entity.Property(a => a.SessionModeAtSubmit).HasMaxLength(20);
+            entity.Property(a => a.RollMode).HasMaxLength(20).IsRequired();
+            entity.Property(a => a.FlavourText).HasMaxLength(500);
             entity.HasIndex(a => new { a.SessionId, a.Sequence }).IsUnique();
+            entity.HasIndex(a => a.ParentActionId);
             entity.HasOne(a => a.Session)
                 .WithMany(s => s.Actions)
                 .HasForeignKey(a => a.SessionId)
@@ -127,6 +133,21 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(e => e.Actions)
                 .HasForeignKey(a => a.CombatEncounterId)
                 .OnDelete(DeleteBehavior.SetNull);
+            // Self-referential for reactions and follow-up chains
+            entity.HasOne(a => a.ParentAction)
+                .WithMany(a => a.ChildActions)
+                .HasForeignKey(a => a.ParentActionId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasIndex(t => t.TokenHash).IsUnique();
+            entity.HasIndex(t => new { t.UserId, t.IsRevoked, t.ExpiresAt });
+            entity.HasOne(t => t.User)
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<ActionResolution>(entity =>

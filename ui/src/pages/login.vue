@@ -1,6 +1,5 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'guest-only' });
-import type { AuthResponse } from '~/types/api';
 
 const { api, setSession, loadSession, token } = useApi();
 const { error: toastError, success: toastSuccess } = useToast();
@@ -39,12 +38,12 @@ async function submit() {
       });
     }
 
-    const auth = await api<AuthResponse>('/api/auth/login', {
+    const auth = await api<{ token: string; expiresAt: string; refreshToken?: string }>('/api/auth/login', {
       method: 'POST',
       body: { email: email.value, password: password.value },
     });
 
-    setSession(auth.token, email.value);
+    setSession(auth.token, email.value, auth.refreshToken);
     toastSuccess('Welcome back!');
     await navigateTo('/games');
   } catch (err) {

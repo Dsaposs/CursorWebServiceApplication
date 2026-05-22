@@ -22,6 +22,12 @@ public class LoginRequest
     public string Password { get; set; } = string.Empty;
 }
 
+public class RefreshTokenRequest
+{
+    [Required]
+    public string RefreshToken { get; set; } = string.Empty;
+}
+
 public class CreateGameRequest
 {
     [Required, MaxLength(160)]

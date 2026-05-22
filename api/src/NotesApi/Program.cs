@@ -22,8 +22,21 @@ var jwtSettings = builder.Configuration
 
 ValidateSecurityConfiguration(builder.Environment, builder.Configuration, jwtSettings);
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Database provider: PostgreSQL when DATABASE_URL or a Postgres connection string is set; SQLite otherwise.
+var pgConnectionString = builder.Configuration["DATABASE_URL"]
+    ?? builder.Configuration.GetConnectionString("Postgres");
+
+if (!string.IsNullOrWhiteSpace(pgConnectionString))
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseNpgsql(pgConnectionString, npgsql => npgsql.MigrationsAssembly("NotesApi")));
+}
+else
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"),
+            sqlite => sqlite.MigrationsAssembly("NotesApi")));
+}
 
 builder.Services
     .AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -61,6 +74,20 @@ builder.Services
             ClockSkew = TimeSpan.FromMinutes(1),
             RoleClaimType = System.Security.Claims.ClaimTypes.Role,
         };
+
+        // SignalR WebSocket / SSE connections send the JWT as a query-string parameter
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = ctx =>
+            {
+                var token = ctx.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) && ctx.Request.Path.StartsWithSegments("/hubs"))
+                {
+                    ctx.Token = token;
+                }
+                return Task.CompletedTask;
+            },
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -73,7 +100,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy(FrontendCorsPolicy, policy =>
         policy.WithOrigins(allowedOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod());
+            .AllowAnyMethod()
+            .AllowCredentials());
 });
 builder.Services.AddRateLimiter(options =>
 {
@@ -92,10 +120,20 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddSingleton<RulesetDefinitionValidator>();
-builder.Services.AddSingleton<NotesApi.Services.IActionBroadcaster, NotesApi.Services.NoOpActionBroadcaster>();
+// Phase 3: real SignalR broadcaster replaces the Phase 2 no-op.
+builder.Services.AddScoped<NotesApi.Services.IActionBroadcaster, NotesApi.Hubs.SignalRActionBroadcaster>();
 builder.Services.AddHostedService<SessionTimeoutService>();
 builder.Services.AddHealthChecks();
 builder.Services.AddControllers();
+
+// SignalR — add Redis backplane when configured, fall back to in-memory for single-instance dev
+var signalR = builder.Services.AddSignalR();
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis")
+    ?? builder.Configuration["REDIS_URL"];
+if (!string.IsNullOrWhiteSpace(redisConnectionString))
+{
+    signalR.AddStackExchangeRedis(redisConnectionString);
+}
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -125,7 +163,10 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.EnsureCreated();
+    // EF Core migrations handle schema creation and upgrades for both SQLite (dev) and PostgreSQL (prod).
+    // For existing SQLite databases that were created with EnsureCreated before migrations were introduced,
+    // we still run the legacy raw-SQL helper to pick up any columns that EF doesn't know were already added.
+    await db.Database.MigrateAsync();
     await ApplySchemaUpdatesAsync(db);
     await SeedRulesetsAsync(db);
 
@@ -179,6 +220,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
+app.MapHub<NotesApi.Hubs.SessionHub>("/hubs/session");
 
 app.Run();
 

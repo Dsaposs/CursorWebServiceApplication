@@ -3,6 +3,10 @@ export interface AuthResponse {
   expiresAt: string;
 }
 
+export interface AuthWithRefreshResponse extends AuthResponse {
+  refreshToken: string;
+}
+
 export interface RulesetResponse {
   code: string;
   displayName: string;
