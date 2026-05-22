@@ -126,12 +126,37 @@ jobs:
     name: Push Docker images
     runs-on: ubuntu-latest
     needs: docker
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    # Skipped until GCP is configured. Set repository variable GCP_DEPLOY_ENABLED=true
+    # and add GCP_* secrets (see README / AGENTS.md).
+    if: >
+      vars.GCP_DEPLOY_ENABLED == 'true' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
+        github.event_name == 'workflow_dispatch'
+      )
     environment: production
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Verify GCP secrets
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          ARTIFACT_REGISTRY_REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}
+        run: |
+          missing=()
+          [ -z "$GCP_SA_KEY" ] && missing+=("GCP_SA_KEY")
+          [ -z "$GCP_PROJECT_ID" ] && missing+=("GCP_PROJECT_ID")
+          [ -z "$GCP_REGION" ] && missing+=("GCP_REGION")
+          [ -z "$ARTIFACT_REGISTRY_REPO" ] && missing+=("ARTIFACT_REGISTRY_REPO")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::GCP deploy is enabled but these secrets are missing: ${missing[*]}"
+            echo "Add them under Settings → Secrets and variables → Actions (repository or production environment)."
+            exit 1
+          fi
 
       - name: Google Auth
         uses: google-github-actions/auth@v2
@@ -165,12 +190,38 @@ jobs:
     name: Deploy to production
     runs-on: ubuntu-latest
     needs: docker-push
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: >
+      vars.GCP_DEPLOY_ENABLED == 'true' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
+        github.event_name == 'workflow_dispatch'
+      )
     environment: production
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Verify GCP secrets
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          ARTIFACT_REGISTRY_REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}
+          TTRPG_JWT_KEY: ${{ secrets.TTRPG_JWT_KEY }}
+          TTRPG_SEED_ADMIN_PASSWORD: ${{ secrets.TTRPG_SEED_ADMIN_PASSWORD }}
+        run: |
+          missing=()
+          [ -z "$GCP_SA_KEY" ] && missing+=("GCP_SA_KEY")
+          [ -z "$GCP_PROJECT_ID" ] && missing+=("GCP_PROJECT_ID")
+          [ -z "$GCP_REGION" ] && missing+=("GCP_REGION")
+          [ -z "$ARTIFACT_REGISTRY_REPO" ] && missing+=("ARTIFACT_REGISTRY_REPO")
+          [ -z "$TTRPG_JWT_KEY" ] && missing+=("TTRPG_JWT_KEY")
+          [ -z "$TTRPG_SEED_ADMIN_PASSWORD" ] && missing+=("TTRPG_SEED_ADMIN_PASSWORD")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::GCP deploy is enabled but these secrets are missing: ${missing[*]}"
+            exit 1
+          fi
 
       - name: Google Auth
         uses: google-github-actions/auth@v2
