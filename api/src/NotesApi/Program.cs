@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading.RateLimiting;
 using Asp.Versioning;
@@ -98,11 +100,25 @@ builder.Services.AddCors(options =>
         .GetSection("Cors:AllowedOrigins")
         .Get<string[]>() ?? new[] { "http://localhost:3000" };
 
+    var allowLocalNetwork = builder.Configuration.GetValue("Cors:AllowLocalNetwork", false);
+
     options.AddPolicy(FrontendCorsPolicy, policy =>
-        policy.WithOrigins(allowedOrigins)
-            .AllowAnyHeader()
+    {
+        policy.AllowAnyHeader()
             .AllowAnyMethod()
-            .AllowCredentials());
+            .AllowCredentials();
+
+        if (allowLocalNetwork && builder.Environment.IsDevelopment())
+        {
+            policy.SetIsOriginAllowed(origin =>
+                allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase)
+                || IsLocalNetworkOrigin(origin));
+        }
+        else
+        {
+            policy.WithOrigins(allowedOrigins);
+        }
+    });
 });
 builder.Services.AddRateLimiter(options =>
 {
@@ -997,4 +1013,58 @@ static async Task SeedRulesetsAsync(ApplicationDbContext db)
     }
 
     await db.SaveChangesAsync();
+}
+
+static bool IsLocalNetworkOrigin(string origin)
+{
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+    {
+        return false;
+    }
+
+    if (uri.Scheme is not "http" and not "https")
+    {
+        return false;
+    }
+
+    var host = uri.Host;
+    if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+        || host == "127.0.0.1"
+        || host == "[::1]")
+    {
+        return true;
+    }
+
+    return IPAddress.TryParse(host, out var ip) && IsPrivateOrLinkLocalAddress(ip);
+}
+
+static bool IsPrivateOrLinkLocalAddress(IPAddress ip)
+{
+    if (IPAddress.IsLoopback(ip))
+    {
+        return true;
+    }
+
+    if (ip.AddressFamily != AddressFamily.InterNetwork)
+    {
+        return false;
+    }
+
+    var bytes = ip.GetAddressBytes();
+    if (bytes[0] == 10)
+    {
+        return true;
+    }
+
+    if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+    {
+        return true;
+    }
+
+    if (bytes[0] == 192 && bytes[1] == 168)
+    {
+        return true;
+    }
+
+    return bytes[0] == 169 && bytes[1] == 254;
 }

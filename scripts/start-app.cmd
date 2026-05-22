@@ -10,6 +10,10 @@ if not exist ".env" (
   exit /b 1
 )
 
+echo Detecting LAN IP for network access...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0resolve-lan-host.ps1"
+if errorlevel 1 exit /b 1
+
 docker compose build --no-cache
 if errorlevel 1 exit /b 1
 
@@ -57,11 +61,14 @@ echo E2E tests passed.
 
 :done
 echo.
-echo  API:    http://localhost:5294
-echo  UI:     http://localhost:3000
-echo  Mobile: http://localhost:3001
-echo  LLM:    http://localhost:8000
-echo  Ollama: http://localhost:11434
+echo  Local (this machine):
+echo    API:    http://localhost:5294
+echo    UI:     http://localhost:3000
+echo    Mobile: http://localhost:3001
+echo    LLM:    http://localhost:8000
+echo    Ollama: http://localhost:11434
 echo.
 echo  Swagger: http://localhost:5294/swagger
 echo  Health:  http://localhost:5294/health
+echo.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0resolve-lan-host.ps1" -PrintUrls

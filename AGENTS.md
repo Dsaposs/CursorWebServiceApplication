@@ -35,3 +35,4 @@
 - The D&D 5e character creation flow requires `classKey`, `skillAllocations`, and `startingItemKey` fields — partial requests are rejected with validation errors.
 - Mobile app runs with SSR disabled (Capacitor requirement). Capacitor native platforms (iOS/Android) are **not** committed; run `npx cap add ios` / `npx cap add android` locally after `npm install` in `mobile/src/`.
 - All docker services can be started together with `docker compose up -d` from the repo root.
+- **LAN access:** `scripts/start-app.cmd` auto-detects `LAN_HOST` in `.env` so UI (`:3000`), mobile (`:3001`), and API (`:5294`) are reachable from other devices on the same network. Set `LAN_HOST` manually if auto-detection picks the wrong adapter.
