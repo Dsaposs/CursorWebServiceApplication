@@ -8,6 +8,7 @@ import { parseRulesetDefinition } from '~/utils/rulesets';
 import { useRulesetTheme } from '~/composables/useRulesetTheme';
 import { useThemePreference } from '~/composables/useThemePreference';
 import ActionForm from '~/components/ActionForm.vue';
+import ActionBuilder from '~/components/ActionBuilder.vue';
 import PlayerRollPromptOverlay from '~/components/PlayerRollPromptOverlay.vue';
 import PlayerCombatTurnOverlay from '~/components/PlayerCombatTurnOverlay.vue';
 import { isSameGuid } from '~/utils/rollPrompt';
@@ -466,8 +467,24 @@ async function skipTurn() {
             Take Action
           </button>
         </div>
+
+        <!-- Phase 2: ActionBuilder (structured action wizard) -->
+        <ActionBuilder
+          v-if="showActionForm && rulesetDefinition && state"
+          :session-join-code="String(route.params.code)"
+          :ruleset-definition="rulesetDefinition"
+          :session-mode="(state.state as 'Exploration' | 'Combat' | 'Downtime')"
+          :dice-roll-mode="(state.diceRollMode ?? 'App') as 'App' | 'Manual' | 'Hybrid'"
+          :is-my-turn="!isCombat"
+          :character-class-key="state.character?.classKey"
+          :player-token="playerToken"
+          @submitted="showActionForm = false; void refresh()"
+          @cancelled="showActionForm = false"
+        />
+
+        <!-- Legacy ActionForm (kept as fallback if ruleset has no structured actions) -->
         <ActionForm
-          v-if="showActionForm"
+          v-else-if="showActionForm && !rulesetDefinition"
           ref="actionFormRef"
           :ruleset-definition="rulesetDefinition"
           :class-key="state.character?.classKey"

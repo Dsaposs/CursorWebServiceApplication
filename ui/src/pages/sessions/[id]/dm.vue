@@ -106,13 +106,37 @@ watch(fatalError, (err) => {
   }
 });
 
-const pendingActions = computed(() => state.value?.actions.filter(a => a.status === 'Pending') ?? []);
+const activeStatuses = ['Pending', 'DmReviewing', 'AwaitingRoll', 'RollReceived', 'AwaitingReaction', 'ReactionPending', 'Resolving', 'AwaitingFollowUpRoll'];
+const pendingActions = computed(() => state.value?.actions.filter(a => activeStatuses.includes(a.status)) ?? []);
 
 /** Pending queue is exploration-only; combat resolves inline from initiative. */
 const explorationPendingActions = computed(() =>
   isCombat.value ? [] : pendingActions.value,
 );
 const publishedActions = computed(() => [...(state.value?.actions.filter(a => a.status === 'Published') ?? [])].reverse());
+
+// DM Resolution Workspace
+const workspaceAction = ref<ActionQueueItemResponse | null>(null);
+
+function openWorkspace(action: ActionQueueItemResponse) {
+  workspaceAction.value = action;
+}
+
+function onWorkspaceResolved(updated: ActionQueueItemResponse) {
+  if (state.value) {
+    const idx = state.value.actions.findIndex(a => a.id === updated.id);
+    if (idx >= 0) state.value.actions[idx] = updated;
+  }
+  if (updated.status === 'Published' || updated.status === 'Rejected') {
+    workspaceAction.value = null;
+  } else {
+    workspaceAction.value = updated;
+  }
+}
+
+function onWorkspaceRejected() {
+  workspaceAction.value = null;
+}
 const game = computed<GameResponse | null>(() => state.value?.game ?? null);
 const combatEncounters = computed(() => state.value?.combatEncounters ?? []);
 const activeEncounter = computed(() =>
@@ -1459,6 +1483,17 @@ onUnmounted(() => {
           </div><!-- /dm-combat-section -->
 
           <!-- Pending actions — hidden during combat (resolve from initiative instead) -->
+          <!-- DM Resolution Workspace (shown above the queue when open) -->
+          <DmResolutionWorkspace
+            v-if="workspaceAction"
+            :action="workspaceAction"
+            :game-id="state?.game.id ?? ''"
+            class="workspace-overlay"
+            @resolved="onWorkspaceResolved"
+            @rejected="onWorkspaceRejected"
+            @closed="workspaceAction = null"
+          />
+
           <div v-if="!isCombat" class="panel dashboard-primary-panel pending-actions-panel">
             <div class="panel-title">
               <div>
@@ -1505,7 +1540,15 @@ onUnmounted(() => {
                       {{ actionRollFlowLabel(pendingRollFlowStatus(action)) }}
                     </span>
                   </div>
-                  <span class="badge pending">{{ expandedPendingActions.has(action.id) ? 'Hide' : 'Resolve' }}</span>
+                  <div class="flex gap-1">
+                    <button
+                      class="btn ghost sm"
+                      type="button"
+                      title="Open in resolution workspace"
+                      @click.stop="openWorkspace(action)"
+                    >⚡ Workspace</button>
+                    <span class="badge pending">{{ expandedPendingActions.has(action.id) ? 'Hide' : 'Resolve' }}</span>
+                  </div>
                 </button>
 
                 <ActionEvaluationPanel

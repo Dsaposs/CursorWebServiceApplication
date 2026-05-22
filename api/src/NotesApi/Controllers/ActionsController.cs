@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,10 +16,12 @@ namespace NotesApi.Controllers;
 public class ActionsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
+    private readonly IActionBroadcaster _broadcaster;
 
-    public ActionsController(ApplicationDbContext db)
+    public ActionsController(ApplicationDbContext db, IActionBroadcaster broadcaster)
     {
         _db = db;
+        _broadcaster = broadcaster;
     }
 
     [HttpGet("sessions/{joinCode}/actions")]
@@ -156,6 +159,12 @@ public class ActionsController : ControllerBase
 
         var nextSequence = session.Actions.Count == 0 ? 1 : session.Actions.Max(a => a.Sequence) + 1;
         var now = DateTime.UtcNow;
+        var combatRound = session.State == SessionMode.Combat
+            ? (session.ActiveCombatEncounterId.HasValue
+                ? (await _db.Set<CombatEncounter>().FindAsync(session.ActiveCombatEncounterId.Value))?.Round
+                : null)
+            : null;
+
         var action = new ActionRequest
         {
             Id = Guid.NewGuid(),
@@ -172,6 +181,9 @@ public class ActionsController : ControllerBase
             Status = ActionStatus.Pending,
             Sequence = nextSequence,
             CombatEncounterId = CombatEncounterLifecycle.ResolveActionEncounterId(session),
+            SessionModeAtSubmit = session.State.ToString(),
+            CombatRound = combatRound,
+            RollMode = session.DiceRollMode.ToString(),
             SubmittedAt = now,
         };
 
@@ -179,7 +191,298 @@ public class ActionsController : ControllerBase
         Touch(session);
         await _db.SaveChangesAsync();
 
+        await _broadcaster.BroadcastToSessionAsync(session.Id, ActionEvents.ActionSubmitted, new
+        {
+            actionId = action.Id,
+            participantId = participant?.Id,
+            actorName = action.ActorName,
+            actionTypeLabel = actionText,
+            status = action.Status.ToString(),
+        });
+
         return CreatedAtAction(nameof(GetActions), new { joinCode, sinceSequence = nextSequence - 1 }, ControllerHelpers.ToActionResponse(action));
+    }
+
+    // ── Phase 2: action state-machine endpoints ───────────────────────────
+
+    /// <summary>DM opens an action in the resolution workspace (Pending|Submitted → DmReviewing).</summary>
+    [HttpPatch("actions/{actionId:guid}/review")]
+    [Authorize]
+    public async Task<ActionResult<ActionQueueItemResponse>> BeginReview(Guid actionId)
+    {
+        var action = await _db.ActionRequests
+            .Include(a => a.Session).ThenInclude(s => s.Game)
+            .Include(a => a.Resolution)
+            .Include(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .FirstOrDefaultAsync(a => a.Id == actionId);
+
+        if (action is null || !IsDm(action.Session?.Game?.DmUserId ?? ""))
+            return NotFound();
+
+        if (action.Status != ActionStatus.Pending)
+            return BadRequest(new { errors = new[] { "Only pending actions can be opened for review." } });
+
+        action.Status = ActionStatus.DmReviewing;
+        Touch(action.Session!);
+        await _db.SaveChangesAsync();
+
+        await _broadcaster.BroadcastToSessionAsync(action.SessionId, ActionEvents.ActionDmReviewing, new { actionId });
+        return Ok(ControllerHelpers.ToActionResponse(action));
+    }
+
+    /// <summary>DM sets the dice mode for a session.</summary>
+    [HttpPatch("sessions/{joinCode}/dice-mode")]
+    [Authorize]
+    public async Task<ActionResult<SessionSummaryResponse>> SetDiceMode(string joinCode, SetSessionDiceModeRequest request)
+    {
+        var session = await _db.GameSessions
+            .Include(s => s.Game)
+            .FirstOrDefaultAsync(s => s.JoinCode == joinCode && s.IsActive);
+
+        if (session is null) return NotFound();
+        if (!IsDm(session.Game.DmUserId)) return Forbid();
+
+        if (!Enum.TryParse<DiceRollMode>(request.Mode, ignoreCase: true, out var mode))
+            return BadRequest(new { errors = new[] { "Mode must be App, Manual, or Hybrid." } });
+
+        session.DiceRollMode = mode;
+        Touch(session);
+        await _db.SaveChangesAsync();
+
+        return Ok(this.ToSessionSummaryResponse(session));
+    }
+
+    /// <summary>DM requests a roll from the acting player (DmReviewing|RollReceived → AwaitingRoll).</summary>
+    [HttpPatch("actions/{actionId:guid}/request-roll")]
+    [Authorize]
+    public async Task<ActionResult<ActionQueueItemResponse>> RequestRoll(Guid actionId, RequestRollFromActionRequest request)
+    {
+        var action = await _db.ActionRequests
+            .Include(a => a.Session).ThenInclude(s => s.Game)
+            .Include(a => a.Resolution)
+            .Include(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .FirstOrDefaultAsync(a => a.Id == actionId);
+
+        if (action is null || !IsDm(action.Session?.Game?.DmUserId ?? ""))
+            return NotFound();
+
+        var allowedStatuses = new[] { ActionStatus.DmReviewing, ActionStatus.RollReceived };
+        if (!allowedStatuses.Contains(action.Status))
+            return BadRequest(new { errors = new[] { "Action must be in DmReviewing or RollReceived state to request a roll." } });
+
+        if (request.DifficultyModifier.HasValue)
+            action.DmDifficultyModifier = request.DifficultyModifier.Value;
+
+        if (request.Dc.HasValue)
+            action.EffectiveDc = request.Dc.Value;
+
+        action.Status = ActionStatus.AwaitingRoll;
+        Touch(action.Session!);
+        await _db.SaveChangesAsync();
+
+        await _broadcaster.BroadcastToSessionAsync(action.SessionId, ActionEvents.ActionRollRequested, new
+        {
+            actionId,
+            diceSpec = request.DiceSpec,
+            label = request.Label,
+            guidanceText = request.GuidanceText,
+            dc = request.Dc,
+            mode = action.RollMode,
+        });
+
+        return Ok(ControllerHelpers.ToActionResponse(action));
+    }
+
+    /// <summary>Player submits their roll result (AwaitingRoll → RollReceived).</summary>
+    [HttpPatch("actions/{actionId:guid}/submit-roll")]
+    public async Task<ActionResult<ActionQueueItemResponse>> SubmitRoll(Guid actionId, SubmitActionRollRequest request)
+    {
+        var action = await _db.ActionRequests
+            .Include(a => a.Session).ThenInclude(s => s.Game)
+            .Include(a => a.Resolution)
+            .Include(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .FirstOrDefaultAsync(a => a.Id == actionId);
+
+        if (action is null) return NotFound();
+
+        var participant = await GetParticipantAsync(action.Session.GameId);
+        var isDm = IsDm(action.Session.Game.DmUserId);
+        if (participant is null && !isDm) return Unauthorized(new { errors = new[] { "Join the session before submitting a roll." } });
+
+        if (action.Status != ActionStatus.AwaitingRoll && action.Status != ActionStatus.AwaitingFollowUpRoll)
+            return BadRequest(new { errors = new[] { "Action is not awaiting a roll." } });
+
+        // Build and store the roll data as JSON
+        var rollData = new
+        {
+            individualRolls = request.IndividualRolls,
+            baseModifier = request.BaseModifier,
+            modifierKeys = request.ModifierKeys,
+            total = request.Total,
+            rollSummary = request.RollSummary,
+        };
+
+        action.RollDataJson = System.Text.Json.JsonSerializer.Serialize(rollData, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        action.Status = ActionStatus.RollReceived;
+        Touch(action.Session!);
+        await _db.SaveChangesAsync();
+
+        await _broadcaster.BroadcastToDmAsync(
+            action.SessionId,
+            action.Session.Game.DmUserId,
+            ActionEvents.ActionRollReceived,
+            new { actionId, rollData });
+
+        return Ok(ControllerHelpers.ToActionResponse(action));
+    }
+
+    /// <summary>DM triggers a reaction from another player, pausing the original action.</summary>
+    [HttpPost("actions/{actionId:guid}/reactions")]
+    [Authorize]
+    public async Task<ActionResult<ActionQueueItemResponse>> TriggerReaction(Guid actionId, TriggerReactionRequest request)
+    {
+        var original = await _db.ActionRequests
+            .Include(a => a.Session).ThenInclude(s => s.Game)
+            .Include(a => a.Session).ThenInclude(s => s.Actions)
+            .Include(a => a.Resolution)
+            .Include(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .FirstOrDefaultAsync(a => a.Id == actionId);
+
+        if (original is null || !IsDm(original.Session?.Game?.DmUserId ?? ""))
+            return NotFound();
+
+        var validTriggerStatuses = new[] { ActionStatus.DmReviewing, ActionStatus.RollReceived, ActionStatus.Resolving };
+        if (!validTriggerStatuses.Contains(original.Status))
+            return BadRequest(new { errors = new[] { "Can only trigger reactions while reviewing or resolving an action." } });
+
+        var reacting = await _db.GameParticipants
+            .Include(p => p.Character)
+            .FirstOrDefaultAsync(p => p.Id == request.ReactingParticipantId && p.GameId == original.Session!.GameId);
+
+        if (reacting is null)
+            return BadRequest(new { errors = new[] { "Reacting participant was not found in this game." } });
+
+        // Create the child reaction action
+        var now = DateTime.UtcNow;
+        var nextSeq = original.Session!.Actions.Count == 0 ? 1 : original.Session.Actions.Max(a => a.Sequence) + 1;
+        var reaction = new ActionRequest
+        {
+            Id = Guid.NewGuid(),
+            SessionId = original.SessionId,
+            ParentActionId = original.Id,
+            FollowUpType = FollowUpTypes.Reaction,
+            ActorCharacterId = reacting.CharacterId,
+            ActorName = reacting.Character.Name,
+            ActionText = request.ReactionType,
+            Description = request.ContextNote,
+            Status = ActionStatus.ReactionPending,
+            Sequence = nextSeq,
+            RollMode = original.RollMode,
+            SessionModeAtSubmit = original.SessionModeAtSubmit,
+            CombatRound = original.CombatRound,
+            SubmittedAt = now,
+        };
+        _db.ActionRequests.Add(reaction);
+
+        original.Status = ActionStatus.AwaitingReaction;
+        Touch(original.Session!);
+        await _db.SaveChangesAsync();
+
+        await _broadcaster.BroadcastToParticipantAsync(
+            original.SessionId,
+            reacting.JoinToken,
+            ActionEvents.ActionReactionRequested,
+            new
+            {
+                reactionId = reaction.Id,
+                parentActionId = original.Id,
+                reactionType = request.ReactionType,
+                diceSpec = request.DiceSpec,
+                context = request.ContextNote,
+            });
+
+        return Ok(ControllerHelpers.ToActionResponse(reaction));
+    }
+
+    /// <summary>Reacting player submits their reaction roll (ReactionPending → RollReceived).</summary>
+    [HttpPatch("reactions/{reactionId:guid}/submit")]
+    public async Task<ActionResult<ActionQueueItemResponse>> SubmitReaction(Guid reactionId, SubmitActionRollRequest request)
+    {
+        var reaction = await _db.ActionRequests
+            .Include(a => a.Session).ThenInclude(s => s.Game)
+            .Include(a => a.ParentAction).ThenInclude(p => p!.Resolution)
+            .Include(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .FirstOrDefaultAsync(a => a.Id == reactionId && a.FollowUpType == FollowUpTypes.Reaction);
+
+        if (reaction is null) return NotFound();
+
+        var participant = await GetParticipantAsync(reaction.Session.GameId);
+        var isDm = IsDm(reaction.Session.Game.DmUserId);
+        if (participant is null && !isDm)
+            return Unauthorized(new { errors = new[] { "Join the session before submitting a reaction roll." } });
+
+        if (reaction.Status != ActionStatus.ReactionPending)
+            return BadRequest(new { errors = new[] { "This reaction is not awaiting a roll." } });
+
+        var rollData = new
+        {
+            individualRolls = request.IndividualRolls,
+            baseModifier = request.BaseModifier,
+            modifierKeys = request.ModifierKeys,
+            total = request.Total,
+            rollSummary = request.RollSummary,
+        };
+
+        reaction.RollDataJson = System.Text.Json.JsonSerializer.Serialize(rollData, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        reaction.Status = ActionStatus.RollReceived;
+
+        // Resume the original action so the DM can see both results
+        if (reaction.ParentAction is not null && reaction.ParentAction.Status == ActionStatus.AwaitingReaction)
+        {
+            reaction.ParentAction.Status = ActionStatus.Resolving;
+        }
+
+        Touch(reaction.Session!);
+        await _db.SaveChangesAsync();
+
+        await _broadcaster.BroadcastToDmAsync(
+            reaction.SessionId,
+            reaction.Session.Game.DmUserId,
+            ActionEvents.ActionReactionReceived,
+            new { reactionId, rollData });
+
+        return Ok(ControllerHelpers.ToActionResponse(reaction));
+    }
+
+    /// <summary>DM moves action into the Resolving state (with optional DC/modifier).</summary>
+    [HttpPatch("actions/{actionId:guid}/begin-resolve")]
+    [Authorize]
+    public async Task<ActionResult<ActionQueueItemResponse>> BeginResolve(Guid actionId, BeginResolveRequest request)
+    {
+        var action = await _db.ActionRequests
+            .Include(a => a.Session).ThenInclude(s => s.Game)
+            .Include(a => a.Resolution)
+            .Include(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .FirstOrDefaultAsync(a => a.Id == actionId);
+
+        if (action is null || !IsDm(action.Session?.Game?.DmUserId ?? ""))
+            return NotFound();
+
+        var allowedStatuses = new[] { ActionStatus.DmReviewing, ActionStatus.RollReceived, ActionStatus.AwaitingReaction };
+        if (!allowedStatuses.Contains(action.Status))
+            return BadRequest(new { errors = new[] { "Action cannot be moved to Resolving from its current state." } });
+
+        if (request.DifficultyModifier.HasValue)
+            action.DmDifficultyModifier = request.DifficultyModifier.Value;
+
+        if (request.EffectiveDc.HasValue)
+            action.EffectiveDc = request.EffectiveDc.Value;
+
+        action.Status = ActionStatus.Resolving;
+        Touch(action.Session!);
+        await _db.SaveChangesAsync();
+
+        return Ok(ControllerHelpers.ToActionResponse(action));
     }
 
     [HttpPut("actions/{actionId:guid}/resolve")]
@@ -203,9 +506,15 @@ public class ActionsController : ControllerBase
             return NotFound();
         }
 
-        if (action.Status != ActionStatus.Pending)
+        // Accept resolution from any active state — Pending (legacy path), or new state-machine states
+        var resolvableStatuses = new[]
         {
-            return BadRequest(new { errors = new[] { "Only pending actions can be resolved." } });
+            ActionStatus.Pending, ActionStatus.DmReviewing, ActionStatus.RollReceived,
+            ActionStatus.Resolving, ActionStatus.AwaitingFollowUpRoll,
+        };
+        if (!resolvableStatuses.Contains(action.Status))
+        {
+            return BadRequest(new { errors = new[] { "Action cannot be resolved from its current state." } });
         }
 
         var statChanges = request.StatChanges ?? [];
@@ -218,6 +527,7 @@ public class ActionsController : ControllerBase
         var now = DateTime.UtcNow;
         action.Status = ActionStatus.Published;
         action.PublishedAt = now;
+        action.ResolvedAt = now;
 
         // Explicitly add the resolution to the change tracker so EF Core
         // correctly issues an INSERT rather than relying on relationship fixup.
@@ -250,7 +560,17 @@ public class ActionsController : ControllerBase
         Touch(action.Session);
         await _db.SaveChangesAsync();
 
-        return Ok(ControllerHelpers.ToActionResponse(action));
+        var response = ControllerHelpers.ToActionResponse(action);
+        await _broadcaster.BroadcastToSessionAsync(action.SessionId, ActionEvents.ActionResolved, new
+        {
+            actionId = action.Id,
+            outcome = response.Outcome,
+            statChangesJson = response.StatChangesJson,
+            narrative = response.ResolutionText,
+            resolvedAt = action.ResolvedAt,
+        });
+
+        return Ok(response);
     }
 
     [HttpPut("actions/{actionId:guid}/reject")]
@@ -274,14 +594,16 @@ public class ActionsController : ControllerBase
             return NotFound();
         }
 
-        if (action.Status != ActionStatus.Pending)
+        var rejectableStatuses = new[] { ActionStatus.Pending, ActionStatus.DmReviewing, ActionStatus.RollReceived, ActionStatus.Resolving };
+        if (!rejectableStatuses.Contains(action.Status))
         {
-            return BadRequest(new { errors = new[] { "Only pending actions can be rejected." } });
+            return BadRequest(new { errors = new[] { "Action cannot be rejected from its current state." } });
         }
 
         var now = DateTime.UtcNow;
         action.Status = ActionStatus.Rejected;
         action.PublishedAt = now;
+        action.ResolvedAt = now;
 
         if (action.Resolution is null)
         {
@@ -829,6 +1151,25 @@ public class ActionsController : ControllerBase
     }
 
     private bool IsDm(string dmUserId) => User.Identity?.IsAuthenticated == true && this.UserId() == dmUserId;
+
+    // ── Phase 2: state-machine helpers ────────────────────────────────────
+
+    private async Task<ActionResult<ActionQueueItemResponse>?> LoadActionForDmAsync(Guid actionId)
+    {
+        var action = await _db.ActionRequests
+            .Include(a => a.Session).ThenInclude(s => s.Game)
+            .Include(a => a.Resolution)
+            .Include(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .FirstOrDefaultAsync(a => a.Id == actionId);
+
+        if (action is null || action.Session is null || action.Session.Game is null)
+            return null;
+
+        if (!IsDm(action.Session.Game.DmUserId))
+            return null;
+
+        return ControllerHelpers.ToActionResponse(action);
+    }
 
     /// <summary>
     /// Pre-loads all characters and NPCs referenced by <paramref name="statChanges"/> in two

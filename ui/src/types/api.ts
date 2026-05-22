@@ -291,6 +291,27 @@ export interface SessionJoinOptionsResponse {
   availableCharacters: CharacterResponse[];
 }
 
+export type DiceRollMode = 'App' | 'Manual' | 'Hybrid';
+
+export type ActionStatus =
+  | 'Pending'
+  | 'Published'
+  | 'Rejected'
+  | 'Cancelled'
+  | 'DmReviewing'
+  | 'AwaitingRoll'
+  | 'RollReceived'
+  | 'AwaitingReaction'
+  | 'ReactionPending'
+  | 'Resolving'
+  | 'AwaitingFollowUpRoll';
+
+export interface DiceRollResponse {
+  spec: string;
+  rolls: number[];
+  total: number;
+}
+
 export interface SessionSummaryResponse {
   id: string;
   gameId: string;
@@ -298,6 +319,8 @@ export interface SessionSummaryResponse {
   joinUrl: string;
   isActive: boolean;
   state: string;
+  diceRollMode: DiceRollMode;
+  activeTurnParticipantId?: string | null;
   version: number;
   startedAt: string;
   endedAt?: string | null;
@@ -351,6 +374,14 @@ export interface RollPromptResponse {
   completedAt?: string | null;
 }
 
+export interface ActionRollData {
+  individualRolls: number[];
+  baseModifier: number;
+  modifierKeys: string[];
+  total: number;
+  rollSummary?: string | null;
+}
+
 export interface ActionQueueItemResponse {
   id: string;
   sequence: number;
@@ -359,13 +390,15 @@ export interface ActionQueueItemResponse {
   actorNpcId?: string | null;
   actionKey?: string | null;
   actionText: string;
+  flavourText?: string | null;
   targetNpcId?: string | null;
   targetName?: string | null;
   description?: string | null;
-  status: string;
+  status: ActionStatus;
   resolutionText?: string | null;
   outcome?: 'Pass' | 'Fail' | null;
   rollSummary?: string | null;
+  rollDataJson?: string | null;
   additionalActions?: string | null;
   statChangesJson: string;
   pendingChainEffectsJson?: string;
@@ -375,8 +408,17 @@ export interface ActionQueueItemResponse {
   isSkillCheckResponse?: boolean;
   skillCheckBatchId?: string | null;
   skillCheckGroupLabel?: string | null;
+  rollMode: DiceRollMode;
+  dmDifficultyModifier?: number | null;
+  effectiveDc?: number | null;
+  parentActionId?: string | null;
+  followUpType?: 'reaction' | 'chain' | null;
+  chainStep?: number | null;
+  sessionModeAtSubmit?: string | null;
+  combatRound?: number | null;
   submittedAt: string;
   publishedAt?: string | null;
+  resolvedAt?: string | null;
 }
 
 export interface InitiativeEntryResponse {

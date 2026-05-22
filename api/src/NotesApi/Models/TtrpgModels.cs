@@ -10,10 +10,39 @@ public enum SessionMode
 
 public enum ActionStatus
 {
+    /// <summary>Player has submitted; waiting for DM attention.</summary>
     Pending = 0,
+    /// <summary>DM has confirmed resolution; action is visible to all.</summary>
     Published = 1,
     Rejected = 2,
     Cancelled = 3,
+    /// <summary>DM has opened the action in the resolution workspace.</summary>
+    DmReviewing = 4,
+    /// <summary>DM has sent a roll prompt; waiting for player roll.</summary>
+    AwaitingRoll = 5,
+    /// <summary>Player roll received; DM reviewing.</summary>
+    RollReceived = 6,
+    /// <summary>DM has triggered a reaction; original action is paused.</summary>
+    AwaitingReaction = 7,
+    /// <summary>Reaction child action created; waiting for reacting player.</summary>
+    ReactionPending = 8,
+    /// <summary>All rolls complete; DM is writing resolution text.</summary>
+    Resolving = 9,
+    /// <summary>DM has requested a follow-up roll.</summary>
+    AwaitingFollowUpRoll = 10,
+}
+
+public enum DiceRollMode
+{
+    App = 0,
+    Manual = 1,
+    Hybrid = 2,
+}
+
+public static class FollowUpTypes
+{
+    public const string Reaction = "reaction";
+    public const string Chain = "chain";
 }
 
 public enum ActionOutcome
@@ -207,6 +236,12 @@ public class GameSession
 
     public string NpcVisibilitiesJson { get; set; } = "{}";
 
+    /// <summary>Session-level dice input mode set by the DM at session start.</summary>
+    public DiceRollMode DiceRollMode { get; set; } = DiceRollMode.App;
+
+    /// <summary>In Combat mode, the participant whose turn is currently active.</summary>
+    public Guid? ActiveTurnParticipantId { get; set; }
+
     public Guid? ActiveCombatEncounterId { get; set; }
 
     public CombatEncounter? ActiveCombatEncounter { get; set; }
@@ -387,13 +422,55 @@ public class ActionRequest
     /// <summary>Stat changes suggested by completed roll-chain steps, pending DM confirmation on resolve.</summary>
     public string PendingChainEffectsJson { get; set; } = "[]";
 
+    // ── Phase 2: state-machine fields ─────────────────────────────────────
+
+    /// <summary>Non-null for reactions and follow-up chain actions; points to the originating action.</summary>
+    public Guid? ParentActionId { get; set; }
+
+    public ActionRequest? ParentAction { get; set; }
+
+    /// <summary>"reaction" | "chain" — see FollowUpTypes constants.</summary>
+    [MaxLength(20)]
+    public string? FollowUpType { get; set; }
+
+    /// <summary>Step index within a multi-roll chain (null for the root action).</summary>
+    public int? ChainStep { get; set; }
+
+    /// <summary>Session mode that was active when the player submitted this action.</summary>
+    [MaxLength(20)]
+    public string? SessionModeAtSubmit { get; set; }
+
+    /// <summary>Combat round number when submitted; null outside of combat.</summary>
+    public int? CombatRound { get; set; }
+
+    /// <summary>DM-applied difficulty modifier (positive = harder, negative = easier).</summary>
+    public int? DmDifficultyModifier { get; set; }
+
+    /// <summary>Final effective DC used for the primary roll.</summary>
+    public int? EffectiveDc { get; set; }
+
+    /// <summary>Dice input mode for this action (App/Manual/Hybrid).</summary>
+    [MaxLength(20)]
+    public string RollMode { get; set; } = "App";
+
+    /// <summary>Structured roll data from the primary roll (JSON: spec, individualRolls, baseModifier, modifierKeys, total).</summary>
+    public string? RollDataJson { get; set; }
+
+    /// <summary>Optional player-written flavour description of their action.</summary>
+    [MaxLength(500)]
+    public string? FlavourText { get; set; }
+
     public DateTime SubmittedAt { get; set; }
 
     public DateTime? PublishedAt { get; set; }
 
+    public DateTime? ResolvedAt { get; set; }
+
     public ActionResolution? Resolution { get; set; }
 
     public ICollection<ActionRollPrompt> RollPrompts { get; set; } = new List<ActionRollPrompt>();
+
+    public ICollection<ActionRequest> ChildActions { get; set; } = new List<ActionRequest>();
 }
 
 public class ActionRollPrompt

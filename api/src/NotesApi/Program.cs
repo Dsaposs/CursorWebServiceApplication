@@ -92,6 +92,7 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddSingleton<RulesetDefinitionValidator>();
+builder.Services.AddSingleton<NotesApi.Services.IActionBroadcaster, NotesApi.Services.NoOpActionBroadcaster>();
 builder.Services.AddHostedService<SessionTimeoutService>();
 builder.Services.AddHealthChecks();
 builder.Services.AddControllers();
@@ -734,6 +735,21 @@ static async Task ApplySchemaUpdatesAsync(ApplicationDbContext db)
     await EnsureColumnAsync(connection, "InitiativeEntries", "InitiativeScore", "INTEGER NOT NULL DEFAULT 0");
     await EnsureColumnAsync(connection, "CombatEncounters", "Round", "INTEGER NOT NULL DEFAULT 1");
     await EnsureColumnAsync(connection, "CombatEncounters", "PromptedTurnCharacterId", "TEXT NULL");
+
+    // Phase 2: action state-machine columns
+    await EnsureColumnAsync(connection, "GameSessions", "DiceRollMode", "INTEGER NOT NULL DEFAULT 0");
+    await EnsureColumnAsync(connection, "GameSessions", "ActiveTurnParticipantId", "TEXT NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "ParentActionId", "TEXT NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "FollowUpType", "TEXT NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "ChainStep", "INTEGER NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "SessionModeAtSubmit", "TEXT NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "CombatRound", "INTEGER NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "DmDifficultyModifier", "INTEGER NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "EffectiveDc", "INTEGER NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "RollMode", "TEXT NOT NULL DEFAULT 'App'");
+    await EnsureColumnAsync(connection, "ActionRequests", "RollDataJson", "TEXT NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "FlavourText", "TEXT NULL");
+    await EnsureColumnAsync(connection, "ActionRequests", "ResolvedAt", "TEXT NULL");
 
     if (!wasOpen)
         await connection.CloseAsync();

@@ -107,10 +107,19 @@ public class SessionSummaryResponse
     public string JoinUrl { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public string State { get; set; } = string.Empty;
+    public string DiceRollMode { get; set; } = "App";
+    public Guid? ActiveTurnParticipantId { get; set; }
     public int Version { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+public class DiceRollResponse
+{
+    public string Spec { get; set; } = string.Empty;
+    public List<int> Rolls { get; set; } = new();
+    public int Total { get; set; }
 }
 
 public class SessionStateResponse : SessionSummaryResponse
@@ -175,9 +184,11 @@ public class ActionQueueItemResponse
     public Guid? TargetNpcId { get; set; }
     public string? TargetName { get; set; }
     public string? Description { get; set; }
+    public string? FlavourText { get; set; }
     public string Status { get; set; } = string.Empty;
     public string? ResolutionText { get; set; }
     public string? RollSummary { get; set; }
+    public string? RollDataJson { get; set; }
     public string? AdditionalActions { get; set; }
     public string? Outcome { get; set; }
     public string StatChangesJson { get; set; } = "[]";
@@ -188,8 +199,17 @@ public class ActionQueueItemResponse
     public bool IsSkillCheckResponse { get; set; }
     public Guid? SkillCheckBatchId { get; set; }
     public string? SkillCheckGroupLabel { get; set; }
+    public string RollMode { get; set; } = "App";
+    public int? DmDifficultyModifier { get; set; }
+    public int? EffectiveDc { get; set; }
+    public Guid? ParentActionId { get; set; }
+    public string? FollowUpType { get; set; }
+    public int? ChainStep { get; set; }
+    public string? SessionModeAtSubmit { get; set; }
+    public int? CombatRound { get; set; }
     public DateTime SubmittedAt { get; set; }
     public DateTime? PublishedAt { get; set; }
+    public DateTime? ResolvedAt { get; set; }
 }
 
 public class InitiativeEntryResponse

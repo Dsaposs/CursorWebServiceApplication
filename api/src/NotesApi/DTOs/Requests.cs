@@ -280,6 +280,90 @@ public class DmRollRequest
     public int? Dc { get; set; }
 }
 
+public class SetSessionDiceModeRequest
+{
+    /// <summary>"App", "Manual", or "Hybrid".</summary>
+    [Required, MaxLength(20)]
+    public string Mode { get; set; } = "App";
+}
+
+public class RequestRollFromActionRequest
+{
+    /// <summary>Dice notation, e.g. "1d20", "2d6". Used for App and Hybrid modes.</summary>
+    [Required, MaxLength(40)]
+    public string DiceSpec { get; set; } = string.Empty;
+
+    /// <summary>Human-readable label shown to the player, e.g. "Attack Roll — STR".</summary>
+    [MaxLength(200)]
+    public string? Label { get; set; }
+
+    /// <summary>Contextual guidance explaining why the roll is needed.</summary>
+    [MaxLength(500)]
+    public string? GuidanceText { get; set; }
+
+    /// <summary>Difficulty class. When set, pass/fail is auto-resolved on submission.</summary>
+    [Range(1, 100)]
+    public int? Dc { get; set; }
+
+    /// <summary>DM-applied difficulty modifier applied on top of the base DC.</summary>
+    public int? DifficultyModifier { get; set; }
+}
+
+public class SubmitActionRollRequest
+{
+    /// <summary>Individual die values (e.g. [14] for 1d20, [3, 5] for 2d6).</summary>
+    [Required]
+    public List<int> IndividualRolls { get; set; } = new();
+
+    /// <summary>Base stat modifier applied before any situational bonuses.</summary>
+    public int BaseModifier { get; set; }
+
+    /// <summary>Keys of situational modifier options selected by the player.</summary>
+    public List<string> ModifierKeys { get; set; } = new();
+
+    /// <summary>Calculated total: sum(individualRolls) + baseModifier + sum(selectedModifiers).</summary>
+    public int Total { get; set; }
+
+    /// <summary>Optional human-readable summary override (e.g. "3 successes — Push the Roll").</summary>
+    [MaxLength(500)]
+    public string? RollSummary { get; set; }
+}
+
+public class TriggerReactionRequest
+{
+    /// <summary>Participant ID of the player being asked to react.</summary>
+    public Guid ReactingParticipantId { get; set; }
+
+    /// <summary>Type label for the reaction, e.g. "Opportunity Attack", "Counter".</summary>
+    [Required, MaxLength(80)]
+    public string ReactionType { get; set; } = string.Empty;
+
+    /// <summary>Dice notation for the reaction roll, e.g. "1d20".</summary>
+    [MaxLength(40)]
+    public string? DiceSpec { get; set; }
+
+    /// <summary>Optional DM note explaining the trigger context.</summary>
+    [MaxLength(500)]
+    public string? ContextNote { get; set; }
+}
+
+public class BeginResolveRequest
+{
+    /// <summary>Optional DM difficulty modifier to apply to the roll effective total.</summary>
+    public int? DifficultyModifier { get; set; }
+
+    /// <summary>Optional final DC to record for the resolution.</summary>
+    [Range(1, 100)]
+    public int? EffectiveDc { get; set; }
+}
+
+public class DiceRollRequest
+{
+    /// <summary>Standard dice notation, e.g. "1d20", "2d6", "4d6".</summary>
+    [Required, MaxLength(40)]
+    public string Spec { get; set; } = string.Empty;
+}
+
 public class SetupCombatRequest
 {
     public IEnumerable<CombatantRequest> Combatants { get; set; } = Array.Empty<CombatantRequest>();

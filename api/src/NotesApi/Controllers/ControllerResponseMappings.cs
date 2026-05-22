@@ -80,6 +80,8 @@ public static partial class ControllerHelpers
         JoinUrl = $"/join/{session.JoinCode}",
         IsActive = session.IsActive,
         State = session.State.ToString(),
+        DiceRollMode = session.DiceRollMode.ToString(),
+        ActiveTurnParticipantId = session.ActiveTurnParticipantId,
         Version = session.Version,
         StartedAt = session.StartedAt,
         EndedAt = session.EndedAt,
@@ -108,40 +110,51 @@ public static partial class ControllerHelpers
         }
 
         return new ActionQueueItemResponse
-    {
-        Id = action.Id,
-        Sequence = action.Sequence,
-        IsSkillCheckResponse = isSkillCheckResponse,
-        ActorName = actorName,
-        ActorCharacterId = action.ActorCharacterId,
-        ActorNpcId = playerView && action.ActorNpcId.HasValue && !ControllerHelpers.IsNpcVisible(action.ActorNpcId.Value, npcVisibilities)
-            ? null
-            : action.ActorNpcId,
-        ActionKey = action.ActionKey,
-        ActionText = action.ActionText,
-        TargetNpcId = playerView && action.TargetNpcId.HasValue && !ControllerHelpers.IsNpcVisible(action.TargetNpcId.Value, npcVisibilities)
-            ? null
-            : action.TargetNpcId,
-        TargetName = targetName,
-        Description = action.Description,
-        Status = action.Status.ToString(),
-        ResolutionText = action.Resolution?.ResolutionText,
-        RollSummary = action.Resolution?.RollSummary,
-        AdditionalActions = action.Resolution?.AdditionalActions,
-        Outcome = action.Resolution?.Outcome?.ToString(),
-        StatChangesJson = action.Resolution?.StatChangesJson ?? "[]",
-        PendingChainEffectsJson = action.PendingChainEffectsJson ?? "[]",
-        FollowUpRolls = action.RollPrompts
-            .Where(p => p.Status == RollPromptStatus.Completed)
-            .OrderBy(p => p.CreatedAt)
-            .Select(p => ToRollPromptResponse(p, action)),
-        CombatEncounterId = action.CombatEncounterId,
-        CombatEncounterSequence = action.CombatEncounter?.Sequence,
-        SkillCheckBatchId = action.SkillCheckBatchId,
-        SkillCheckGroupLabel = action.SkillCheckGroupLabel,
-        SubmittedAt = action.SubmittedAt,
-        PublishedAt = action.PublishedAt,
-    };
+        {
+            Id = action.Id,
+            Sequence = action.Sequence,
+            IsSkillCheckResponse = isSkillCheckResponse,
+            ActorName = actorName,
+            ActorCharacterId = action.ActorCharacterId,
+            ActorNpcId = playerView && action.ActorNpcId.HasValue && !ControllerHelpers.IsNpcVisible(action.ActorNpcId.Value, npcVisibilities)
+                ? null
+                : action.ActorNpcId,
+            ActionKey = action.ActionKey,
+            ActionText = action.ActionText,
+            FlavourText = action.FlavourText,
+            TargetNpcId = playerView && action.TargetNpcId.HasValue && !ControllerHelpers.IsNpcVisible(action.TargetNpcId.Value, npcVisibilities)
+                ? null
+                : action.TargetNpcId,
+            TargetName = targetName,
+            Description = action.Description,
+            Status = action.Status.ToString(),
+            ResolutionText = action.Resolution?.ResolutionText,
+            RollSummary = action.Resolution?.RollSummary,
+            RollDataJson = action.RollDataJson,
+            AdditionalActions = action.Resolution?.AdditionalActions,
+            Outcome = action.Resolution?.Outcome?.ToString(),
+            StatChangesJson = action.Resolution?.StatChangesJson ?? "[]",
+            PendingChainEffectsJson = action.PendingChainEffectsJson ?? "[]",
+            FollowUpRolls = action.RollPrompts
+                .Where(p => p.Status == RollPromptStatus.Completed)
+                .OrderBy(p => p.CreatedAt)
+                .Select(p => ToRollPromptResponse(p, action)),
+            CombatEncounterId = action.CombatEncounterId,
+            CombatEncounterSequence = action.CombatEncounter?.Sequence,
+            SkillCheckBatchId = action.SkillCheckBatchId,
+            SkillCheckGroupLabel = action.SkillCheckGroupLabel,
+            RollMode = action.RollMode,
+            DmDifficultyModifier = action.DmDifficultyModifier,
+            EffectiveDc = action.EffectiveDc,
+            ParentActionId = action.ParentActionId,
+            FollowUpType = action.FollowUpType,
+            ChainStep = action.ChainStep,
+            SessionModeAtSubmit = action.SessionModeAtSubmit,
+            CombatRound = action.CombatRound,
+            SubmittedAt = action.SubmittedAt,
+            PublishedAt = action.PublishedAt,
+            ResolvedAt = action.ResolvedAt,
+        };
     }
 
     public static IEnumerable<InitiativeEntryResponse> SelectInitiativeEntries(
@@ -184,7 +197,8 @@ public static partial class ControllerHelpers
 
     public static IEnumerable<RollPromptResponse> SelectRollPrompts(GameSession session, Guid? playerCharacterId = null)
     {
-        foreach (var action in session.Actions.Where(a => a.Status == ActionStatus.Pending).OrderBy(a => a.Sequence))
+        var activeStatuses = new[] { ActionStatus.Pending, ActionStatus.DmReviewing, ActionStatus.AwaitingRoll, ActionStatus.RollReceived, ActionStatus.AwaitingReaction, ActionStatus.ReactionPending, ActionStatus.Resolving, ActionStatus.AwaitingFollowUpRoll };
+        foreach (var action in session.Actions.Where(a => activeStatuses.Contains(a.Status)).OrderBy(a => a.Sequence))
         {
             var prompts = action.RollPrompts.AsEnumerable();
             if (playerCharacterId.HasValue)
