@@ -4,7 +4,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY src/package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 COPY src/ .
 RUN npm run build

@@ -9,7 +9,7 @@ COPY src/package*.json ./
 # Use npm install (not ci) because no lockfile exists until the project is bootstrapped locally.
 # Once you run `npm install` in mobile/src/ and commit the generated package-lock.json,
 # change this back to `npm ci` for reproducible, faster installs.
-RUN npm install --omit=dev
+RUN npm install
 
 COPY src/ .
 RUN npm run build
