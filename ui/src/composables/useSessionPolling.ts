@@ -16,8 +16,18 @@ export interface SessionRefreshOptions {
   force?: boolean;
 }
 
-export function useSessionPolling(loadState: () => Promise<SessionStateResponse | null>, intervalMs = 3000) {
-  const state = ref<SessionStateResponse | null>(null);
+export type SessionStateLoader = (
+  prev: SessionStateResponse | null,
+  options?: SessionRefreshOptions,
+) => Promise<SessionStateResponse | null>;
+
+export type PollIntervalResolver = number | ((state: SessionStateResponse | null) => number);
+
+export function useSessionPolling(
+  loadState: SessionStateLoader,
+  intervalMs: PollIntervalResolver = 3000,
+) {
+  const state = shallowRef<SessionStateResponse | null>(null);
   const pollingError = ref('');
   const fatalError = ref<FatalError | null>(null);
   const connectionStatus = ref<ConnectionStatus>('refreshing');
@@ -28,7 +38,7 @@ export function useSessionPolling(loadState: () => Promise<SessionStateResponse 
   let failureCount = 0;
   let refreshPromise: Promise<void> | null = null;
 
-  async function runRefresh() {
+  async function runRefresh(refreshOptions?: SessionRefreshOptions) {
     if (fatalError.value) return;
 
     isRefreshing.value = true;
@@ -36,7 +46,7 @@ export function useSessionPolling(loadState: () => Promise<SessionStateResponse 
       connectionStatus.value = 'reconnecting';
     }
     try {
-      state.value = await loadState();
+      state.value = await loadState(state.value, refreshOptions);
       pollingError.value = '';
       failureCount = 0;
       lastRefreshedAt.value = new Date();
@@ -72,15 +82,19 @@ export function useSessionPolling(loadState: () => Promise<SessionStateResponse 
       await refreshPromise;
     }
 
-    refreshPromise = runRefresh().finally(() => {
+    refreshPromise = runRefresh(options).finally(() => {
       refreshPromise = null;
     });
 
     return refreshPromise;
   }
 
+  function resolveBaseInterval() {
+    return typeof intervalMs === 'function' ? intervalMs(state.value) : intervalMs;
+  }
+
   function nextInterval() {
-    return Math.min(intervalMs * 2 ** Math.max(failureCount - 1, 0), maxIntervalMs);
+    return Math.min(resolveBaseInterval() * 2 ** Math.max(failureCount - 1, 0), maxIntervalMs);
   }
 
   const maxIntervalMs = 30000;

@@ -4,16 +4,27 @@ import {
   IonList, IonItem, IonLabel, IonInput, IonButton, IonNote, IonBackButton, IonButtons,
 } from '@ionic/vue';
 
-const { api, setSession } = useApi();
+const { api } = useApi();
 
 const code = ref('');
 const displayName = ref('');
 const isLoading = ref(false);
 const error = ref('');
 
+const defaultCharacterBuild = {
+  classKey: 'scientist',
+  skillAllocations: {
+    observation: 2,
+    survival: 2,
+    comtech: 3,
+    medicalAid: 3,
+  },
+  startingItemKey: 'medkit',
+};
+
 async function join() {
   error.value = '';
-  const trimmedCode = code.value.trim().toUpperCase();
+  const trimmedCode = code.value.trim().toLowerCase();
   const trimmedName = displayName.value.trim();
 
   if (!trimmedCode) { error.value = 'Enter a session code.'; return; }
@@ -21,14 +32,20 @@ async function join() {
 
   isLoading.value = true;
   try {
-    const res = await api<{ joinToken: string; participantId: string }>(
-      `/api/sessions/${trimmedCode}/join`,
-      { method: 'POST', body: { displayName: trimmedName } },
+    const res = await api<{ participantToken: string; character: { id: string }; game: { id: string } }>(
+      `/api/session-join/${trimmedCode}`,
+      {
+        method: 'POST',
+        body: {
+          characterName: trimmedName,
+          playerName: trimmedName,
+          ...defaultCharacterBuild,
+        },
+      },
     );
-    // Store participant token so the session page can authenticate as a player
     if (import.meta.client) {
-      localStorage.setItem('ttrpg_player_token', res.joinToken);
-      localStorage.setItem('ttrpg_participant_id', res.participantId);
+      localStorage.setItem('ttrpg_player_token', res.participantToken);
+      localStorage.setItem('ttrpg_participant_id', res.character.id);
     }
     await navigateTo(`/session/${trimmedCode}`);
   } catch {

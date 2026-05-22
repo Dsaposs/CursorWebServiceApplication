@@ -63,6 +63,8 @@ services:
       Jwt__Issuer: "TtrpgApi"
       Jwt__Audience: "TtrpgApi"
       Seed__AdminPassword: "Password1"
+      Cors__AllowedOrigins__0: "http://localhost:3000"
+      Cors__AllowedOrigins__1: "http://localhost:3001"
       # Exposed to the /api/version endpoint for other services
       UI_VERSION: "2.0.0"
       MOBILE_VERSION: "0.1.0"
@@ -102,12 +104,14 @@ services:
     build:
       context: ./mobile
       dockerfile: Dockerfile
+      args:
+        NUXT_API_BASE_URL: "http://localhost:5294"
     labels:
       com.ttrpg.service: mobile
       com.ttrpg.version: "0.1.0"
     environment:
       NODE_ENV: production
-      NUXT_API_BASE_URL: "http://api:5294"
+      NUXT_API_BASE_URL: "http://localhost:5294"
       MOBILE_VERSION: "0.1.0"
     ports:
       - "3001:3001"

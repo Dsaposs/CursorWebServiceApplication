@@ -16,18 +16,19 @@ interface ActionItem {
   actorName: string;
   actionText: string;
   status: string;
-  resolvedText?: string | null;
+  resolutionText?: string | null;
   createdAt: string;
 }
 
 interface SessionState {
   id: string;
   joinCode: string;
-  mode: string;
+  state: string;
   isActive: boolean;
+  actions: ActionItem[];
 }
 
-const session = ref<SessionState | null>(null);
+const session = ref<Pick<SessionState, 'id' | 'joinCode' | 'state' | 'isActive'> | null>(null);
 const actions = ref<ActionItem[]>([]);
 const actionText = ref('');
 const flavourText = ref('');
@@ -39,11 +40,13 @@ const playerToken = import.meta.client ? (localStorage.getItem('ttrpg_player_tok
 
 async function loadSession() {
   try {
-    const data = await api<{ session: SessionState; actions: ActionItem[] }>(
-      `/api/sessions/${joinCode}/player`,
-      { method: 'GET' },
-    );
-    session.value = data.session;
+    const data = await api<SessionState>(`/api/session-join/${joinCode}/state`, { playerToken: true });
+    session.value = {
+      id: data.id,
+      joinCode: data.joinCode,
+      state: data.state,
+      isActive: data.isActive,
+    };
     actions.value = (data.actions ?? []).slice().reverse();
   } catch {
     error.value = 'Could not load session.';
@@ -54,13 +57,12 @@ async function submitAction() {
   if (!actionText.value.trim()) return;
   isSubmitting.value = true;
   try {
-    await api('/api/actions', {
+    await api(`/api/sessions/${joinCode}/actions`, {
       method: 'POST',
+      playerToken: true,
       body: {
-        joinCode,
         actionText: actionText.value.trim(),
-        flavourText: flavourText.value.trim() || undefined,
-        playerToken,
+        description: flavourText.value.trim() || undefined,
       },
     });
     await Haptics.impact({ style: ImpactStyle.Light });
@@ -163,7 +165,7 @@ onUnmounted(() => { disconnect(); });
         <IonItem v-for="a in actions" :key="a.id">
           <IonLabel>
             <h3 class="font-medium">{{ a.actorName }}: {{ a.actionText }}</h3>
-            <p v-if="a.resolvedText" class="text-sm text-gray-300 mt-0.5">{{ a.resolvedText }}</p>
+            <p v-if="a.resolutionText" class="text-sm text-gray-300 mt-0.5">{{ a.resolutionText }}</p>
             <p class="text-xs text-gray-500 mt-1">
               <IonChip :color="statusColor(a.status)" style="height:1.25rem;font-size:0.7rem;">
                 {{ a.status }}

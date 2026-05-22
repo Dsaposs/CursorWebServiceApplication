@@ -58,6 +58,35 @@ public class SessionsController : ControllerBase
         return session is null ? NotFound() : Ok(ToSessionState(session, null, sinceSequence));
     }
 
+    [HttpGet("sessions/{sessionId:guid}/version")]
+    public async Task<ActionResult<SessionVersionResponse>> GetSessionVersion(Guid sessionId)
+    {
+        var userId = this.UserId();
+        var snapshot = await _db.GameSessions
+            .Where(s => s.Id == sessionId && s.Game.DmUserId == userId)
+            .Select(s => new SessionVersionResponse
+            {
+                Version = s.Version,
+                UpdatedAt = s.UpdatedAt,
+            })
+            .FirstOrDefaultAsync();
+
+        return snapshot is null ? NotFound() : Ok(snapshot);
+    }
+
+    [HttpGet("sessions/{sessionId:guid}/live")]
+    public async Task<ActionResult<SessionLiveResponse>> GetSessionLive(Guid sessionId, int sinceSequence = 0)
+    {
+        var session = await GetOwnedSessionLiveAsync(sessionId);
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        var npcVisibilities = ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson);
+        return Ok(ControllerHelpers.BuildSessionLiveResponse(this, session, sinceSequence, npcVisibilities));
+    }
+
     [HttpPost("sessions/{sessionId:guid}/stop")]
     public async Task<ActionResult<SessionSummaryResponse>> StopSession(Guid sessionId)
     {
@@ -226,6 +255,21 @@ public class SessionsController : ControllerBase
         var userId = this.UserId();
         return await _db.GameSessions
             .Include(s => s.Game).ThenInclude(g => g.Ruleset)
+            .Include(s => s.Game).ThenInclude(g => g.Characters)
+            .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
+            .Include(s => s.Actions).ThenInclude(a => a.Resolution)
+            .Include(s => s.Actions).ThenInclude(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .Include(s => s.Actions).ThenInclude(a => a.CombatEncounter)
+            .Include(s => s.CombatEncounters)
+            .Include(s => s.InitiativeEntries)
+            .Include(s => s.SessionRollPrompts).ThenInclude(p => p.TargetCharacter)
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.Game.DmUserId == userId);
+    }
+
+    private async Task<GameSession?> GetOwnedSessionLiveAsync(Guid sessionId)
+    {
+        var userId = this.UserId();
+        return await _db.GameSessions
             .Include(s => s.Game).ThenInclude(g => g.Characters)
             .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
             .Include(s => s.Actions).ThenInclude(a => a.Resolution)

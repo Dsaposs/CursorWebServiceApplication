@@ -143,4 +143,14 @@ dotnet test api\tests\NotesApi.Tests\NotesApi.Tests.csproj
 npm --prefix ui\src test
 ```
 
-Tests cover: DM-owned game scoping, participant token scoping, combat initiative tracking, game name uniqueness constraint, cascade delete behavior, and frontend ruleset/action chooser helpers.
+End-to-end tests (Playwright, full Docker stack):
+
+```powershell
+scripts\start-app.cmd
+# or manually from e2e/
+cd e2e && npm ci && npm run install:browsers && npm test
+```
+
+Set `SKIP_E2E=1` before running `start-app.cmd` to deploy without E2E.
+
+Tests cover: DM-owned game scoping, participant token scoping, combat initiative tracking, game name uniqueness constraint, cascade delete behavior, frontend ruleset/action chooser helpers, and browser/API end-to-end session workflows.

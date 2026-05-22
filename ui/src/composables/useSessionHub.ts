@@ -1,56 +1,46 @@
 import { HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr';
-import type { ActionQueueItemResponse } from '~/types/api';
+import type { SessionHubEvent } from '~/composables/useSessionHub';
 
-export type SessionHubEvent =
-  | 'session.mode_changed'
-  | 'turn.opened'
-  | 'turn.skipped'
-  | 'action.submitted'
-  | 'action.dm_reviewing'
-  | 'action.roll_requested'
-  | 'action.roll_received'
-  | 'action.reaction_requested'
-  | 'action.reaction_received'
-  | 'action.followup_roll_requested'
-  | 'action.followup_roll_received'
-  | 'action.resolved'
-  | 'action.rejected'
-  | 'character.stats_updated'
-  | 'npc.stats_updated';
+export type { SessionHubEvent };
 
 export interface RollRequestedPayload {
   actionId: string;
-  diceSpec: string;
+  diceSpec?: string;
   label?: string | null;
   guidanceText?: string | null;
   dc?: number | null;
-  mode: string;
-}
-
-export interface ReactionRequestedPayload {
-  reactionId: string;
-  parentActionId: string;
-  reactionType: string;
-  diceSpec?: string | null;
-  context?: string | null;
+  mode?: string;
+  promptIds?: string[];
 }
 
 interface UseSessionHubOptions {
-  joinCode: string;
-  /** DM JWT token (when connecting as DM). */
-  dmToken?: string | null;
-  /** Player participant token (when connecting as player). */
-  playerToken?: string | null;
-  onActionUpdate?: (action: ActionQueueItemResponse) => void;
-  onRollRequested?: (payload: RollRequestedPayload) => void;
-  onReactionRequested?: (payload: ReactionRequestedPayload) => void;
-  onModeChanged?: (payload: { newMode: string }) => void;
-  onTurnOpened?: (payload: { activeParticipantId: string; characterName: string; round: number }) => void;
-  onCharacterStatsUpdated?: (payload: { characterId: string; updatedStats: unknown }) => void;
+  getJoinCode: () => string;
+  getDmToken?: () => string | null | undefined;
+  getPlayerToken?: () => string | null | undefined;
+  /** Debounced refresh when any session lifecycle event arrives. */
+  onSessionChange?: () => void;
 }
 
+const SESSION_CHANGE_EVENTS: SessionHubEvent[] = [
+  'session.mode_changed',
+  'turn.opened',
+  'turn.skipped',
+  'action.submitted',
+  'action.dm_reviewing',
+  'action.roll_requested',
+  'action.roll_received',
+  'action.reaction_requested',
+  'action.reaction_received',
+  'action.followup_roll_requested',
+  'action.followup_roll_received',
+  'action.resolved',
+  'action.rejected',
+  'character.stats_updated',
+  'npc.stats_updated',
+];
+
 /**
- * Composable that manages the SignalR WebSocket connection to `/hubs/session`.
+ * Manages the SignalR WebSocket connection to `/api-ws/hubs/session`.
  * Call `connect()` once the session join code is known; call `disconnect()` on unmount.
  */
 export function useSessionHub(options: UseSessionHubOptions) {
@@ -60,47 +50,61 @@ export function useSessionHub(options: UseSessionHubOptions) {
   const connectionError = ref<string | null>(null);
 
   const connection = new HubConnectionBuilder()
-    .withUrl(`/api-ws/hubs/session`, {
-      accessTokenFactory: () => options.dmToken ?? authToken.value ?? '',
+    .withUrl('/api-ws/hubs/session', {
+      accessTokenFactory: () => options.getDmToken?.() ?? authToken.value ?? '',
     })
     .withAutomaticReconnect()
     .configureLogging(LogLevel.Warning)
     .build();
 
-  // ── Event bindings ─────────────────────────────────────────────────────
+  for (const eventName of SESSION_CHANGE_EVENTS) {
+    connection.on(eventName, () => {
+      options.onSessionChange?.();
+    });
+  }
 
-  connection.on('action.submitted', (payload: ActionQueueItemResponse) => options.onActionUpdate?.(payload));
-  connection.on('action.dm_reviewing', (payload: ActionQueueItemResponse) => options.onActionUpdate?.(payload));
-  connection.on('action.roll_received', (payload: ActionQueueItemResponse) => options.onActionUpdate?.(payload));
-  connection.on('action.resolved', (payload: ActionQueueItemResponse) => options.onActionUpdate?.(payload));
-  connection.on('action.rejected', (payload: ActionQueueItemResponse) => options.onActionUpdate?.(payload));
-  connection.on('action.roll_requested', (payload: RollRequestedPayload) => options.onRollRequested?.(payload));
-  connection.on('action.reaction_requested', (payload: ReactionRequestedPayload) => options.onReactionRequested?.(payload));
-  connection.on('session.mode_changed', (payload: { newMode: string }) => options.onModeChanged?.(payload));
-  connection.on('turn.opened', (payload: { activeParticipantId: string; characterName: string; round: number }) => options.onTurnOpened?.(payload));
-  connection.on('character.stats_updated', (payload: { characterId: string; updatedStats: unknown }) => options.onCharacterStatsUpdated?.(payload));
+  connection.onreconnecting(() => {
+    isConnected.value = false;
+  });
 
-  connection.onreconnecting(() => { isConnected.value = false; });
-  connection.onreconnected(() => { isConnected.value = true; });
-  connection.onclose(() => { isConnected.value = false; });
+  connection.onreconnected(async () => {
+    isConnected.value = true;
+    await joinGroups();
+    options.onSessionChange?.();
+  });
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────
+  connection.onclose(() => {
+    isConnected.value = false;
+  });
+
+  async function joinGroups() {
+    const joinCode = options.getJoinCode();
+    if (!joinCode) return;
+
+    const dmToken = options.getDmToken?.() ?? authToken.value;
+    if (dmToken) {
+      await connection.invoke('JoinSessionAsDm', joinCode);
+      return;
+    }
+
+    const playerToken = options.getPlayerToken?.();
+    if (playerToken) {
+      await connection.invoke('JoinSessionAsPlayer', joinCode, playerToken);
+    }
+  }
 
   async function connect() {
     if (connection.state !== HubConnectionState.Disconnected) return;
+    if (!options.getJoinCode()) return;
 
     try {
       await connection.start();
       isConnected.value = true;
       connectionError.value = null;
-
-      if (options.dmToken || authToken.value) {
-        await connection.invoke('JoinSessionAsDm', options.joinCode);
-      } else if (options.playerToken) {
-        await connection.invoke('JoinSessionAsPlayer', options.joinCode, options.playerToken);
-      }
+      await joinGroups();
     } catch (err) {
       connectionError.value = err instanceof Error ? err.message : 'SignalR connection failed';
+      isConnected.value = false;
     }
   }
 
@@ -108,6 +112,7 @@ export function useSessionHub(options: UseSessionHubOptions) {
     if (connection.state !== HubConnectionState.Disconnected) {
       await connection.stop();
     }
+    isConnected.value = false;
   }
 
   return { isConnected, connectionError, connect, disconnect, connection };

@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import { IonApp, IonRouterOutlet } from '@ionic/vue';
-
-// Capacitor safe-area CSS vars are injected into the root element automatically.
-// We import the Ionic core CSS bundle at app level so all pages inherit it.
+import { IonApp } from '@ionic/vue';
 </script>
 
 <template>
   <IonApp>
-    <IonRouterOutlet />
+    <NuxtPage />
   </IonApp>
 </template>
 

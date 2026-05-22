@@ -353,6 +353,27 @@ export interface SessionStateResponse extends SessionSummaryResponse {
   combatEncounters?: CombatEncounterResponse[];
 }
 
+export interface SessionVersionResponse {
+  version: number;
+  updatedAt: string;
+}
+
+export interface GameLiveResponse {
+  updatedAt: string;
+  characters: CharacterResponse[];
+  npcsAndMonsters: NpcResponse[];
+}
+
+/** Lightweight poll payload — no ruleset or session history on the game. */
+export interface SessionLiveResponse extends SessionSummaryResponse {
+  game?: GameLiveResponse | null;
+  character?: CharacterResponse | null;
+  actions: ActionQueueItemResponse[];
+  initiative: InitiativeEntryResponse[];
+  rollPrompts: RollPromptResponse[];
+  combatEncounters?: CombatEncounterResponse[];
+}
+
 export interface CombatEncounterResponse {
   id: string;
   sequence: number;

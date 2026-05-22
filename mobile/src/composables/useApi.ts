@@ -14,6 +14,13 @@ export class ApiError extends Error {
 
 const TOKEN_KEY = 'ttrpg_token';
 const REFRESH_KEY = 'ttrpg_refresh_token';
+const PLAYER_TOKEN_KEY = 'ttrpg_player_token';
+
+interface ApiCallOptions {
+  method?: string;
+  body?: unknown;
+  playerToken?: boolean;
+}
 
 const authToken = () => useState<string | null>('auth-token', () => null);
 const authEmail = () => useState<string>('auth-email', () => '');
@@ -62,9 +69,13 @@ export function useApi() {
     }
   }
 
-  async function api<T>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
+  async function api<T>(path: string, opts: ApiCallOptions = {}): Promise<T> {
     const headers: Record<string, string> = {};
-    if (token.value) headers['Authorization'] = `Bearer ${token.value}`;
+    if (token.value) headers.Authorization = `Bearer ${token.value}`;
+    if (opts.playerToken && import.meta.client) {
+      const playerToken = localStorage.getItem(PLAYER_TOKEN_KEY);
+      if (playerToken) headers['X-Player-Token'] = playerToken;
+    }
 
     try {
       return await $fetch<T>(`${base}${path}`, {

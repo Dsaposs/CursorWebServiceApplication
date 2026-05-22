@@ -1,3 +1,5 @@
+const apiBaseUrl = process.env.NUXT_API_BASE_URL || 'http://localhost:5294';
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
   devtools: { enabled: false },
@@ -5,6 +7,7 @@ export default defineNuxtConfig({
   routeRules: {
     '/sessions': { ssr: false },
     '/sessions/**': { ssr: false },
+    '/api-ws/**': { proxy: `${apiBaseUrl}/**` },
   },
   runtimeConfig: {
     apiBaseUrl: process.env.NUXT_API_BASE_URL || 'http://localhost:5294',

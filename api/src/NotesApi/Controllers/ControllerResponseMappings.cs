@@ -286,4 +286,57 @@ public static partial class ControllerHelpers
         CreatedAt = prompt.CreatedAt,
         CompletedAt = prompt.CompletedAt,
     };
+
+    public static SessionLiveResponse BuildSessionLiveResponse(
+        ControllerBase controller,
+        GameSession session,
+        int sinceSequence,
+        Dictionary<string, string>? npcVisibilities = null,
+        Character? playerCharacter = null,
+        bool playerView = false)
+    {
+        var summary = controller.ToSessionSummaryResponse(session);
+        var skillCheckActionIds = session.SessionRollPrompts
+            .Where(p => p.ActionRequestId.HasValue)
+            .Select(p => p.ActionRequestId!.Value)
+            .ToHashSet();
+
+        return new SessionLiveResponse
+        {
+            Id = summary.Id,
+            GameId = summary.GameId,
+            JoinCode = summary.JoinCode,
+            JoinUrl = summary.JoinUrl,
+            IsActive = summary.IsActive,
+            State = summary.State,
+            DiceRollMode = summary.DiceRollMode,
+            ActiveTurnParticipantId = summary.ActiveTurnParticipantId,
+            Version = summary.Version,
+            StartedAt = summary.StartedAt,
+            EndedAt = summary.EndedAt,
+            UpdatedAt = summary.UpdatedAt,
+            Game = new GameLiveResponse
+            {
+                UpdatedAt = session.Game.UpdatedAt,
+                Characters = session.Game.Characters.OrderBy(c => c.Name).Select(ToCharacterResponse),
+                NpcsAndMonsters = session.Game.NpcsAndMonsters
+                    .OrderBy(n => n.Name)
+                    .Select(n => (npc: n, vis: GetNpcVisibility(n.Id, npcVisibilities)))
+                    .Where(x => !playerView || IsNpcVisible(x.npc.Id, npcVisibilities))
+                    .Select(x => ToNpcResponse(x.npc, x.vis)),
+            },
+            Character = playerCharacter is null ? null : ToCharacterResponse(playerCharacter),
+            Actions = session.Actions
+                .Where(a => a.Sequence > sinceSequence)
+                .OrderBy(a => a.Sequence)
+                .Select(a => ToActionResponse(
+                    a,
+                    skillCheckActionIds.Contains(a.Id),
+                    npcVisibilities,
+                    playerView)),
+            Initiative = SelectInitiativeEntries(session, npcVisibilities, playerView),
+            RollPrompts = SelectRollPrompts(session, playerView ? playerCharacter?.Id : null),
+            CombatEncounters = SelectCombatEncounters(session),
+        };
+    }
 }

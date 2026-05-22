@@ -7,6 +7,7 @@ interface Props {
   startedAt?: string | Date | null;
   endedAt?: string | Date | null;
   isActive?: boolean;
+  hubConnected?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -14,6 +15,10 @@ const currentTime = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
 
 const label = computed(() => {
+  if (props.hubConnected && (props.status === 'live' || props.status === 'refreshing')) {
+    return 'Realtime';
+  }
+
   switch (props.status) {
     case 'live':
     case 'refreshing':

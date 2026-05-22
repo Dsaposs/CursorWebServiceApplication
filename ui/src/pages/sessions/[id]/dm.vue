@@ -13,7 +13,7 @@ import DmPlayerSkillCheckPanel from '~/components/DmPlayerSkillCheckPanel.vue';
 import SessionConnectionStatus from '~/components/SessionConnectionStatus.vue';
 import SkeletonBlock from '~/components/SkeletonBlock.vue';
 import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
-import type { ActionQueueItemResponse, GameResponse, InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
+import type { ActionQueueItemResponse, GameResponse, InitiativeEntryResponse, RulesetResponse, SessionLiveResponse, SessionStateResponse, SessionVersionResponse } from '~/types/api';
 import { evaluateActionOutcome, resolveTargetArmor } from '~/utils/actionOutcome';
 import {
   actionRollFlowBadgeClass,
@@ -37,6 +37,7 @@ import {
 import { useRulesetTheme } from '~/composables/useRulesetTheme';
 import { useThemePreference } from '~/composables/useThemePreference';
 import { isStatCheckAction } from '~/utils/statCheckAction';
+import { replaceActionInState } from '~/utils/sessionStateMerge';
 
 const route = useRoute();
 const { api, token, loadSession, clearSession } = useApi();
@@ -73,16 +74,36 @@ const expandedPendingActions = ref<Set<string>>(new Set());
 const isSaving = ref(false);
 const showStopSessionConfirm = ref(false);
 
-async function loadState() {
+function sessionQuery(sinceSequence: number) {
+  return sinceSequence > 0 ? `?sinceSequence=${sinceSequence}` : '';
+}
+
+async function fetchFullState({ sinceSequence }: { sinceSequence: number }) {
   if (!token.value) return null;
-  const nextState = await api<SessionStateResponse>(`/api/sessions/${route.params.id}/dm`);
+  const nextState = await api<SessionStateResponse>(`/api/sessions/${route.params.id}/dm${sessionQuery(sinceSequence)}`);
   if (!ruleset.value) {
     ruleset.value = await api<RulesetResponse>(`/api/rulesets/${nextState.game.rulesetCode}`);
   }
   return nextState;
 }
 
-const { state, pollingError, fatalError, connectionStatus, refresh, start } = useSessionPolling(loadState, 3000);
+async function fetchLiveState({ sinceSequence }: { sinceSequence: number }) {
+  if (!token.value) return null;
+  return api<SessionLiveResponse>(`/api/sessions/${route.params.id}/live${sessionQuery(sinceSequence)}`);
+}
+
+async function checkVersion(knownVersion: number) {
+  if (!token.value) return false;
+  const snapshot = await api<SessionVersionResponse>(`/api/sessions/${route.params.id}/version`);
+  return snapshot.version === knownVersion;
+}
+
+const { state, pollingError, fatalError, connectionStatus, refresh, refreshInBackground, hubConnected, start } = useLiveSession({
+  fetchFullState,
+  fetchLiveState,
+  checkVersion,
+  getDmToken: () => token.value,
+});
 const { enabled: rulesetThemeEnabled, toggle: toggleRulesetTheme } = useThemePreference();
 const _rulesetThemeStyle = useRulesetTheme(ruleset);
 const rulesetThemeStyle = computed(() => rulesetThemeEnabled.value ? _rulesetThemeStyle.value : {});
@@ -223,7 +244,7 @@ async function setState(nextState: 'Exploration' | 'Combat') {
   isSaving.value = true;
   try {
     await api(`/api/sessions/${route.params.id}/state`, { method: 'POST', body: { state: nextState } });
-    await refresh();
+    refreshInBackground();
     toastSuccess(`Mode set to ${nextState}.`);
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -269,7 +290,7 @@ async function submitNpcAction() {
     npcActionTargetPickerRef.value?.reset();
     npcRollResult.value = '';
     npcDamageRollResult.value = '';
-    await refresh();
+    refreshInBackground();
     toastSuccess('NPC action queued. Resolve from the pending queue.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -363,7 +384,7 @@ async function submitAndResolveNpcAction() {
     npcDamageRollResult.value = '';
     resetNpcInlineFields();
     activeCombatEntryId.value = null;
-    await refresh();
+    refreshInBackground();
     toastSuccess('NPC action resolved.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -390,7 +411,7 @@ async function sendSessionRollPrompts(payload: {
   isSaving.value = true;
   try {
     await api(`/api/sessions/${state.value.id}/roll-prompts`, { method: 'POST', body: payload });
-    await refresh();
+    refreshInBackground();
     toastSuccess('Stat check sent to player(s).');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -403,7 +424,7 @@ async function startRollChain(actionId: string) {
   isSaving.value = true;
   try {
     await api(`/api/actions/${actionId}/roll-prompts/start-chain`, { method: 'POST' });
-    await refresh();
+    refreshInBackground();
     toastSuccess('Attack roll sent to player.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -454,7 +475,7 @@ async function sendRollPrompts(
   isSaving.value = true;
   try {
     await api(`/api/actions/${actionId}/roll-prompts`, { method: 'POST', body: payload });
-    await refresh();
+    refreshInBackground();
     toastSuccess('Roll prompt sent to player(s).');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -481,7 +502,7 @@ async function dmRollForPlayer(payload: {
         chainStepKey: payload.chainStepKey,
       },
     });
-    await refresh();
+    refreshInBackground();
     toastSuccess('Roll recorded for player.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -494,7 +515,7 @@ async function cancelRollPrompt(promptId: string) {
   isSaving.value = true;
   try {
     await api(`/api/roll-prompts/${promptId}`, { method: 'DELETE' });
-    await refresh();
+    refreshInBackground();
     toastInfo('Roll prompt cancelled.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -529,7 +550,7 @@ async function rejectAction(action: ActionQueueItemResponse) {
       delete map.value[action.id];
     }
     expandedPendingActions.value.delete(action.id);
-    await refresh();
+    refreshInBackground();
     toastInfo('Action rejected.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -541,7 +562,7 @@ async function rejectAction(action: ActionQueueItemResponse) {
 async function resolveAction(action: ActionQueueItemResponse) {
   isSaving.value = true;
   try {
-    await api(`/api/actions/${action.id}/resolve`, {
+    const updated = await api<ActionQueueItemResponse>(`/api/actions/${action.id}/resolve`, {
       method: 'PUT',
       body: {
         resolutionText: resolutionText.value[action.id] || undefined,
@@ -552,7 +573,10 @@ async function resolveAction(action: ActionQueueItemResponse) {
       delete map.value[action.id];
     }
     expandedPendingActions.value.delete(action.id);
-    await refresh();
+    if (state.value) {
+      state.value = replaceActionInState(state.value, updated);
+    }
+    refreshInBackground();
     toastSuccess('Resolution published to players.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -668,7 +692,7 @@ async function setupCombat() {
 
   try {
     const result = await api<{ guidanceText?: string | null }>(`/api/sessions/${route.params.id}/combat/start`, { method: 'POST' });
-    await refresh();
+    refreshInBackground();
     const hint = result.guidanceText ? ` ${result.guidanceText}` : '';
     toastSuccess(`Combat started — initiative rolled.${hint}`);
   } catch (err) {
@@ -690,7 +714,7 @@ async function saveInitiativeOrder(entries: InitiativeEntryResponse[]) {
 
   try {
     await api(`/api/sessions/${route.params.id}/combat`, { method: 'POST', body: { combatants } });
-    await refresh();
+    refreshInBackground();
     toastSuccess('Initiative order updated.');
   } finally {
     isSaving.value = false;
@@ -705,7 +729,7 @@ async function advanceTurn() {
   isSaving.value = true;
   try {
     await api(`/api/sessions/${route.params.id}/combat/advance`, { method: 'POST' });
-    await refresh();
+    refreshInBackground();
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   } finally {
@@ -722,7 +746,7 @@ async function promptPlayerTurn(characterId: string) {
       method: 'POST',
       body: { characterId },
     });
-    await refresh();
+    refreshInBackground();
     toastSuccess('Player has been prompted to take their action.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -740,7 +764,7 @@ async function stopSession() {
   isSaving.value = true;
   try {
     await api(`/api/sessions/${route.params.id}/stop`, { method: 'POST' });
-    await refresh();
+    refreshInBackground();
     toastInfo('Session ended.');
     showStopSessionConfirm.value = false;
   } catch (err) {
@@ -757,18 +781,18 @@ async function cycleNpcVisibility(npcId: string, current: string) {
       method: 'POST',
       body: { npcId, visibility: next },
     });
-    await refresh();
+    refreshInBackground();
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
   }
 }
 
 async function onNpcCreated() {
-  await refresh();
+  refreshInBackground();
 }
 
 async function onNpcUpdated() {
-  await refresh();
+  refreshInBackground();
 }
 
 async function copyJoinLink() {
@@ -1073,6 +1097,7 @@ onUnmounted(() => {
       <div v-if="state" class="topbar-status">
         <SessionConnectionStatus
           :status="connectionStatus"
+          :hub-connected="hubConnected"
           :error="pollingError"
           :started-at="state.startedAt"
           :ended-at="state.endedAt"

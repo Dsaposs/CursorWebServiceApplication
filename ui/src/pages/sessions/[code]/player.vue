@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'player-auth' });
-import type { InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
+import type { InitiativeEntryResponse, RulesetResponse, SessionLiveResponse, SessionStateResponse, SessionVersionResponse } from '~/types/api';
 import { parseCharacterStats } from '~/utils/dice';
 import { parseRulesetDefinition } from '~/utils/rulesets';
 import { useRulesetTheme } from '~/composables/useRulesetTheme';
@@ -28,9 +28,13 @@ const isSubmittingRollPrompt = ref(false);
 const isSkippingTurn = ref(false);
 const showActionForm = ref(false);
 
-async function loadState() {
+function sessionQuery(sinceSequence: number) {
+  return sinceSequence > 0 ? `?sinceSequence=${sinceSequence}` : '';
+}
+
+async function fetchFullState({ sinceSequence }: { sinceSequence: number }) {
   if (!playerToken.value) return null;
-  const nextState = await api<SessionStateResponse>(`/api/session-join/${route.params.code}/state`, {
+  const nextState = await api<SessionStateResponse>(`/api/session-join/${route.params.code}/state${sessionQuery(sinceSequence)}`, {
     playerToken: playerToken.value,
   });
   if (!ruleset.value) {
@@ -39,7 +43,28 @@ async function loadState() {
   return nextState;
 }
 
-const { state, pollingError, fatalError, connectionStatus, refresh, start } = useSessionPolling(loadState, 3000);
+async function fetchLiveState({ sinceSequence }: { sinceSequence: number }) {
+  if (!playerToken.value) return null;
+  return api<SessionLiveResponse>(`/api/session-join/${route.params.code}/live${sessionQuery(sinceSequence)}`, {
+    playerToken: playerToken.value,
+  });
+}
+
+async function checkVersion(knownVersion: number) {
+  if (!playerToken.value) return false;
+  const snapshot = await api<SessionVersionResponse>(`/api/session-join/${route.params.code}/version`, {
+    playerToken: playerToken.value,
+  });
+  return snapshot.version === knownVersion;
+}
+
+const { state, pollingError, fatalError, connectionStatus, refresh, refreshInBackground, hubConnected, start } = useLiveSession({
+  fetchFullState,
+  fetchLiveState,
+  checkVersion,
+  getJoinCode: () => route.params.code as string,
+  getPlayerToken: () => playerToken.value,
+});
 const { enabled: rulesetThemeEnabled, toggle: toggleRulesetTheme } = useThemePreference();
 const _rulesetThemeStyle = useRulesetTheme(ruleset);
 const rulesetThemeStyle = computed(() => rulesetThemeEnabled.value ? _rulesetThemeStyle.value : {});
@@ -265,7 +290,7 @@ async function withdrawAction(actionId: string) {
       playerToken: playerToken.value,
     });
     expandedPendingPlayerActions.value.delete(actionId);
-    await refresh();
+    refreshInBackground();
     toastSuccess('Action withdrawn.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -310,7 +335,7 @@ async function submitRollPrompt(payload: { rollSummary: string; rollResultJson?:
     });
 
     applyRollPromptTransition(response, submittedPromptId);
-    await refresh({ force: true });
+    refreshInBackground();
 
     if (response.nextPendingPrompt) {
       toastSuccess('Roll sent — next roll is ready.');
@@ -364,7 +389,7 @@ async function submitActionFromForm(payload: ActionFormPayload) {
       },
     });
     actionFormRef.value?.reset();
-    await refresh({ force: true });
+    refreshInBackground();
     if (!isCombat.value) {
       showActionForm.value = false;
     }
@@ -392,7 +417,7 @@ async function skipTurn() {
       method: 'POST',
       playerToken: playerToken.value,
     });
-    await refresh();
+    refreshInBackground();
     toastSuccess('Turn skipped.');
   } catch (err) {
     toastError(err instanceof Error ? err.message : String(err));
@@ -476,6 +501,7 @@ async function skipTurn() {
       <div v-if="state" class="topbar-status">
         <SessionConnectionStatus
           :status="connectionStatus"
+          :hub-connected="hubConnected"
           :error="pollingError"
           :started-at="state.startedAt"
           :ended-at="state.endedAt"

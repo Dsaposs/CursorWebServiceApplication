@@ -14,7 +14,7 @@ interface GameSummary {
   sessionCount: number;
 }
 
-const { api, clearSession } = useApi();
+const { api, clearSession, loadSession } = useApi();
 const games = ref<GameSummary[]>([]);
 const isLoading = ref(true);
 
@@ -40,6 +40,7 @@ function signOut() {
 }
 
 onMounted(() => {
+  loadSession();
   load();
 });
 </script>

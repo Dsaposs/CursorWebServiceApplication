@@ -137,6 +137,30 @@ public class SessionStateResponse : SessionSummaryResponse
     public IEnumerable<CombatEncounterResponse> CombatEncounters { get; set; } = Array.Empty<CombatEncounterResponse>();
 }
 
+public class SessionVersionResponse
+{
+    public int Version { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>Lightweight session snapshot for polling — omits ruleset and session history on the game.</summary>
+public class SessionLiveResponse : SessionSummaryResponse
+{
+    public GameLiveResponse? Game { get; set; }
+    public CharacterResponse? Character { get; set; }
+    public IEnumerable<ActionQueueItemResponse> Actions { get; set; } = Array.Empty<ActionQueueItemResponse>();
+    public IEnumerable<InitiativeEntryResponse> Initiative { get; set; } = Array.Empty<InitiativeEntryResponse>();
+    public IEnumerable<RollPromptResponse> RollPrompts { get; set; } = Array.Empty<RollPromptResponse>();
+    public IEnumerable<CombatEncounterResponse> CombatEncounters { get; set; } = Array.Empty<CombatEncounterResponse>();
+}
+
+public class GameLiveResponse
+{
+    public DateTime UpdatedAt { get; set; }
+    public IEnumerable<CharacterResponse> Characters { get; set; } = Array.Empty<CharacterResponse>();
+    public IEnumerable<NpcResponse> NpcsAndMonsters { get; set; } = Array.Empty<NpcResponse>();
+}
+
 public class CombatEncounterResponse
 {
     public Guid Id { get; set; }

@@ -12,6 +12,8 @@ COPY src/package*.json ./
 RUN npm install
 
 COPY src/ .
+ARG NUXT_API_BASE_URL=http://localhost:5294
+ENV NUXT_API_BASE_URL=$NUXT_API_BASE_URL
 RUN npm run build
 
 FROM node:22-alpine AS runtime

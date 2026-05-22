@@ -246,6 +246,53 @@ public class SessionJoinController : ControllerBase
         return Ok(ToPlayerSessionState(session, participant, sinceSequence));
     }
 
+    [HttpGet("{joinCode}/version")]
+    public async Task<ActionResult<SessionVersionResponse>> GetSessionVersion(string joinCode)
+    {
+        var session = await LoadSessionForPlayerAsync(joinCode, activeOnly: true);
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        var participant = await GetParticipantAsync(session.GameId);
+        if (participant is null)
+        {
+            return Unauthorized(new { errors = new[] { "Join the session before reading player state." } });
+        }
+
+        return Ok(new SessionVersionResponse
+        {
+            Version = session.Version,
+            UpdatedAt = session.UpdatedAt,
+        });
+    }
+
+    [HttpGet("{joinCode}/live")]
+    public async Task<ActionResult<SessionLiveResponse>> GetSessionLive(string joinCode, int sinceSequence = 0)
+    {
+        var session = await LoadSessionForPlayerLiveAsync(joinCode, activeOnly: true);
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        var participant = await GetParticipantAsync(session.GameId);
+        if (participant is null)
+        {
+            return Unauthorized(new { errors = new[] { "Join the session before reading player state." } });
+        }
+
+        var npcVisibilities = ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson);
+        return Ok(ControllerHelpers.BuildSessionLiveResponse(
+            this,
+            session,
+            sinceSequence,
+            npcVisibilities,
+            participant.Character,
+            playerView: true));
+    }
+
     [HttpGet("sessions/{sessionId:guid}/summary")]
     public async Task<ActionResult<SessionStateResponse>> GetSessionSummary(Guid sessionId, int sinceSequence = 0)
     {
@@ -271,6 +318,27 @@ public class SessionJoinController : ControllerBase
             .Include(s => s.Game).ThenInclude(g => g.Characters)
             .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
             .Include(s => s.Game).ThenInclude(g => g.Sessions)
+            .Include(s => s.Actions).ThenInclude(a => a.Resolution)
+            .Include(s => s.Actions).ThenInclude(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
+            .Include(s => s.Actions).ThenInclude(a => a.CombatEncounter)
+            .Include(s => s.CombatEncounters)
+            .Include(s => s.InitiativeEntries)
+            .Include(s => s.SessionRollPrompts).ThenInclude(p => p.TargetCharacter)
+            .Where(s => s.JoinCode == joinCode);
+
+        if (activeOnly)
+        {
+            query = query.Where(s => s.IsActive);
+        }
+
+        return await query.FirstOrDefaultAsync();
+    }
+
+    private async Task<GameSession?> LoadSessionForPlayerLiveAsync(string joinCode, bool activeOnly)
+    {
+        var query = _db.GameSessions
+            .Include(s => s.Game).ThenInclude(g => g.Characters)
+            .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
             .Include(s => s.Actions).ThenInclude(a => a.Resolution)
             .Include(s => s.Actions).ThenInclude(a => a.RollPrompts).ThenInclude(p => p.TargetCharacter)
             .Include(s => s.Actions).ThenInclude(a => a.CombatEncounter)
