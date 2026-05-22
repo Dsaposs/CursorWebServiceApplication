@@ -6,6 +6,7 @@ import { parseInventory } from '~/utils/inventory';
 import { parseRulesetDefinition } from '~/utils/rulesets';
 import { useRulesetTheme } from '~/composables/useRulesetTheme';
 import { useThemePreference } from '~/composables/useThemePreference';
+import ActionForm from '~/components/ActionForm.vue';
 import PlayerRollPromptOverlay from '~/components/PlayerRollPromptOverlay.vue';
 import PlayerCombatTurnOverlay from '~/components/PlayerCombatTurnOverlay.vue';
 import { isSameGuid } from '~/utils/rollPrompt';
@@ -19,9 +20,11 @@ const playerToken = ref<string | null>(null);
 const ruleset = ref<RulesetResponse | null>(null);
 const showCharacterSheet = ref(false);
 const actionTargetPickerRef = ref<{ isValid: () => boolean; reset: () => void; toSubmitFields: () => { targetCharacterId?: string; targetNpcId?: string; targetName?: string } } | null>(null);
+const actionFormRef = ref<{ reset: () => void } | null>(null);
 const description = ref('');
 const isSubmitting = ref(false);
 const isSubmittingRollPrompt = ref(false);
+const isSkippingTurn = ref(false);
 const showActionForm = ref(false);
 
 async function loadState() {
@@ -111,8 +114,15 @@ const activeRollPrompt = computed(() =>
   ) ?? null,
 );
 
+const activeEncounter = computed(() =>
+  state.value?.combatEncounters?.find(e => e.isActive) ?? null,
+);
+
+/** Only show the action form overlay once the DM has explicitly prompted this character to act. */
 const showCombatTurnFocus = computed(() =>
-  isCombat.value && isMyTurn.value,
+  isCombat.value
+  && isMyTurn.value
+  && activeEncounter.value?.promptedTurnCharacterId === state.value?.character?.id,
 );
 
 const isPlayerFocusActive = computed(() =>
@@ -238,6 +248,43 @@ async function submitRollPrompt(payload: { rollSummary: string; rollResultJson?:
   }
 }
 
+interface ActionFormPayload {
+  actionKey?: string;
+  actionText: string;
+  targetCharacterId?: string;
+  targetNpcId?: string;
+  targetName?: string;
+}
+
+async function submitActionFromForm(payload: ActionFormPayload) {
+  if (!playerToken.value || !state.value) return;
+
+  isSubmitting.value = true;
+  try {
+    await api(`/api/sessions/${state.value.joinCode}/actions`, {
+      method: 'POST',
+      playerToken: playerToken.value,
+      body: {
+        actionKey: payload.actionKey,
+        actionText: payload.actionText,
+        targetCharacterId: payload.targetCharacterId,
+        targetNpcId: payload.targetNpcId,
+        targetName: payload.targetName,
+      },
+    });
+    actionFormRef.value?.reset();
+    await refresh();
+    if (!isCombat.value) {
+      showActionForm.value = false;
+    }
+    toastSuccess('Action sent to DM! The DM will call for your roll.');
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSubmitting.value = false;
+  }
+}
+
 async function submitAction() {
   if (!playerToken.value || !state.value) return;
   const payload = buildSubmitPayload(description.value);
@@ -276,6 +323,23 @@ async function submitAction() {
     isSubmitting.value = false;
   }
 }
+
+async function skipTurn() {
+  if (!playerToken.value || !state.value || !isMyTurn.value) return;
+  isSkippingTurn.value = true;
+  try {
+    await api(`/api/session-join/${route.params.code}/skip-turn`, {
+      method: 'POST',
+      playerToken: playerToken.value,
+    });
+    await refresh();
+    toastSuccess('Turn skipped.');
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSkippingTurn.value = false;
+  }
+}
 </script>
 
 <template>
@@ -292,11 +356,32 @@ async function submitAction() {
     v-if="state?.character"
     :character-name="state.character.name"
     :is-open="showCombatTurnFocus && !activeRollPrompt"
-    :waiting-for-dm="false"
+    :waiting-for-dm="combatTurnWaiting"
   >
-    <p class="text-sm muted" style="margin: 0;">
-      It is your turn. The DM will prompt you when a roll is needed — you cannot queue actions to the pending log during combat.
-    </p>
+    <template v-if="!combatTurnWaiting">
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 0.75rem;">
+        <button
+          class="btn ghost sm"
+          type="button"
+          :disabled="isSkippingTurn || isSubmitting"
+          @click="skipTurn"
+        >
+          {{ isSkippingTurn ? 'Skipping…' : 'Skip Turn' }}
+        </button>
+      </div>
+      <ActionForm
+        ref="actionFormRef"
+        :ruleset-definition="rulesetDefinition"
+        :class-key="state.character?.classKey"
+        :inventory-json="state.character?.inventoryJson"
+        :characters="state.game.characters"
+        :npcs="state.game.npcsAndMonsters"
+        :is-submitting="isSubmitting"
+        :require-target-for-combat="true"
+        @submit="submitActionFromForm"
+        @cancel="() => {}"
+      />
+    </template>
   </PlayerCombatTurnOverlay>
 
   <section class="app-shell" :style="rulesetThemeStyle">
@@ -381,87 +466,18 @@ async function submitAction() {
             Take Action
           </button>
         </div>
-        <form v-if="showActionForm" @submit.prevent="submitAction">
-          <label>
-            Action type <span style="color: var(--danger);">*</span>
-            <select v-model="actionMode">
-              <option v-if="availableActions.length" value="action">Action</option>
-              <option value="stat-check">Stat check</option>
-              <option value="custom">Custom action</option>
-            </select>
-          </label>
-
-          <label v-if="actionMode === 'action'">
-            Action <span style="color: var(--danger);">*</span>
-            <select v-model="selectedActionKey" required>
-              <option value="">Choose an action</option>
-              <option v-for="action in availableActions" :key="action.key" :value="action.key">
-                {{ action.label }}
-              </option>
-            </select>
-          </label>
-
-          <label v-else-if="actionMode === 'stat-check'">
-            Stat <span style="color: var(--danger);">*</span>
-            <select v-model="selectedStatKey" required>
-              <option value="">Choose a stat</option>
-              <optgroup label="Skills">
-                <option v-for="stat in availableStatChecks.filter(s => s.type === 'skill')" :key="stat.key" :value="stat.key">
-                  {{ stat.label }}
-                </option>
-              </optgroup>
-              <optgroup label="Attributes">
-                <option v-for="stat in availableStatChecks.filter(s => s.type === 'attribute')" :key="stat.key" :value="stat.key">
-                  {{ stat.label }}
-                </option>
-              </optgroup>
-            </select>
-          </label>
-
-          <label v-else>
-            Custom action <span style="color: var(--danger);">*</span>
-            <input v-model.trim="actionText" placeholder="Swing sword, use medkit, lockpick door…" required />
-          </label>
-
-          <div v-if="actionMode === 'action' && selectedActionDetail" class="alert info">
-            <div>
-              <strong>{{ selectedActionDetail.dice }}</strong>
-              <p class="text-sm muted">
-                Expected check (you roll when the DM asks): {{ selectedActionDetail.attribute }} + {{ selectedActionDetail.skill }}.
-              </p>
-              <p class="text-sm">{{ selectedActionDetail.successRule }}</p>
-            </div>
-          </div>
-          <div v-else-if="actionMode === 'stat-check' && selectedStatDetail" class="alert info">
-            <div>
-              <strong>{{ selectedStatDetail.actionText }}</strong>
-              <p class="text-sm muted">Expected check: {{ selectedStatDetail.rollSummary }}.</p>
-            </div>
-          </div>
-
-          <div class="alert info" style="font-size: 0.85rem; padding: 0.5rem 0.75rem;">
-            The DM will prompt you to roll once they review your action.
-          </div>
-
-          <ActionTargetPicker
-            ref="actionTargetPickerRef"
-            :characters="state.game.characters"
-            :npcs="state.game.npcsAndMonsters"
-            :disabled="isSubmitting"
-          />
-          <label>
-            Description
-            <textarea v-model="description" placeholder="What are you trying to accomplish?" style="min-height: 3rem;" />
-          </label>
-          <div class="btn-row">
-            <button class="btn" type="submit" :disabled="isSubmitting">
-              {{ isSubmitting ? 'Sending…' : 'Send to DM' }}
-            </button>
-            <button class="btn ghost" type="button" :disabled="isSubmitting" @click="showActionForm = false">
-              Cancel
-            </button>
-          </div>
-        </form>
+        <ActionForm
+          v-if="showActionForm"
+          ref="actionFormRef"
+          :ruleset-definition="rulesetDefinition"
+          :class-key="state.character?.classKey"
+          :inventory-json="state.character?.inventoryJson"
+          :characters="state.game.characters"
+          :npcs="state.game.npcsAndMonsters"
+          :is-submitting="isSubmitting"
+          @submit="submitActionFromForm"
+          @cancel="showActionForm = false"
+        />
       </div>
 
       <!-- Pending actions (withdraw) — exploration only; combat shows these in the turn overlay -->

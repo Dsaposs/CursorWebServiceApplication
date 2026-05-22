@@ -55,6 +55,10 @@ button, input, select, textarea {
   color: inherit;
 }
 
+input, select, textarea {
+  min-width: 0;
+}
+
 button { cursor: pointer; }
 
 a { color: var(--accent); text-decoration: none; }
@@ -109,7 +113,7 @@ p:last-child { margin-bottom: 0; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1.5rem;
+  padding: 0.75rem max(1.5rem, calc((100% - var(--page-max)) / 2 + 1.5rem));
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   gap: 1rem;
@@ -264,8 +268,13 @@ p:last-child { margin-bottom: 0; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   margin-bottom: 1rem;
-  gap: 1rem;
+  gap: 0.75rem 1rem;
+}
+
+.panel-title > div {
+  min-width: 0;
 }
 
 .panel-title h2, .panel-title h3 {
@@ -308,6 +317,15 @@ p:last-child { margin-bottom: 0; }
   min-height: 0;
 }
 
+.dm-screen-main,
+.session-screen-main {
+  max-width: var(--page-max);
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .session-primary-column,
 .session-feed-column,
 .session-action-column,
@@ -322,11 +340,121 @@ p:last-child { margin-bottom: 0; }
   gap: 1rem;
 }
 
+/* Wrapper sections inside session-support-column for layout ordering */
+.dm-combat-section,
+.dm-participant-section {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
+}
+
+/* ─── DM two-column layout ───────────────────────────────── */
+
+.dm-two-col-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+  width: 100%;
+}
+
+.dm-action-column,
+.dm-reference-column {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
+}
+
+/* Roll chain step styles */
+.roll-chain-steps {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.roll-chain-step {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  padding: 0.65rem 0.85rem;
+  background: var(--panel-alt);
+}
+
+.roll-chain-step--current {
+  border-color: var(--accent);
+  background: var(--accent-dim, rgba(0,80,200,0.07));
+}
+
+.roll-chain-step--pending {
+  opacity: 0.55;
+}
+
+.roll-chain-step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.roll-chain-step-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  flex: 1;
+}
+
+.roll-chain-step-result {
+  margin-top: 0.35rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.roll-chain-step-controls {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+/* Push the Roll banner */
+.push-the-roll-banner {
+  margin: 0.65rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--warn, #d08000);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--warn-dim, rgba(208,128,0,0.1));
+}
+
+.push-the-roll-banner p {
+  margin: 0.25rem 0 0.5rem;
+}
+
+/* Locked initiative items */
+.initiative-item.locked-turn {
+  opacity: 0.65;
+}
+
+/* Action evaluation panel */
+.action-evaluation-panel {
+  padding: 0.75rem;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+/* Inline roll prompt (non-overlay mode) */
+.roll-prompt-inline {
+  padding: 0.85rem 1rem;
+}
+
 .pending-actions-list,
 .action-log-scroll {
   display: grid;
   gap: 0.75rem;
   align-items: start;
+  min-width: 0;
 }
 
 .pending-actions-list .action-card,
@@ -493,17 +621,19 @@ select option {
 
 .field-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.5rem;
   align-items: end;
+  min-width: 0;
 }
 
-.field-row input { flex: 1; }
+.field-row input { flex: 1; min-width: 0; }
 
 .inline-fields {
   display: grid;
-  grid-template-columns: 1fr 5.5rem 5.5rem;
+  grid-template-columns: minmax(0, 1fr) 5.5rem 5.5rem;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 /* ─── Tabs ──────────────────────────────────────────────── */
@@ -1246,6 +1376,7 @@ select option {
   gap: 0.75rem;
   height: auto;
   min-height: 0;
+  min-width: 0;
   align-self: start;
   transition: border-color 0.15s;
 }
@@ -1285,6 +1416,12 @@ select option {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
+  min-width: 0;
+}
+
+.action-card-header > div {
+  min-width: 0;
+  flex: 1 1 0%;
 }
 
 .action-card-toggle {
@@ -1306,17 +1443,20 @@ select option {
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--ink-bright);
+  overflow-wrap: break-word;
 }
 
 .action-card-target {
   font-size: 0.8rem;
   color: var(--muted-light);
+  overflow-wrap: break-word;
 }
 
 .action-card-desc {
   font-size: 0.85rem;
   color: var(--muted-light);
   font-style: italic;
+  overflow-wrap: break-word;
 }
 
 .action-resolution {
@@ -2087,30 +2227,27 @@ tr:hover td { background: var(--panel-alt); }
 /* ─── Responsive ────────────────────────────────────────── */
 
 @media (min-width: 1024px) {
+  /* Override app-shell's 1fr row so dm-screen-main can grow past 100vh */
+  .dm-app-shell {
+    grid-template-rows: auto auto;
+  }
+
   .dm-screen-main {
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr);
-    max-height: calc(100dvh - 3.75rem);
-    overflow: hidden;
+    grid-template-rows: auto auto auto;
   }
 
   .dm-screen-main > .session-dashboard-grid {
     min-height: 0;
-    overflow: auto;
-    align-self: stretch;
   }
 
   .session-screen-main {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    max-height: calc(100dvh - 3.75rem);
-    overflow: hidden;
+    grid-template-rows: auto auto;
   }
 
   .session-screen-main > .session-dashboard-grid {
     min-height: 0;
-    overflow: auto;
-    align-self: stretch;
   }
 
   .session-dashboard-grid {
@@ -2118,63 +2255,51 @@ tr:hover td { background: var(--panel-alt); }
     align-items: start;
   }
 
+  /* Feed column: natural flow — no overflow, no sticky, no height cap.
+     Panels resize to content and scroll uniformly with the page. */
   .session-feed-column {
-    position: sticky;
-    top: 0.75rem;
+    position: static;
+    max-height: none;
+    overflow: visible;
     align-self: start;
-    max-height: calc(100dvh - 5rem);
-    overflow: auto;
-    padding-right: 0.15rem;
-    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .session-feed-column .pending-actions-panel {
     height: auto;
-    max-height: min(42vh, 26rem);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    max-height: none;
+    overflow: visible;
   }
 
   .session-feed-column .pending-actions-list {
-    min-height: 0;
-    overflow: auto;
-    padding-right: 0.15rem;
+    overflow: visible;
   }
 
   .session-feed-column .action-log-panel {
-    display: flex;
-    flex-direction: column;
     height: auto;
-    min-height: 12rem;
+    min-height: 0;
     max-height: none;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .session-feed-column .action-log-scroll {
-    min-height: 0;
-    overflow: auto;
-    padding-right: 0.15rem;
+    overflow: visible;
   }
 }
 
 @media (min-width: 900px) and (orientation: landscape) {
+  /* Wide landscape: compact padding + wider right column */
   .dm-app-shell {
-    height: 100dvh;
-    overflow: hidden;
+    grid-template-rows: auto auto;
   }
 
   .dm-screen-main {
-    height: calc(100dvh - 3.75rem);
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
     gap: clamp(0.75rem, 1.2vw, 1rem);
-    overflow: hidden;
     padding: clamp(0.75rem, 1.2vw, 1.25rem);
   }
 
   .dm-screen-main > .session-dashboard-grid {
     min-height: 0;
-    overflow: auto;
   }
 
   .dm-session-info {
@@ -2182,68 +2307,47 @@ tr:hover td { background: var(--panel-alt); }
   }
 
   .session-dashboard-grid {
-    height: 100%;
-    min-height: 0;
     grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
-    align-items: stretch;
+    align-items: start;
   }
 
   .session-primary-column {
-    height: 100%;
-    min-height: 0;
-    overflow: auto;
-    padding-right: 0.2rem;
     align-content: start;
   }
 
+  /* Feed column: natural flow, no overflow constraints, scrolls with page */
   .session-feed-column {
     position: static;
-    height: 100%;
     max-height: none;
-    overflow: hidden;
-    padding-right: 0;
-    grid-template-rows: auto minmax(0, 1fr);
+    overflow: visible;
+    align-self: start;
   }
 
-  .session-feed-column .pending-actions-panel {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    max-height: min(38vh, 24rem);
-    overflow: hidden;
-    flex: 0 1 auto;
-  }
-
+  .session-feed-column .pending-actions-panel,
   .session-feed-column .action-log-panel {
     height: auto;
-    min-height: 0;
     max-height: none;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    flex: 1 1 auto;
+    overflow: visible;
   }
 
-  .session-feed-column .pending-actions-panel .panel-title,
-  .session-feed-column .action-log-panel .panel-title {
-    flex: 0 0 auto;
-  }
-
-  .session-feed-column .pending-actions-list {
-    min-height: 0;
-    overflow: auto;
-    padding-right: 0.2rem;
+  .session-feed-column .pending-actions-list,
+  .session-feed-column .action-log-scroll {
+    overflow: visible;
   }
 
   .session-primary-column > .session-support-column {
-    min-height: 0;
     overflow: visible;
+  }
+
+  /* DM two-column layout: wider left (action column) + narrower right (reference) */
+  .dm-two-col-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(22rem, 28rem);
+    align-items: start;
   }
 }
 
-/* Portrait / narrow: one column, equal gap between every session panel */
+/* Portrait / narrow: one column, natural page scroll */
 @media (max-width: 1023px), (orientation: portrait) {
-  /* Let the page grow with content instead of locking main to viewport height */
   .dm-app-shell,
   .app-shell:has(> .session-screen-main) {
     grid-template-rows: auto auto;
@@ -2254,7 +2358,7 @@ tr:hover td { background: var(--panel-alt); }
 
   .dm-screen-main {
     display: grid;
-    grid-template-rows: auto auto minmax(0, auto);
+    grid-template-rows: auto;
     min-height: auto;
     height: auto;
     max-height: none;
@@ -2263,7 +2367,7 @@ tr:hover td { background: var(--panel-alt); }
 
   .session-screen-main {
     display: grid;
-    grid-template-rows: auto minmax(0, auto);
+    grid-template-rows: auto;
     min-height: auto;
     height: auto;
     max-height: none;
@@ -2284,10 +2388,38 @@ tr:hover td { background: var(--panel-alt); }
     align-items: stretch;
   }
 
+  /* Flatten columns into the page flow */
   .session-primary-column,
   .session-feed-column,
   .session-primary-column > .session-support-column {
     display: contents;
+  }
+
+  /* Portrait priority ordering:
+     1. dm-combat-section  (combat tracker + skill prompts + NPC actions)
+     2. pending-actions-panel (review & resolve submissions)
+     3. action-log-panel  (published outcomes)
+     4. dm-participant-section (character/NPC reference — scrolled to when needed)
+  */
+  .dm-combat-section         { order: 1; }
+  .pending-actions-panel     { order: 2; }
+  .action-log-panel          { order: 3; }
+  .dm-participant-section    { order: 4; }
+
+  /* Collapse DM two-column to single column on portrait */
+  .dm-two-col-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dm-reference-column {
+    display: contents;
+  }
+
+  /* Reset sticky positioning from wider breakpoints */
+  .session-feed-column {
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 
   .session-feed-column .pending-actions-panel,
@@ -2955,7 +3087,7 @@ tr:hover td { background: var(--panel-alt); }
   }
 
   .inline-fields {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .toast-container {
@@ -2980,7 +3112,7 @@ tr:hover td { background: var(--panel-alt); }
     flex-direction: column;
   }
   .copy-row { flex-direction: column; }
-  .inline-fields { grid-template-columns: 1fr; }
+  .inline-fields { grid-template-columns: minmax(0, 1fr); }
 }
 
 .inventory-list {
@@ -3087,8 +3219,9 @@ details[open] .inventory-item-chevron {
 .inventory-stat-grid {
   margin: 0;
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 0.2rem 0.6rem;
+  min-width: 0;
 }
 
 .inventory-stat-row {

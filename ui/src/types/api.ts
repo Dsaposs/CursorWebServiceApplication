@@ -220,6 +220,10 @@ export interface RulesetActionDefinition {
   key: string;
   label: string;
   description?: string;
+  /** 'combat' actions require a target and are only available during a combatant's turn.
+   *  'exploration' (or absent) actions can be taken freely.
+   *  Maps to category 'combat' | 'normal' in UI helpers. */
+  context?: 'combat' | 'exploration';
   allowedClasses?: string[];
   requiredItemKey?: string;
   roll: {
@@ -312,9 +316,11 @@ export interface SessionStateResponse extends SessionSummaryResponse {
 export interface CombatEncounterResponse {
   id: string;
   sequence: number;
+  round: number;
   startedAt: string;
   endedAt?: string | null;
   isActive: boolean;
+  promptedTurnCharacterId?: string | null;
 }
 
 export interface RollPromptResponse {

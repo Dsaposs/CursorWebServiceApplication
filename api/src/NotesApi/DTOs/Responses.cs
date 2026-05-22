@@ -131,9 +131,11 @@ public class CombatEncounterResponse
 {
     public Guid Id { get; set; }
     public int Sequence { get; set; }
+    public int Round { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }
     public bool IsActive { get; set; }
+    public Guid? PromptedTurnCharacterId { get; set; }
 }
 
 public class RollPromptResponse

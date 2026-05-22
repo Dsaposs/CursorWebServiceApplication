@@ -174,9 +174,11 @@ public static partial class ControllerHelpers
     {
         Id = encounter.Id,
         Sequence = encounter.Sequence,
+        Round = encounter.Round,
         StartedAt = encounter.StartedAt,
         EndedAt = encounter.EndedAt,
         IsActive = encounter.Id == activeEncounterId && encounter.EndedAt is null,
+        PromptedTurnCharacterId = encounter.PromptedTurnCharacterId,
     };
 
     public static IEnumerable<CombatEncounterResponse> SelectCombatEncounters(GameSession session) =>

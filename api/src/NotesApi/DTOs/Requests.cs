@@ -291,6 +291,11 @@ public class SetupCombatRequest
     public IEnumerable<CombatantRequest> Combatants { get; set; } = Array.Empty<CombatantRequest>();
 }
 
+public class PromptTurnRequest
+{
+    public Guid CharacterId { get; set; }
+}
+
 public class CombatantRequest
 {
     [Required]

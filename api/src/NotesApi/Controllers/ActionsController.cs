@@ -52,6 +52,7 @@ public class ActionsController : ControllerBase
             .Include(s => s.Game).ThenInclude(g => g.Ruleset)
             .Include(s => s.Game).ThenInclude(g => g.NpcsAndMonsters)
             .Include(s => s.Actions)
+            .Include(s => s.InitiativeEntries)
             .FirstOrDefaultAsync(s => s.JoinCode == joinCode && s.IsActive);
 
         if (session is null)
@@ -128,10 +129,26 @@ public class ActionsController : ControllerBase
 
             if (!isDm)
             {
-                return BadRequest(new { errors = new[] { "During combat, wait for the DM to prompt your turn — actions cannot be submitted to the queue." } });
-            }
+                // Players may only submit during their prompted initiative turn.
+                var encounter = session.ActiveCombatEncounterId.HasValue
+                    ? await _db.Set<CombatEncounter>().FindAsync(session.ActiveCombatEncounterId.Value)
+                    : null;
 
-            if (!request.ActorNpcId.HasValue)
+                var currentEntry = session.InitiativeEntries
+                    .FirstOrDefault(i => i.IsCurrentTurn);
+
+                var isPromptedPlayerTurn =
+                    encounter?.PromptedTurnCharacterId.HasValue == true
+                    && encounter.PromptedTurnCharacterId == actorCharacterId
+                    && currentEntry?.CombatantType == CombatantType.Character
+                    && currentEntry?.CombatantId == actorCharacterId;
+
+                if (!isPromptedPlayerTurn)
+                {
+                    return BadRequest(new { errors = new[] { "Wait for the DM to prompt your turn before submitting a combat action." } });
+                }
+            }
+            else if (!request.ActorNpcId.HasValue)
             {
                 return BadRequest(new { errors = new[] { "During combat, resolve player actions from the initiative panel — only NPC actions can be queued here." } });
             }

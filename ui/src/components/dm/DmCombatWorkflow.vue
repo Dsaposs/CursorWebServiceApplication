@@ -9,9 +9,16 @@ interface Props {
   draggedInitiativeId: string | null;
   dragOverId: string | null;
   expandedEntryId: string | null;
+  /** Current round number from the active CombatEncounter. */
+  round?: number;
+  /** The character ID that has been prompted to act this turn, if any. */
+  promptedTurnCharacterId?: string | null;
 }
 
-defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  round: 1,
+  promptedTurnCharacterId: null,
+});
 
 const emit = defineEmits<{
   setupCombat: [];
@@ -20,7 +27,36 @@ const emit = defineEmits<{
   startDrag: [entryId: string, event: PointerEvent];
   moveKeyboard: [entryId: string, offset: -1 | 1];
   activateEntry: [entry: InitiativeEntryResponse];
+  promptTurn: [entry: InitiativeEntryResponse];
+  skipTurnDm: [];
 }>();
+
+/** True when the current turn belongs to an NPC that the DM must resolve. */
+const isNpcTurn = computed(() =>
+  props.currentTurn?.combatantType === 'NpcOrMonster',
+);
+
+/** DM skip turn is available whenever it is an NPC's turn (DM controls NPC).
+ *  For player turns the player uses the Skip Turn button on their screen. */
+const canDmSkip = computed(() => isNpcTurn.value);
+
+function entryButtonLabel(entry: InitiativeEntryResponse): string {
+  if (entry.id === props.expandedEntryId) return 'Close';
+  if (entry.combatantType === 'Character') {
+    return props.promptedTurnCharacterId === entry.combatantId ? 'View' : 'Prompt';
+  }
+  return 'Act';
+}
+
+function handleEntryButton(entry: InitiativeEntryResponse) {
+  if (entry.combatantType === 'Character' && entry.id !== props.expandedEntryId && props.promptedTurnCharacterId !== entry.combatantId) {
+    // Prompt the player and expand the resolution panel in one click.
+    emit('promptTurn', entry);
+  } else {
+    // NPC entry, or toggling an already-expanded / already-prompted character panel.
+    emit('activateEntry', entry);
+  }
+}
 </script>
 
 <template>
@@ -28,11 +64,49 @@ const emit = defineEmits<{
     <div class="panel-title">
       <div>
         <h2>Combat</h2>
-        <p class="text-sm">{{ isCombat ? 'Drag to reorder. Click Act / Prompt to take a turn.' : 'Rolls initiative for all characters and NPCs per the ruleset.' }}</p>
+        <p class="text-sm">
+          {{ isCombat
+            ? 'Drag to reorder. Activate a turn to act or prompt.'
+            : 'Rolls initiative for all characters and NPCs per the ruleset.' }}
+        </p>
       </div>
-      <div class="btn-row">
-        <button v-if="isCombat && displayedInitiative.length" class="btn ghost sm" type="button" :disabled="isSaving" @click="emit('advanceTurn')">Next Turn →</button>
-        <button v-if="!isCombat" class="btn ghost sm" type="button" :disabled="isSaving" @click="emit('setupCombat')">
+      <div class="btn-row" style="align-items: center; gap: 0.5rem;">
+        <!-- Round badge -->
+        <span
+          v-if="isCombat"
+          class="badge"
+          style="font-weight: 600; font-size: 0.8rem;"
+        >
+          Round {{ round }}
+        </span>
+
+        <button
+          v-if="isCombat && canDmSkip"
+          class="btn ghost sm"
+          type="button"
+          :disabled="isSaving"
+          @click="emit('skipTurnDm')"
+        >
+          Skip Turn
+        </button>
+
+        <button
+          v-if="isCombat && displayedInitiative.length"
+          class="btn ghost sm"
+          type="button"
+          :disabled="isSaving"
+          @click="emit('advanceTurn')"
+        >
+          Next Turn →
+        </button>
+
+        <button
+          v-if="!isCombat"
+          class="btn ghost sm"
+          type="button"
+          :disabled="isSaving"
+          @click="emit('setupCombat')"
+        >
           {{ isSaving ? 'Starting…' : 'Start combat' }}
         </button>
       </div>
@@ -49,8 +123,10 @@ const emit = defineEmits<{
           'dragging': draggedInitiativeId === entry.id,
           'draggable': isCombat && !isSaving,
           'drag-over': dragOverId === entry.id && draggedInitiativeId !== null && draggedInitiativeId !== entry.id,
+          'locked-turn': !entry.isCurrentTurn,
         }"
         :data-initiative-id="entry.id"
+        :aria-disabled="!entry.isCurrentTurn ? 'true' : undefined"
       >
         <div class="initiative-item-header">
           <button
@@ -77,9 +153,9 @@ const emit = defineEmits<{
             :class="entry.id === expandedEntryId ? 'ghost' : ''"
             type="button"
             :disabled="isSaving"
-            @click="emit('activateEntry', entry)"
+            @click="handleEntryButton(entry)"
           >
-            {{ entry.id === expandedEntryId ? 'Close' : entry.combatantType === 'Character' ? 'Prompt' : 'Act' }}
+            {{ entryButtonLabel(entry) }}
           </button>
         </div>
 
@@ -90,7 +166,13 @@ const emit = defineEmits<{
       </li>
     </ul>
 
-    <button v-if="isCombat" class="btn danger w-full" type="button" :disabled="isSaving" @click="emit('endCombat')">
+    <button
+      v-if="isCombat"
+      class="btn danger w-full"
+      type="button"
+      :disabled="isSaving"
+      @click="emit('endCombat')"
+    >
       End Combat
     </button>
   </div>

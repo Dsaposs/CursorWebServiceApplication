@@ -81,6 +81,43 @@ public class CombatController : ControllerBase
         return Ok(entries);
     }
 
+    /// <summary>
+    /// DM explicitly prompts a character to take their turn action, opening the action form on the player's device.
+    /// </summary>
+    [HttpPost("prompt-turn")]
+    public async Task<IActionResult> PromptTurn(Guid sessionId, [FromBody] PromptTurnRequest request)
+    {
+        var session = await GetOwnedSessionAsync(sessionId);
+        if (session is null) return NotFound();
+
+        if (session.State != SessionMode.Combat)
+            return BadRequest(new { errors = new[] { "Session is not in combat." } });
+
+        var encounter = session.ActiveCombatEncounterId.HasValue
+            ? await _db.Set<CombatEncounter>().FindAsync(session.ActiveCombatEncounterId.Value)
+            : null;
+
+        if (encounter is null)
+            return BadRequest(new { errors = new[] { "No active combat encounter." } });
+
+        // Validate the character is the current turn's combatant.
+        var currentEntry = await _db.InitiativeEntries
+            .Where(i => i.SessionId == sessionId && i.IsCurrentTurn)
+            .FirstOrDefaultAsync();
+
+        if (currentEntry is null
+            || currentEntry.CombatantType != CombatantType.Character
+            || currentEntry.CombatantId != request.CharacterId)
+        {
+            return BadRequest(new { errors = new[] { "It is not that character's turn." } });
+        }
+
+        encounter.PromptedTurnCharacterId = request.CharacterId;
+        Touch(session);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
     [HttpPost("advance")]
     public async Task<ActionResult<IEnumerable<InitiativeEntryResponse>>> Advance(Guid sessionId)
     {
@@ -100,7 +137,10 @@ public class CombatController : ControllerBase
             return BadRequest(new { errors = new[] { "Set up initiative before advancing turns." } });
         }
 
-        CombatTurnAdvanceService.AdvanceTurn(entries);
+        var encounter = session.ActiveCombatEncounterId.HasValue
+            ? await _db.Set<NotesApi.Models.CombatEncounter>().FindAsync(session.ActiveCombatEncounterId.Value)
+            : null;
+        CombatTurnAdvanceService.AdvanceTurn(entries, encounter);
         Touch(session);
         await _db.SaveChangesAsync();
 
@@ -173,6 +213,18 @@ public class CombatController : ControllerBase
         else
         {
             await CombatEncounterLifecycle.EnsureEncounterForCombatAsync(_db, session);
+
+            // Reordering initiative invalidates any active turn prompt so the player
+            // is not shown an unexpected action form after the order changes.
+            if (session.ActiveCombatEncounterId.HasValue)
+            {
+                var activeEncounter = await _db.Set<CombatEncounter>()
+                    .FindAsync(session.ActiveCombatEncounterId.Value);
+                if (activeEncounter is not null)
+                {
+                    activeEncounter.PromptedTurnCharacterId = null;
+                }
+            }
         }
 
         Touch(session);

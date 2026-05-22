@@ -48,10 +48,18 @@ public static class CombatTurnAdvanceService
             return false;
         }
 
-        return AdvanceTurn(entries);
+        var encounter = session.ActiveCombatEncounterId.HasValue
+            ? await db.Set<CombatEncounter>().FindAsync(session.ActiveCombatEncounterId.Value)
+            : null;
+
+        return AdvanceTurn(entries, encounter);
     }
 
-    public static bool AdvanceTurn(IList<InitiativeEntry> entries)
+    /// <summary>
+    /// Advances the initiative to the next combatant. When the order wraps back to the first
+    /// combatant the encounter's Round counter is incremented.
+    /// </summary>
+    public static bool AdvanceTurn(IList<InitiativeEntry> entries, CombatEncounter? encounter = null)
     {
         if (entries.Count == 0)
         {
@@ -65,7 +73,21 @@ public static class CombatTurnAdvanceService
         }
 
         entries[currentIndex].IsCurrentTurn = false;
-        entries[(currentIndex + 1) % entries.Count].IsCurrentTurn = true;
+        var nextIndex = (currentIndex + 1) % entries.Count;
+        entries[nextIndex].IsCurrentTurn = true;
+
+        if (encounter is not null)
+        {
+            // Clear the turn prompt so the next player is not auto-shown the action form.
+            encounter.PromptedTurnCharacterId = null;
+
+            // Increment round counter when the order wraps back to the first position.
+            if (nextIndex == 0)
+            {
+                encounter.Round++;
+            }
+        }
+
         return true;
     }
 }

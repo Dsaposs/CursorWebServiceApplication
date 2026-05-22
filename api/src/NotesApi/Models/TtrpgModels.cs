@@ -321,6 +321,15 @@ public class CombatEncounter
 
     public int Sequence { get; set; }
 
+    /// <summary>Current round number. Starts at 1 and increments each time the initiative order wraps.</summary>
+    public int Round { get; set; } = 1;
+
+    /// <summary>
+    /// Set by the DM to explicitly prompt a specific character to take their action.
+    /// Cleared automatically when the turn advances. Null means no player has been prompted yet.
+    /// </summary>
+    public Guid? PromptedTurnCharacterId { get; set; }
+
     public DateTime StartedAt { get; set; }
 
     public DateTime? EndedAt { get; set; }

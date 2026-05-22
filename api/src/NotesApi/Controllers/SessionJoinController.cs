@@ -4,6 +4,7 @@ using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Models;
 using NotesApi.Rulesets;
+using NotesApi.Services;
 
 namespace NotesApi.Controllers;
 
@@ -174,6 +175,55 @@ public class SessionJoinController : ControllerBase
                 ControllerHelpers.ParseNpcVisibilities(session.NpcVisibilitiesJson),
                 playerView: true),
         });
+    }
+
+    /// <summary>
+    /// Player skips their turn in combat. Validates that it is the player's character's turn,
+    /// then advances the initiative order without requiring an action to be resolved.
+    /// </summary>
+    [HttpPost("{joinCode}/skip-turn")]
+    public async Task<IActionResult> SkipTurn(string joinCode)
+    {
+        var session = await _db.GameSessions
+            .Include(s => s.InitiativeEntries)
+            .FirstOrDefaultAsync(s => s.JoinCode == joinCode && s.IsActive);
+
+        if (session is null)
+        {
+            return NotFound();
+        }
+
+        if (session.State != SessionMode.Combat)
+        {
+            return BadRequest(new { errors = new[] { "Skip Turn is only available during combat." } });
+        }
+
+        var participant = await GetParticipantAsync(session.GameId);
+        if (participant is null)
+        {
+            return Unauthorized(new { errors = new[] { "Join the session before skipping a turn." } });
+        }
+
+        var entries = session.InitiativeEntries.OrderBy(e => e.SortOrder).ToList();
+        var current = entries.FirstOrDefault(e => e.IsCurrentTurn);
+
+        if (current is null
+            || current.CombatantType != CombatantType.Character
+            || current.CombatantId != participant.CharacterId)
+        {
+            return BadRequest(new { errors = new[] { "It is not your turn." } });
+        }
+
+        var encounter = session.ActiveCombatEncounterId.HasValue
+            ? await _db.Set<CombatEncounter>().FindAsync(session.ActiveCombatEncounterId.Value)
+            : null;
+
+        CombatTurnAdvanceService.AdvanceTurn(entries, encounter);
+        session.Version++;
+        session.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return NoContent();
     }
 
     [HttpGet("{joinCode}/state")]

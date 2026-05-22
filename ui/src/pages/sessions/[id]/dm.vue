@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ActionCard from '~/components/ActionCard.vue';
+import ActionEvaluationPanel from '~/components/ActionEvaluationPanel.vue';
 import ConfirmModal from '~/components/ConfirmModal.vue';
 import DmActionLog from '~/components/dm/DmActionLog.vue';
 import DmCombatWorkflow from '~/components/dm/DmCombatWorkflow.vue';
@@ -114,6 +115,10 @@ const explorationPendingActions = computed(() =>
 const publishedActions = computed(() => [...(state.value?.actions.filter(a => a.status === 'Published') ?? [])].reverse());
 const game = computed<GameResponse | null>(() => state.value?.game ?? null);
 const combatEncounters = computed(() => state.value?.combatEncounters ?? []);
+const activeEncounter = computed(() =>
+  combatEncounters.value.find(e => e.isActive) ?? null,
+);
+const currentRound = computed(() => activeEncounter.value?.round ?? 1);
 
 const {
   expandedGroups: expandedLogGroups,
@@ -550,6 +555,36 @@ async function resolveAction(action: ActionQueueItemResponse) {
   }
 }
 
+/** Called by ActionEvaluationPanel resolve event — merges panel state into local maps then resolves. */
+async function resolveActionFromPanel(action: ActionQueueItemResponse, payload: {
+  resolutionText: string;
+  statTarget: string;
+  statHealthDelta: string;
+  statSetHealth: string;
+  statSetArmor: string;
+  statGvDeltas: Record<string, string>;
+  statAttrDeltas: Record<string, string>;
+  statInventoryDeltas: Record<string, string>;
+  statStatusChanges: { addKeys: string[]; removeKeys: string[] };
+}) {
+  resolutionText.value[action.id] = payload.resolutionText;
+  statChangeTarget.value[action.id] = payload.statTarget;
+  statChangeHealthDelta.value[action.id] = payload.statHealthDelta;
+  statChangeSetHealth.value[action.id] = payload.statSetHealth;
+  statChangeSetArmor.value[action.id] = payload.statSetArmor;
+  statChangeGvDeltas.value[action.id] = payload.statGvDeltas;
+  statChangeAttrDeltas.value[action.id] = payload.statAttrDeltas;
+  statChangeInventoryDeltas.value[action.id] = payload.statInventoryDeltas;
+  statChangeStatusChanges.value[action.id] = payload.statStatusChanges;
+  await resolveAction(action);
+}
+
+/** Called by ActionEvaluationPanel reject event. */
+async function rejectActionWithReason(action: ActionQueueItemResponse, reason: string) {
+  rejectReason.value[action.id] = reason;
+  await rejectAction(action);
+}
+
 function buildStatChanges(action: ActionQueueItemResponse) {
   const actionId = action.id;
 
@@ -672,6 +707,36 @@ async function advanceTurn() {
   }
 }
 
+/** DM skips the current NPC turn — advances initiative without resolving an action. */
+async function skipTurnDm() {
+  await advanceTurn();
+}
+
+/** DM prompts the current-turn character to take their action — opens the action form on the player's device. */
+async function promptPlayerTurn(characterId: string) {
+  if (!state.value) return;
+  isSaving.value = true;
+  try {
+    await api(`/api/sessions/${route.params.id}/combat/prompt-turn`, {
+      method: 'POST',
+      body: { characterId },
+    });
+    await refresh();
+    toastSuccess('Player has been prompted to take their action.');
+  } catch (err) {
+    toastError(err instanceof Error ? err.message : String(err));
+  } finally {
+    isSaving.value = false;
+  }
+}
+
+/** Called when DM clicks the Prompt button on a character's initiative entry.
+ *  Sends the prompt-turn request and auto-expands the resolution panel. */
+async function handlePromptTurn(entry: InitiativeEntryResponse) {
+  activeCombatEntryId.value = entry.id;
+  await promptPlayerTurn(entry.combatantId);
+}
+
 async function stopSession() {
   isSaving.value = true;
   try {
@@ -738,6 +803,15 @@ function pendingStatChecksForCharacter(characterId: string) {
   return pendingActions.value.filter(a =>
     isStatCheckAction(a)
     && a.actorCharacterId === characterId,
+  );
+}
+
+/** Returns player-submitted combat actions (non-stat-check, in a combat encounter) awaiting DM evaluation. */
+function pendingCombatActionsForCharacter(characterId: string) {
+  return pendingActions.value.filter(a =>
+    !isStatCheckAction(a)
+    && a.actorCharacterId === characterId
+    && a.combatEncounterId != null,
   );
 }
 
@@ -1035,9 +1109,11 @@ onUnmounted(() => {
         :session-id="state.id"
       />
 
-      <div class="session-dashboard-grid">
-        <div class="session-primary-column">
-          <div class="session-support-column">
+      <div class="dm-two-col-grid">
+        <!-- LEFT: Action column — combat, pending queue, action log -->
+        <div class="dm-action-column">
+          <!-- dm-combat-section groups combat + aux tools for portrait reordering -->
+          <div class="dm-combat-section">
           <DmCombatWorkflow
             :is-combat="isCombat"
             :is-saving="isSaving"
@@ -1046,61 +1122,117 @@ onUnmounted(() => {
             :dragged-initiative-id="draggedInitiativeId"
             :drag-over-id="dragOverId"
             :expanded-entry-id="activeCombatEntryId"
+            :round="currentRound"
+            :prompted-turn-character-id="activeEncounter?.promptedTurnCharacterId"
             @setup-combat="setupCombat"
             @advance-turn="advanceTurn"
             @end-combat="endCombat"
             @start-drag="startInitiativeDrag"
             @move-keyboard="moveInitiativeByKeyboard"
             @activate-entry="handleActivateEntry"
+            @prompt-turn="handlePromptTurn"
+            @skip-turn-dm="skipTurnDm"
           >
             <template v-if="state" #entry-action="{ entry }">
-              <!-- Player turn — prompt rolls and resolve stat checks inline (not pending queue) -->
+              <!-- Player turn — evaluate submitted action or wait; DM can also prompt a stat check -->
               <div v-if="entry.combatantType === 'Character'" class="turn-inline-body">
-                <p class="text-sm muted" style="margin: 0 0 0.75rem;">
-                  <strong>{{ entry.combatantName }}</strong> can act on their device when it is their turn.
-                </p>
 
-                <div v-if="awaitingCombatTurnRollPrompts.length" class="follow-up-roll-list" style="margin-bottom: 0.75rem;">
-                  <p class="text-sm muted" style="margin: 0 0 0.5rem;">Waiting for rolls</p>
-                  <div
-                    v-for="prompt in awaitingCombatTurnRollPrompts"
-                    :key="prompt.id"
-                    class="follow-up-roll-item"
-                  >
-                    <span class="text-sm">{{ prompt.promptLabel || prompt.skillKey || 'Skill check' }}</span>
-                    <span class="badge pending">Awaiting roll</span>
-                  </div>
+                <!-- Player-submitted combat action: evaluate inline -->
+                <template v-if="pendingCombatActionsForCharacter(entry.combatantId).length">
+                  <ActionEvaluationPanel
+                    v-for="action in pendingCombatActionsForCharacter(entry.combatantId)"
+                    :key="action.id"
+                    :action="action"
+                    :characters="state.game.characters"
+                    :npcs="state.game.npcsAndMonsters"
+                    :roll-prompts="state.rollPrompts ?? []"
+                    :ruleset-definition="rulesetDefinition"
+                    :is-busy="isSaving"
+                    :resolution-text="resolutionText[action.id] ?? ''"
+                    :stat-target="statChangeTarget[action.id] ?? ''"
+                    :stat-health-delta="statChangeHealthDelta[action.id] ?? ''"
+                    :stat-set-health="statChangeSetHealth[action.id] ?? ''"
+                    :stat-set-armor="statChangeSetArmor[action.id] ?? ''"
+                    :stat-gv-deltas="statChangeGvDeltas[action.id] ?? {}"
+                    :stat-attr-deltas="statChangeAttrDeltas[action.id] ?? {}"
+                    :stat-inventory-deltas="statChangeInventoryDeltas[action.id] ?? {}"
+                    :stat-status-changes="statChangeStatusChanges[action.id] ?? { addKeys: [], removeKeys: [] }"
+                    @resolve="payload => resolveActionFromPanel(action, payload)"
+                    @reject="reason => rejectActionWithReason(action, reason)"
+                    @start-chain="startRollChain(action.id)"
+                    @send-roll-prompts="payload => sendRollPrompts(action.id, payload)"
+                    @cancel-prompt="cancelRollPrompt"
+                    @dm-roll="dmRollForPlayer"
+                    @update:resolution-text="resolutionText[action.id] = $event"
+                    @update:stat-target="statChangeTarget[action.id] = $event"
+                    @update:stat-health-delta="statChangeHealthDelta[action.id] = $event"
+                    @update:stat-set-health="statChangeSetHealth[action.id] = $event"
+                    @update:stat-set-armor="statChangeSetArmor[action.id] = $event"
+                    @update:stat-gv-deltas="statChangeGvDeltas[action.id] = $event"
+                    @update:stat-attr-deltas="statChangeAttrDeltas[action.id] = $event"
+                    @update:stat-inventory-deltas="statChangeInventoryDeltas[action.id] = $event"
+                    @update:stat-status-changes="statChangeStatusChanges[action.id] = $event"
+                  />
+                </template>
+                <div
+                  v-else-if="activeEncounter?.promptedTurnCharacterId === entry.combatantId"
+                  class="alert success"
+                  style="margin-bottom: 0.75rem;"
+                >
+                  <p class="text-sm" style="margin: 0;">
+                    <strong>{{ entry.combatantName }}</strong> has been prompted — waiting for them to submit their action.
+                  </p>
+                </div>
+                <div v-else class="alert info" style="margin-bottom: 0.75rem;">
+                  <p class="text-sm" style="margin: 0;">
+                    Close this panel and click <strong>Prompt</strong> on the initiative card to send {{ entry.combatantName }} their action form.
+                  </p>
                 </div>
 
-                <fieldset style="margin-bottom: 0.75rem;">
-                  <legend class="text-sm">Prompt stat check</legend>
-                  <label>
-                    Skill
-                    <select v-model="combatTurnSkillKey" :disabled="isSaving">
-                      <option value="">Choose a skill</option>
-                      <option
-                        v-for="skill in combatTurnAvailableSkills"
-                        :key="skill.key"
-                        :value="skill.key"
+                <!-- DM-initiated stat check prompt (independent of player action) -->
+                <details class="dm-stat-check-prompt" style="margin-bottom: 0.75rem;">
+                  <summary class="text-sm" style="cursor: pointer; user-select: none;">Prompt stat check</summary>
+                  <div style="margin-top: 0.5rem;">
+                    <div v-if="awaitingCombatTurnRollPrompts.length" class="follow-up-roll-list" style="margin-bottom: 0.75rem;">
+                      <p class="text-sm muted" style="margin: 0 0 0.5rem;">Waiting for rolls</p>
+                      <div
+                        v-for="prompt in awaitingCombatTurnRollPrompts"
+                        :key="prompt.id"
+                        class="follow-up-roll-item"
                       >
-                        {{ skill.label }}
-                      </option>
-                    </select>
-                  </label>
-                  <label>
-                    Note (optional)
-                    <input v-model.trim="combatTurnSkillPromptLabel" placeholder="e.g. Perception to spot the trap…" :disabled="isSaving" />
-                  </label>
-                  <button
-                    class="btn sm"
-                    type="button"
-                    :disabled="isSaving || !combatTurnSkillKey"
-                    @click="promptCombatTurnStatCheck(entry.combatantId)"
-                  >
-                    Prompt {{ entry.combatantName }} to roll
-                  </button>
-                </fieldset>
+                        <span class="text-sm">{{ prompt.promptLabel || prompt.skillKey || 'Skill check' }}</span>
+                        <span class="badge pending">Awaiting roll</span>
+                      </div>
+                    </div>
+                    <label>
+                      Skill
+                      <select v-model="combatTurnSkillKey" :disabled="isSaving">
+                        <option value="">Choose a skill</option>
+                        <option
+                          v-for="skill in combatTurnAvailableSkills"
+                          :key="skill.key"
+                          :value="skill.key"
+                        >
+                          {{ skill.label }}
+                        </option>
+                      </select>
+                    </label>
+                    <label>
+                      Note (optional)
+                      <input v-model.trim="combatTurnSkillPromptLabel" placeholder="e.g. Perception to spot the trap…" :disabled="isSaving" />
+                    </label>
+                    <button
+                      class="btn sm"
+                      type="button"
+                      :disabled="isSaving || !combatTurnSkillKey"
+                      @click="promptCombatTurnStatCheck(entry.combatantId)"
+                    >
+                      Prompt {{ entry.combatantName }} to roll
+                    </button>
+                  </div>
+                </details>
 
+                <!-- Resolve DM-prompted stat checks -->
                 <div
                   v-for="action in pendingStatChecksForCharacter(entry.combatantId)"
                   :key="action.id"
@@ -1367,20 +1499,9 @@ onUnmounted(() => {
             </form>
           </div>
 
-          <DmParticipantPanels
-            v-if="state?.game"
-            :game="state.game"
-            :game-id="state.game.id"
-            :ruleset-definition="rulesetDefinition"
-            :is-busy="isSaving"
-            @cycle-npc-visibility="cycleNpcVisibility"
-            @npc-created="onNpcCreated"
-            @npc-updated="onNpcUpdated"
-          />
-          </div>
-        </div>
+          </div><!-- /dm-combat-section -->
 
-        <aside class="session-feed-column">
+          <!-- Pending actions — hidden during combat (resolve from initiative instead) -->
           <div v-if="!isCombat" class="panel dashboard-primary-panel pending-actions-panel">
             <div class="panel-title">
               <div>
@@ -1430,81 +1551,39 @@ onUnmounted(() => {
                   <span class="badge pending">{{ expandedPendingActions.has(action.id) ? 'Hide' : 'Resolve' }}</span>
                 </button>
 
-                <form v-if="expandedPendingActions.has(action.id)" @submit.prevent="resolveAction(action)">
-                  <div v-if="rulesetActionDetail(action)" class="alert info">
-                    <div>
-                      <strong>{{ rulesetActionDetail(action)?.dice }}</strong>
-                      <p class="text-sm muted">
-                        Reference — prompt the player to roll: {{ rulesetActionDetail(action)?.attribute }} + {{ rulesetActionDetail(action)?.skill }}.
-                      </p>
-                      <p class="text-sm">{{ rulesetActionDetail(action)?.successRule }}</p>
-                    </div>
-                  </div>
-
-                  <DmFollowUpRollPanel
-                    v-if="state"
-                    :action="action"
-                    :characters="state.game.characters"
-                    :roll-prompts="state.rollPrompts ?? []"
-                    :ruleset-definition="rulesetDefinition"
-                    :is-busy="isSaving"
-                    @start-chain="startRollChain(action.id)"
-                    @send="payload => sendRollPrompts(action.id, payload)"
-                    @cancel="cancelRollPrompt"
-                    @dm-roll="dmRollForPlayer"
-                  />
-
-                  <p
-                    v-if="derivedActionOutcome(action)"
-                    class="text-sm"
-                    style="margin: 0.5rem 0;"
-                  >
-                    Roll outcome:
-                    <span class="badge" :class="derivedActionOutcome(action) === 'Pass' ? 'pass' : 'fail'">
-                      {{ derivedActionOutcome(action) }}
-                    </span>
-                  </p>
-
-                  <DmStatChangePanel
-                    :characters="state.game.characters"
-                    :npcs="state.game.npcsAndMonsters"
-                    :ruleset-definition="rulesetDefinition"
-                    :target="statChangeTarget[action.id]"
-                    :health-delta="statChangeHealthDelta[action.id]"
-                    :set-health="statChangeSetHealth[action.id]"
-                    :set-armor="statChangeSetArmor[action.id]"
-                    :gv-deltas="statChangeGvDeltas[action.id]"
-                    :attr-deltas="statChangeAttrDeltas[action.id]"
-                    :inventory-deltas="statChangeInventoryDeltas[action.id]"
-                    :status-changes="statChangeStatusChanges[action.id]"
-                    @update:target="statChangeTarget[action.id] = $event"
-                    @update:health-delta="statChangeHealthDelta[action.id] = $event"
-                    @update:set-health="statChangeSetHealth[action.id] = $event"
-                    @update:set-armor="statChangeSetArmor[action.id] = $event"
-                    @update:gv-deltas="statChangeGvDeltas[action.id] = $event"
-                    @update:attr-deltas="statChangeAttrDeltas[action.id] = $event"
-                    @update:inventory-deltas="statChangeInventoryDeltas[action.id] = $event"
-                    @update:status-changes="statChangeStatusChanges[action.id] = $event"
-                  />
-
-                  <div class="btn-row">
-                    <button class="btn success" type="submit" :disabled="isSaving">
-                      <span aria-hidden="true">✓</span> Publish Resolution
-                    </button>
-                    <button
-                      class="btn danger ghost"
-                      type="button"
-                      :disabled="isSaving"
-                      @click="rejectAction(action)"
-                    >
-                      Reject Action
-                    </button>
-                  </div>
-                  <label>
-                    Rejection note (optional, used if you reject instead)
-                    <textarea v-model="rejectReason[action.id]" placeholder="Why this action does not succeed…" style="min-height: 2rem;" />
-                  </label>
-                </form>
+                <ActionEvaluationPanel
+                  v-if="expandedPendingActions.has(action.id) && state"
+                  :action="action"
+                  :characters="state.game.characters"
+                  :npcs="state.game.npcsAndMonsters"
+                  :roll-prompts="state.rollPrompts ?? []"
+                  :ruleset-definition="rulesetDefinition"
+                  :is-busy="isSaving"
+                  :resolution-text="resolutionText[action.id] ?? ''"
+                  :stat-target="statChangeTarget[action.id] ?? ''"
+                  :stat-health-delta="statChangeHealthDelta[action.id] ?? ''"
+                  :stat-set-health="statChangeSetHealth[action.id] ?? ''"
+                  :stat-set-armor="statChangeSetArmor[action.id] ?? ''"
+                  :stat-gv-deltas="statChangeGvDeltas[action.id] ?? {}"
+                  :stat-attr-deltas="statChangeAttrDeltas[action.id] ?? {}"
+                  :stat-inventory-deltas="statChangeInventoryDeltas[action.id] ?? {}"
+                  :stat-status-changes="statChangeStatusChanges[action.id] ?? { addKeys: [], removeKeys: [] }"
+                  @resolve="payload => resolveActionFromPanel(action, payload)"
+                  @reject="reason => rejectActionWithReason(action, reason)"
+                  @start-chain="startRollChain(action.id)"
+                  @send-roll-prompts="payload => sendRollPrompts(action.id, payload)"
+                  @cancel-prompt="cancelRollPrompt"
+                  @dm-roll="dmRollForPlayer"
+                  @update:resolution-text="resolutionText[action.id] = $event"
+                  @update:stat-target="statChangeTarget[action.id] = $event"
+                  @update:stat-health-delta="statChangeHealthDelta[action.id] = $event"
+                  @update:stat-set-health="statChangeSetHealth[action.id] = $event"
+                  @update:stat-set-armor="statChangeSetArmor[action.id] = $event"
+                  @update:stat-gv-deltas="statChangeGvDeltas[action.id] = $event"
+                  @update:stat-attr-deltas="statChangeAttrDeltas[action.id] = $event"
+                  @update:stat-inventory-deltas="statChangeInventoryDeltas[action.id] = $event"
+                  @update:stat-status-changes="statChangeStatusChanges[action.id] = $event"
+                />
               </div>
             </div>
           </div>
@@ -1522,8 +1601,24 @@ onUnmounted(() => {
             @expand-all="expandAllActions"
             @collapse-all="collapseAllActions"
           />
-        </aside>
-      </div>
+        </div><!-- /dm-action-column -->
+
+        <!-- RIGHT: Reference column — participants, skill checks, exploration NPC form -->
+        <div class="dm-reference-column">
+          <div class="dm-participant-section">
+            <DmParticipantPanels
+              v-if="state?.game"
+              :game="state.game"
+              :game-id="state.game.id"
+              :ruleset-definition="rulesetDefinition"
+              :is-busy="isSaving"
+              @cycle-npc-visibility="cycleNpcVisibility"
+              @npc-created="onNpcCreated"
+              @npc-updated="onNpcUpdated"
+            />
+          </div>
+        </div><!-- /dm-reference-column -->
+      </div><!-- /dm-two-col-grid -->
 
       <div v-if="pollingError" class="alert error">{{ pollingError }}</div>
     </main>

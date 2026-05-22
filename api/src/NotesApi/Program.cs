@@ -707,6 +707,8 @@ static async Task ApplySchemaUpdatesAsync(ApplicationDbContext db)
     await EnsureColumnAsync(connection, "ActionRollPrompts", "DmRolled", "INTEGER NOT NULL DEFAULT 0");
     await EnsureColumnAsync(connection, "SessionRollPrompts", "RollResultJson", "TEXT NULL");
     await EnsureColumnAsync(connection, "InitiativeEntries", "InitiativeScore", "INTEGER NOT NULL DEFAULT 0");
+    await EnsureColumnAsync(connection, "CombatEncounters", "Round", "INTEGER NOT NULL DEFAULT 1");
+    await EnsureColumnAsync(connection, "CombatEncounters", "PromptedTurnCharacterId", "TEXT NULL");
 
     if (!wasOpen)
         await connection.CloseAsync();

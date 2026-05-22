@@ -151,3 +151,28 @@ export function buildRollSummary(action: RulesetActionDefinition, definition: Ru
   return `${detail.dice}: ${detail.attribute} + ${detail.skill}`;
 }
 
+/** True when the action requires a target and is only usable during a combatant's turn. */
+export function isCombatAction(action: RulesetActionDefinition): boolean {
+  return action.context === 'combat';
+}
+
+export interface GroupedActions {
+  normal: RulesetActionDefinition[];
+  combat: RulesetActionDefinition[];
+}
+
+/** Splits available actions into Normal Actions and Combat Actions groups. */
+export function groupActions(actions: RulesetActionDefinition[]): GroupedActions {
+  return actions.reduce<GroupedActions>(
+    (acc, action) => {
+      if (isCombatAction(action)) {
+        acc.combat.push(action);
+      } else {
+        acc.normal.push(action);
+      }
+      return acc;
+    },
+    { normal: [], combat: [] },
+  );
+}
+
