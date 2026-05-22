@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     ollama_url: str = "http://ollama:11434"
     embed_model: str = "nomic-embed-text"
     llm_model: str = "mistral:7b-instruct"
+    llm_version: str = "0.1.0"
 
     class Config:
         env_file = ".env"
@@ -39,7 +40,7 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-app = FastAPI(title="TTRPG Oracle", version="0.1.0")
+app = FastAPI(title="TTRPG Oracle", version=settings.llm_version)
 
 
 # ── Request / Response models ──────────────────────────────────────────────
@@ -65,7 +66,12 @@ class ReindexRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "healthy", "model": settings.llm_model}
+    return {
+        "status": "healthy",
+        "version": settings.llm_version,
+        "model": settings.llm_model,
+        "embed_model": settings.embed_model,
+    }
 
 
 # ── Query endpoint ─────────────────────────────────────────────────────────

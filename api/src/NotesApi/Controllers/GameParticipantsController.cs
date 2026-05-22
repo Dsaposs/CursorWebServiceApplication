@@ -6,8 +6,10 @@ using NotesApi.Models;
 using NotesApi.Rulesets;
 using BuildResult = NotesApi.Rulesets.CharacterCreation.BuildResult;
 
+using Asp.Versioning;
 namespace NotesApi.Controllers;
 
+[ApiVersion("1.0")]
 [ApiController]
 [Route("api/game-participants")]
 public class GameParticipantsController : ControllerBase

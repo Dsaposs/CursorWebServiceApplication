@@ -1,5 +1,6 @@
 using System.Text;
 using System.Threading.RateLimiting;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -125,6 +126,19 @@ builder.Services.AddScoped<NotesApi.Services.IActionBroadcaster, NotesApi.Hubs.S
 builder.Services.AddHostedService<SessionTimeoutService>();
 builder.Services.AddHealthChecks();
 builder.Services.AddControllers();
+
+builder.Services.AddApiVersioning(options =>
+{
+    // Unversioned calls default to v1.0 — all existing UI routes keep working unchanged.
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;          // adds api-supported-versions / api-deprecated-versions headers
+    options.ApiVersionReader = ApiVersionReader.Combine(
+        new UrlSegmentApiVersionReader(),       // /api/v1/games
+        new HeaderApiVersionReader("api-version"),  // api-version: 1.0
+        new QueryStringApiVersionReader("api-version") // ?api-version=1.0
+    );
+});
 
 // SignalR — add Redis backplane when configured, fall back to in-memory for single-instance dev
 var signalR = builder.Services.AddSignalR();

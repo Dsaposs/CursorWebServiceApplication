@@ -5,8 +5,10 @@ using NotesApi.Data;
 using NotesApi.DTOs;
 using NotesApi.Rulesets;
 
+using Asp.Versioning;
 namespace NotesApi.Controllers;
 
+[ApiVersion("1.0")]
 [ApiController]
 [Route("api/games/{gameId:guid}/characters")]
 [Authorize]

@@ -7,8 +7,10 @@ using NotesApi.Models;
 using NotesApi.Rulesets;
 using NotesApi.Services;
 
+using Asp.Versioning;
 namespace NotesApi.Controllers;
 
+[ApiVersion("1.0")]
 [ApiController]
 [Route("api/sessions/{sessionId:guid}/combat")]
 [Authorize]

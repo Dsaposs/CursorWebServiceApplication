@@ -4,8 +4,10 @@ using Microsoft.EntityFrameworkCore;
 using NotesApi.Data;
 using NotesApi.DTOs;
 
+using Asp.Versioning;
 namespace NotesApi.Controllers;
 
+[ApiVersion("1.0")]
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin")]

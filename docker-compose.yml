@@ -4,11 +4,11 @@
 # Services:
 #   postgres  — primary database (port 5432)
 #   redis     — SignalR backplane + cache (port 6379)
-#   api       — ASP.NET Core 8 backend (port 5294)
-#   ui        — Nuxt 4 BFF + frontend (port 3000)
-#   mobile    — Nuxt 3 + Ionic mobile web preview (port 3001)
+#   api       — ASP.NET Core 8 backend (port 5294)         v2.0.0
+#   ui        — Nuxt 4 BFF + frontend (port 3000)          v2.0.0
+#   mobile    — Nuxt 3 + Ionic mobile web preview (port 3001) v0.1.0
 #   ollama    — local LLM server (port 11434)
-#   llm       — FastAPI oracle microservice (port 8000)
+#   llm       — FastAPI oracle microservice (port 8000)    v0.1.0
 #
 # Start everything:  docker compose up -d
 # Stop:              docker compose down
@@ -17,6 +17,9 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    labels:
+      com.ttrpg.service: postgres
+      com.ttrpg.version: "16"
     environment:
       POSTGRES_USER: ttrpg
       POSTGRES_PASSWORD: ttrpg_dev
@@ -33,6 +36,9 @@ services:
 
   redis:
     image: redis:7-alpine
+    labels:
+      com.ttrpg.service: redis
+      com.ttrpg.version: "7"
     ports:
       - "6379:6379"
     healthcheck:
@@ -45,6 +51,9 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+    labels:
+      com.ttrpg.service: api
+      com.ttrpg.version: "2.0.0"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       DATABASE_URL: "Host=postgres;Port=5432;Database=ttrpg;Username=ttrpg;Password=ttrpg_dev"
@@ -53,6 +62,10 @@ services:
       Jwt__Issuer: "TtrpgApi"
       Jwt__Audience: "TtrpgApi"
       Seed__AdminPassword: "Password1"
+      # Exposed to the /api/version endpoint for other services
+      UI_VERSION: "2.0.0"
+      MOBILE_VERSION: "0.1.0"
+      LLM_VERSION: "0.1.0"
     ports:
       - "5294:5294"
     depends_on:
@@ -70,17 +83,39 @@ services:
     build:
       context: ./ui
       dockerfile: Dockerfile
+    labels:
+      com.ttrpg.service: ui
+      com.ttrpg.version: "2.0.0"
     environment:
       NUXT_API_BASE_URL: http://api:5294
       NUXT_LLM_BASE_URL: http://llm:8000
+      UI_VERSION: "2.0.0"
     ports:
       - "3000:3000"
     depends_on:
       api:
         condition: service_healthy
 
+  mobile:
+    build:
+      context: ./mobile
+      dockerfile: Dockerfile
+    labels:
+      com.ttrpg.service: mobile
+      com.ttrpg.version: "0.1.0"
+    environment:
+      NODE_ENV: production
+      NUXT_API_BASE_URL: "http://api:5294"
+      MOBILE_VERSION: "0.1.0"
+    ports:
+      - "3001:3001"
+    depends_on:
+      - api
+
   ollama:
     image: ollama/ollama:latest
+    labels:
+      com.ttrpg.service: ollama
     ports:
       - "11434:11434"
     volumes:
@@ -92,11 +127,15 @@ services:
     build:
       context: ./llm
       dockerfile: Dockerfile
+    labels:
+      com.ttrpg.service: llm
+      com.ttrpg.version: "0.1.0"
     environment:
       DATABASE_URL: "postgresql+asyncpg://ttrpg:ttrpg_dev@postgres:5432/ttrpg"
       OLLAMA_URL: http://ollama:11434
       EMBED_MODEL: nomic-embed-text
       LLM_MODEL: "mistral:7b-instruct"
+      LLM_VERSION: "0.1.0"
     ports:
       - "8000:8000"
     depends_on:
@@ -107,18 +146,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  mobile:
-    build:
-      context: ./mobile
-      dockerfile: Dockerfile
-    environment:
-      NODE_ENV: production
-      NUXT_API_BASE_URL: "http://api:5294"
-    ports:
-      - "3001:3001"
-    depends_on:
-      - api
 
 volumes:
   postgres_data:

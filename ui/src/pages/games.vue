@@ -14,6 +14,7 @@ type GameTab = 'overview' | 'players' | 'npcs' | 'notes';
 
 const { api, email, token, loadSession, clearSession } = useApi();
 const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
+const { appVersion } = useVersion();
 
 const games = ref<GameResponse[]>([]);
 const rulesets = ref<RulesetResponse[]>([]);
@@ -226,6 +227,7 @@ function signOut() {
       <div class="topbar-actions">
         <NuxtLink class="btn ghost sm" to="/campaigns">Campaigns</NuxtLink>
         <NuxtLink class="btn ghost sm" to="/rulesets">Rulesets</NuxtLink>
+        <span class="text-xs text-gray-500 select-none" title="UI version">v{{ appVersion }}</span>
         <button class="btn ghost sm" type="button" @click="signOut">Sign out</button>
       </div>
     </header>

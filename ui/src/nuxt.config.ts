@@ -4,6 +4,9 @@ export default defineNuxtConfig({
   runtimeConfig: {
     apiBaseUrl: process.env.NUXT_API_BASE_URL || 'http://localhost:5294',
     llmBaseUrl: process.env.NUXT_LLM_BASE_URL || '',
+    public: {
+      appVersion: process.env.UI_VERSION || '2.0.0',
+    },
   },
   app: {
     head: {

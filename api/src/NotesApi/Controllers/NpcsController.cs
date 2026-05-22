@@ -7,8 +7,10 @@ using NotesApi.DTOs;
 using NotesApi.Models;
 using NotesApi.Rulesets;
 
+using Asp.Versioning;
 namespace NotesApi.Controllers;
 
+[ApiVersion("1.0")]
 [ApiController]
 [Route("api/games/{gameId:guid}/npcs")]
 [Authorize]
