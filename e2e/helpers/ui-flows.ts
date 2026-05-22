@@ -94,12 +94,15 @@ export async function dmPromptActorRoll(page: Page) {
 export async function playerSubmitAutoRoll(page: Page) {
   await page.getByRole('button', { name: /Roll \d+d\d+/i }).click({ timeout: 45_000 });
   await page.getByRole('button', { name: 'Submit roll to DM' }).click();
+  await expect(page.getByRole('button', { name: 'Submit roll to DM' })).not.toBeVisible({ timeout: 45_000 });
 }
 
 export async function dmPublishResolution(page: Page, note: string) {
-  await page.getByLabel('Resolution note (optional)').fill(note);
+  const resolutionInput = page.getByLabel('Resolution note (optional)');
   const publishButton = page.getByRole('button', { name: 'Publish Resolution' });
   await expect(publishButton).toBeEnabled({ timeout: 45_000 });
+  await expect(resolutionInput).toBeEnabled({ timeout: 45_000 });
+  await resolutionInput.fill(note);
   await publishButton.click();
   await expect(page.getByText(/Resolution published to players|published to players/i)).toBeVisible({ timeout: 45_000 });
 }
