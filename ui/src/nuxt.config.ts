@@ -1,5 +1,6 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
+  devtools: { enabled: false },
   css: ['~/assets/css/app.css'],
   runtimeConfig: {
     apiBaseUrl: process.env.NUXT_API_BASE_URL || 'http://localhost:5294',

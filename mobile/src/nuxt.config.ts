@@ -2,6 +2,10 @@
 export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
 
+  // Devtools must be disabled in production builds — its dependencies
+  // are not installed when NODE_ENV=production (--omit=dev).
+  devtools: { enabled: false },
+
   modules: ['@nuxtjs/tailwindcss'],
 
   // Capacitor requires a fully static build
