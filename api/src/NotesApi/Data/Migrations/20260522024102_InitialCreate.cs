@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace NotesApi.Data.Migrations
+namespace NotesApi.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -34,15 +34,15 @@ namespace NotesApi.Data.Migrations
                     NormalizedUserName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
                     NormalizedEmail = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    EmailConfirmed = table.Column<bool>(type: "INTEGER", nullable: false),
+                    EmailConfirmed = table.Column<bool>(nullable: false),
                     PasswordHash = table.Column<string>(type: "TEXT", nullable: true),
                     SecurityStamp = table.Column<string>(type: "TEXT", nullable: true),
                     ConcurrencyStamp = table.Column<string>(type: "TEXT", nullable: true),
                     PhoneNumber = table.Column<string>(type: "TEXT", nullable: true),
-                    PhoneNumberConfirmed = table.Column<bool>(type: "INTEGER", nullable: false),
-                    TwoFactorEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    PhoneNumberConfirmed = table.Column<bool>(nullable: false),
+                    TwoFactorEnabled = table.Column<bool>(nullable: false),
                     LockoutEnd = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    LockoutEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    LockoutEnabled = table.Column<bool>(nullable: false),
                     AccessFailedCount = table.Column<int>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
@@ -58,7 +58,7 @@ namespace NotesApi.Data.Migrations
                     DisplayName = table.Column<string>(type: "TEXT", maxLength: 120, nullable: false),
                     Description = table.Column<string>(type: "TEXT", maxLength: 500, nullable: false),
                     DiceNotation = table.Column<string>(type: "TEXT", maxLength: 80, nullable: false),
-                    IsPlaceholder = table.Column<bool>(type: "INTEGER", nullable: false),
+                    IsPlaceholder = table.Column<bool>(nullable: false),
                     CharacterTemplateJson = table.Column<string>(type: "TEXT", nullable: false),
                     DefinitionJson = table.Column<string>(type: "TEXT", nullable: false)
                 },
@@ -181,7 +181,7 @@ namespace NotesApi.Data.Migrations
                     UserId = table.Column<string>(type: "TEXT", nullable: false),
                     TokenHash = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
                     ReplacedById = table.Column<Guid>(type: "TEXT", nullable: true),
-                    IsRevoked = table.Column<bool>(type: "INTEGER", nullable: false),
+                    IsRevoked = table.Column<bool>(nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
                     ExpiresAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
@@ -223,6 +223,34 @@ namespace NotesApi.Data.Migrations
                         column: x => x.RulesetCode,
                         principalTable: "Rulesets",
                         principalColumn: "Code",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Campaigns",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Name = table.Column<string>(type: "TEXT", maxLength: 120, nullable: false),
+                    Description = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
+                    OwnerId = table.Column<string>(type: "TEXT", nullable: false),
+                    GameId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Campaigns", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Campaigns_AspNetUsers_OwnerId",
+                        column: x => x.OwnerId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Campaigns_Games_GameId",
+                        column: x => x.GameId,
+                        principalTable: "Games",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
 
@@ -278,6 +306,32 @@ namespace NotesApi.Data.Migrations
                         name: "FK_NpcsAndMonsters_Games_GameId",
                         column: x => x.GameId,
                         principalTable: "Games",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "CampaignMembers",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CampaignId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    UserId = table.Column<string>(type: "TEXT", nullable: false),
+                    JoinedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CampaignMembers", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_CampaignMembers_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_CampaignMembers_Campaigns_CampaignId",
+                        column: x => x.CampaignId,
+                        principalTable: "Campaigns",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -403,7 +457,7 @@ namespace NotesApi.Data.Migrations
                     ChainStepKey = table.Column<string>(type: "TEXT", maxLength: 80, nullable: true),
                     AutoResolveOutcome = table.Column<string>(type: "TEXT", maxLength: 20, nullable: true),
                     Dc = table.Column<int>(type: "INTEGER", nullable: true),
-                    DmRolled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    DmRolled = table.Column<bool>(nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
                     CompletedAt = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
@@ -448,7 +502,7 @@ namespace NotesApi.Data.Migrations
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
                     GameId = table.Column<Guid>(type: "TEXT", nullable: false),
                     JoinCode = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
+                    IsActive = table.Column<bool>(nullable: false),
                     State = table.Column<int>(type: "INTEGER", nullable: false),
                     Version = table.Column<int>(type: "INTEGER", nullable: false),
                     StartedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
@@ -487,7 +541,7 @@ namespace NotesApi.Data.Migrations
                     CombatantName = table.Column<string>(type: "TEXT", maxLength: 160, nullable: false),
                     SortOrder = table.Column<int>(type: "INTEGER", nullable: false),
                     InitiativeScore = table.Column<int>(type: "INTEGER", nullable: false),
-                    IsCurrentTurn = table.Column<bool>(type: "INTEGER", nullable: false),
+                    IsCurrentTurn = table.Column<bool>(nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
@@ -499,6 +553,39 @@ namespace NotesApi.Data.Migrations
                         principalTable: "GameSessions",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ScheduledSessions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CampaignId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Title = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    Notes = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
+                    ScheduledAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    DurationMinutes = table.Column<int>(type: "INTEGER", nullable: false),
+                    Recurrence = table.Column<int>(type: "INTEGER", nullable: false),
+                    RecurrenceCron = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
+                    LinkedSessionId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    IsCancelled = table.Column<bool>(nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ScheduledSessions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ScheduledSessions_Campaigns_CampaignId",
+                        column: x => x.CampaignId,
+                        principalTable: "Campaigns",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ScheduledSessions_GameSessions_LinkedSessionId",
+                        column: x => x.LinkedSessionId,
+                        principalTable: "GameSessions",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -640,6 +727,27 @@ namespace NotesApi.Data.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_CampaignMembers_CampaignId_UserId",
+                table: "CampaignMembers",
+                columns: new[] { "CampaignId", "UserId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CampaignMembers_UserId",
+                table: "CampaignMembers",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Campaigns_GameId",
+                table: "Campaigns",
+                column: "GameId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Campaigns_OwnerId_CreatedAt",
+                table: "Campaigns",
+                columns: new[] { "OwnerId", "CreatedAt" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Characters_GameId_Name",
                 table: "Characters",
                 columns: new[] { "GameId", "Name" },
@@ -728,6 +836,16 @@ namespace NotesApi.Data.Migrations
                 columns: new[] { "UserId", "IsRevoked", "ExpiresAt" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_ScheduledSessions_CampaignId_ScheduledAt",
+                table: "ScheduledSessions",
+                columns: new[] { "CampaignId", "ScheduledAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ScheduledSessions_LinkedSessionId",
+                table: "ScheduledSessions",
+                column: "LinkedSessionId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_SessionNotes_OwnerKind_OwnerId_UpdatedAt",
                 table: "SessionNotes",
                 columns: new[] { "OwnerKind", "OwnerId", "UpdatedAt" });
@@ -807,6 +925,9 @@ namespace NotesApi.Data.Migrations
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
+                name: "CampaignMembers");
+
+            migrationBuilder.DropTable(
                 name: "GameParticipants");
 
             migrationBuilder.DropTable(
@@ -819,6 +940,9 @@ namespace NotesApi.Data.Migrations
                 name: "RefreshTokens");
 
             migrationBuilder.DropTable(
+                name: "ScheduledSessions");
+
+            migrationBuilder.DropTable(
                 name: "SessionNotes");
 
             migrationBuilder.DropTable(
@@ -826,6 +950,9 @@ namespace NotesApi.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");
+
+            migrationBuilder.DropTable(
+                name: "Campaigns");
 
             migrationBuilder.DropTable(
                 name: "ActionRequests");

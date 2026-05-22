@@ -8,10 +8,10 @@ using NotesApi.Data;
 
 #nullable disable
 
-namespace NotesApi.Data.Migrations
+namespace NotesApi.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260522015606_InitialCreate")]
+    [Migration("20260522024102_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -456,6 +456,66 @@ namespace NotesApi.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("NotesApi.Models.Campaign", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId");
+
+                    b.HasIndex("OwnerId", "CreatedAt");
+
+                    b.ToTable("Campaigns");
+                });
+
+            modelBuilder.Entity("NotesApi.Models.CampaignMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("JoinedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("CampaignId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("CampaignMembers");
+                });
+
             modelBuilder.Entity("NotesApi.Models.Character", b =>
                 {
                     b.Property<Guid>("Id")
@@ -857,6 +917,55 @@ namespace NotesApi.Data.Migrations
                     b.ToTable("Rulesets");
                 });
 
+            modelBuilder.Entity("NotesApi.Models.ScheduledSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("LinkedSessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Recurrence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RecurrenceCron")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ScheduledAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkedSessionId");
+
+                    b.HasIndex("CampaignId", "ScheduledAt");
+
+                    b.ToTable("ScheduledSessions");
+                });
+
             modelBuilder.Entity("NotesApi.Models.SessionNote", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1081,6 +1190,44 @@ namespace NotesApi.Data.Migrations
                     b.Navigation("TargetCharacter");
                 });
 
+            modelBuilder.Entity("NotesApi.Models.Campaign", b =>
+                {
+                    b.HasOne("NotesApi.Models.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NotesApi.Models.ApplicationUser", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+
+                    b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("NotesApi.Models.CampaignMember", b =>
+                {
+                    b.HasOne("NotesApi.Models.Campaign", "Campaign")
+                        .WithMany("Members")
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NotesApi.Models.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Campaign");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("NotesApi.Models.Character", b =>
                 {
                     b.HasOne("NotesApi.Models.Game", "Game")
@@ -1192,6 +1339,24 @@ namespace NotesApi.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("NotesApi.Models.ScheduledSession", b =>
+                {
+                    b.HasOne("NotesApi.Models.Campaign", "Campaign")
+                        .WithMany("ScheduledSessions")
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("NotesApi.Models.GameSession", "LinkedSession")
+                        .WithMany()
+                        .HasForeignKey("LinkedSessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Campaign");
+
+                    b.Navigation("LinkedSession");
+                });
+
             modelBuilder.Entity("NotesApi.Models.SessionNote", b =>
                 {
                     b.HasOne("NotesApi.Models.GameSession", "Session")
@@ -1241,6 +1406,13 @@ namespace NotesApi.Data.Migrations
             modelBuilder.Entity("NotesApi.Models.ApplicationUser", b =>
                 {
                     b.Navigation("GamesHosted");
+                });
+
+            modelBuilder.Entity("NotesApi.Models.Campaign", b =>
+                {
+                    b.Navigation("Members");
+
+                    b.Navigation("ScheduledSessions");
                 });
 
             modelBuilder.Entity("NotesApi.Models.Character", b =>

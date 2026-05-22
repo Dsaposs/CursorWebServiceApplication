@@ -7,7 +7,7 @@ using NotesApi.Data;
 
 #nullable disable
 
-namespace NotesApi.Data.Migrations
+namespace NotesApi.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
     partial class ApplicationDbContextModelSnapshot : ModelSnapshot
