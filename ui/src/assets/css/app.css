@@ -387,8 +387,16 @@ p:last-child { margin-bottom: 0; }
 .dm-screen-main > .panel,
 .session-screen-main > .panel {
   width: min(100%, var(--session-wide-max-width));
-  min-width: min(100%, var(--session-wide-min-width));
   margin-inline: auto;
+}
+
+@media (min-width: 1024px) {
+  .dm-two-col-grid,
+  .session-dashboard-grid,
+  .dm-screen-main > .panel,
+  .session-screen-main > .panel {
+    min-width: min(100%, var(--session-wide-min-width));
+  }
 }
 
 .dm-action-column > .panel,
@@ -2444,12 +2452,26 @@ tr:hover td { background: var(--panel-alt); }
 
 /* Portrait / narrow: one column, natural page scroll */
 @media (max-width: 1023px), (orientation: portrait) {
+  :root {
+    --session-wide-min-width: 0;
+    --session-wide-max-width: 100%;
+  }
+
   .dm-app-shell,
   .app-shell:has(> .session-screen-main) {
     grid-template-rows: auto auto;
     height: auto;
     min-height: 100dvh;
+    max-width: 100%;
     overflow: visible;
+  }
+
+  .session-screen-main.stack,
+  .dm-screen-main.stack {
+    width: 100%;
+    max-width: 100%;
+    padding-inline: max(0.75rem, env(safe-area-inset-left)) max(0.75rem, env(safe-area-inset-right));
+    box-sizing: border-box;
   }
 
   .dm-screen-main {
@@ -2458,6 +2480,9 @@ tr:hover td { background: var(--panel-alt); }
     min-height: auto;
     height: auto;
     max-height: none;
+    max-width: 100%;
+    width: 100%;
+    padding-inline-end: 0;
     overflow: visible;
   }
 
@@ -2467,6 +2492,8 @@ tr:hover td { background: var(--panel-alt); }
     min-height: auto;
     height: auto;
     max-height: none;
+    max-width: 100%;
+    width: 100%;
     overflow: visible;
   }
 
@@ -2475,6 +2502,61 @@ tr:hover td { background: var(--panel-alt); }
     overflow: visible;
     min-height: auto;
     height: auto;
+  }
+
+  /* Fit cards to the padded content area — avoid width:100% overflow from nested padding */
+  .session-dashboard-grid,
+  .dm-two-col-grid,
+  .dm-screen-main > .panel,
+  .session-screen-main > .panel {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    margin-inline: 0;
+  }
+
+  .session-dashboard-grid > *,
+  .dm-two-col-grid > *,
+  .session-dashboard-grid .panel,
+  .dm-two-col-grid .panel,
+  .session-dashboard-grid .action-card,
+  .session-dashboard-grid .action-log-group,
+  .dm-two-col-grid .action-card,
+  .dm-two-col-grid .action-log-group,
+  .dm-action-column,
+  .dm-combat-section,
+  .dm-exploration-tools,
+  .dm-participant-section,
+  .combat-banner {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+  }
+
+  .initiative-item,
+  .initiative-item.current-turn-expanded {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .topbar-status {
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .action-card-header,
+  .panel-title {
+    min-width: 0;
   }
 
   .session-dashboard-grid {
@@ -3120,8 +3202,12 @@ tr:hover td { background: var(--panel-alt); }
 
 @media (max-width: 768px) {
   .topbar {
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: 0.5rem 0.75rem;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .topbar-brand {
@@ -3139,7 +3225,10 @@ tr:hover td { background: var(--panel-alt); }
     flex: 1 1 100%;
     order: 3;
     justify-content: flex-end;
+    flex-wrap: wrap;
     margin-left: 0;
+    min-width: 0;
+    max-width: 100%;
     padding-top: 0.1rem;
   }
 
