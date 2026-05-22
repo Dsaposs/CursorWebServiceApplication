@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace NotesApi.Migrations
+namespace NotesApi.Data.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -15,10 +16,10 @@ namespace NotesApi.Migrations
                 name: "AspNetRoles",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    NormalizedName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    ConcurrencyStamp = table.Column<string>(type: "TEXT", nullable: true)
+                    Id = table.Column<string>(type: "text", nullable: false),
+                    Name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    NormalizedName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    ConcurrencyStamp = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -29,21 +30,21 @@ namespace NotesApi.Migrations
                 name: "AspNetUsers",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "TEXT", nullable: false),
-                    UserName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    NormalizedUserName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    Email = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    NormalizedEmail = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
-                    EmailConfirmed = table.Column<bool>(nullable: false),
-                    PasswordHash = table.Column<string>(type: "TEXT", nullable: true),
-                    SecurityStamp = table.Column<string>(type: "TEXT", nullable: true),
-                    ConcurrencyStamp = table.Column<string>(type: "TEXT", nullable: true),
-                    PhoneNumber = table.Column<string>(type: "TEXT", nullable: true),
-                    PhoneNumberConfirmed = table.Column<bool>(nullable: false),
-                    TwoFactorEnabled = table.Column<bool>(nullable: false),
-                    LockoutEnd = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    LockoutEnabled = table.Column<bool>(nullable: false),
-                    AccessFailedCount = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table.Column<string>(type: "text", nullable: false),
+                    UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    NormalizedEmail = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    EmailConfirmed = table.Column<bool>(type: "boolean", nullable: false),
+                    PasswordHash = table.Column<string>(type: "text", nullable: true),
+                    SecurityStamp = table.Column<string>(type: "text", nullable: true),
+                    ConcurrencyStamp = table.Column<string>(type: "text", nullable: true),
+                    PhoneNumber = table.Column<string>(type: "text", nullable: true),
+                    PhoneNumberConfirmed = table.Column<bool>(type: "boolean", nullable: false),
+                    TwoFactorEnabled = table.Column<bool>(type: "boolean", nullable: false),
+                    LockoutEnd = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    LockoutEnabled = table.Column<bool>(type: "boolean", nullable: false),
+                    AccessFailedCount = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -54,13 +55,13 @@ namespace NotesApi.Migrations
                 name: "Rulesets",
                 columns: table => new
                 {
-                    Code = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
-                    DisplayName = table.Column<string>(type: "TEXT", maxLength: 120, nullable: false),
-                    Description = table.Column<string>(type: "TEXT", maxLength: 500, nullable: false),
-                    DiceNotation = table.Column<string>(type: "TEXT", maxLength: 80, nullable: false),
-                    IsPlaceholder = table.Column<bool>(nullable: false),
-                    CharacterTemplateJson = table.Column<string>(type: "TEXT", nullable: false),
-                    DefinitionJson = table.Column<string>(type: "TEXT", nullable: false)
+                    Code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    DisplayName = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
+                    Description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    DiceNotation = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
+                    IsPlaceholder = table.Column<bool>(type: "boolean", nullable: false),
+                    CharacterTemplateJson = table.Column<string>(type: "text", nullable: false),
+                    DefinitionJson = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -71,11 +72,11 @@ namespace NotesApi.Migrations
                 name: "AspNetRoleClaims",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    RoleId = table.Column<string>(type: "TEXT", nullable: false),
-                    ClaimType = table.Column<string>(type: "TEXT", nullable: true),
-                    ClaimValue = table.Column<string>(type: "TEXT", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    RoleId = table.Column<string>(type: "text", nullable: false),
+                    ClaimType = table.Column<string>(type: "text", nullable: true),
+                    ClaimValue = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -92,11 +93,11 @@ namespace NotesApi.Migrations
                 name: "AspNetUserClaims",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    ClaimType = table.Column<string>(type: "TEXT", nullable: true),
-                    ClaimValue = table.Column<string>(type: "TEXT", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    ClaimType = table.Column<string>(type: "text", nullable: true),
+                    ClaimValue = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -113,10 +114,10 @@ namespace NotesApi.Migrations
                 name: "AspNetUserLogins",
                 columns: table => new
                 {
-                    LoginProvider = table.Column<string>(type: "TEXT", nullable: false),
-                    ProviderKey = table.Column<string>(type: "TEXT", nullable: false),
-                    ProviderDisplayName = table.Column<string>(type: "TEXT", nullable: true),
-                    UserId = table.Column<string>(type: "TEXT", nullable: false)
+                    LoginProvider = table.Column<string>(type: "text", nullable: false),
+                    ProviderKey = table.Column<string>(type: "text", nullable: false),
+                    ProviderDisplayName = table.Column<string>(type: "text", nullable: true),
+                    UserId = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -133,8 +134,8 @@ namespace NotesApi.Migrations
                 name: "AspNetUserRoles",
                 columns: table => new
                 {
-                    UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    RoleId = table.Column<string>(type: "TEXT", nullable: false)
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    RoleId = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -157,10 +158,10 @@ namespace NotesApi.Migrations
                 name: "AspNetUserTokens",
                 columns: table => new
                 {
-                    UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    LoginProvider = table.Column<string>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
-                    Value = table.Column<string>(type: "TEXT", nullable: true)
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    LoginProvider = table.Column<string>(type: "text", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Value = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -177,13 +178,13 @@ namespace NotesApi.Migrations
                 name: "RefreshTokens",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    TokenHash = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
-                    ReplacedById = table.Column<Guid>(type: "TEXT", nullable: true),
-                    IsRevoked = table.Column<bool>(nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    ExpiresAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    TokenHash = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    ReplacedById = table.Column<Guid>(type: "uuid", nullable: true),
+                    IsRevoked = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -200,14 +201,14 @@ namespace NotesApi.Migrations
                 name: "Games",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    DmUserId = table.Column<string>(type: "TEXT", nullable: false),
-                    RulesetCode = table.Column<string>(type: "TEXT", maxLength: 50, nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 160, nullable: false),
-                    Description = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
-                    InviteCode = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    DmUserId = table.Column<string>(type: "text", nullable: false),
+                    RulesetCode = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    Name = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    InviteCode = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -230,12 +231,12 @@ namespace NotesApi.Migrations
                 name: "Campaigns",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 120, nullable: false),
-                    Description = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
-                    OwnerId = table.Column<string>(type: "TEXT", nullable: false),
-                    GameId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
+                    Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    OwnerId = table.Column<string>(type: "text", nullable: false),
+                    GameId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -258,19 +259,19 @@ namespace NotesApi.Migrations
                 name: "Characters",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    GameId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 160, nullable: false),
-                    PlayerName = table.Column<string>(type: "TEXT", maxLength: 160, nullable: false),
-                    MaxHealth = table.Column<int>(type: "INTEGER", nullable: false),
-                    Health = table.Column<int>(type: "INTEGER", nullable: false),
-                    Armor = table.Column<int>(type: "INTEGER", nullable: false),
-                    InventoryJson = table.Column<string>(type: "TEXT", nullable: false),
-                    RulesetDataJson = table.Column<string>(type: "TEXT", nullable: false),
-                    StatusEffectsJson = table.Column<string>(type: "TEXT", nullable: false),
-                    ClassKey = table.Column<string>(type: "TEXT", maxLength: 80, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    GameId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    PlayerName = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    MaxHealth = table.Column<int>(type: "integer", nullable: false),
+                    Health = table.Column<int>(type: "integer", nullable: false),
+                    Armor = table.Column<int>(type: "integer", nullable: false),
+                    InventoryJson = table.Column<string>(type: "text", nullable: false),
+                    RulesetDataJson = table.Column<string>(type: "text", nullable: false),
+                    StatusEffectsJson = table.Column<string>(type: "text", nullable: false),
+                    ClassKey = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -287,17 +288,17 @@ namespace NotesApi.Migrations
                 name: "NpcsAndMonsters",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    GameId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 160, nullable: false),
-                    Kind = table.Column<string>(type: "TEXT", maxLength: 80, nullable: false),
-                    MaxHealth = table.Column<int>(type: "INTEGER", nullable: false),
-                    Health = table.Column<int>(type: "INTEGER", nullable: false),
-                    Armor = table.Column<int>(type: "INTEGER", nullable: false),
-                    StatBlockJson = table.Column<string>(type: "TEXT", nullable: false),
-                    StatusEffectsJson = table.Column<string>(type: "TEXT", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    GameId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    Kind = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
+                    MaxHealth = table.Column<int>(type: "integer", nullable: false),
+                    Health = table.Column<int>(type: "integer", nullable: false),
+                    Armor = table.Column<int>(type: "integer", nullable: false),
+                    StatBlockJson = table.Column<string>(type: "text", nullable: false),
+                    StatusEffectsJson = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -314,10 +315,10 @@ namespace NotesApi.Migrations
                 name: "CampaignMembers",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    CampaignId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    JoinedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    CampaignId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "text", nullable: false),
+                    JoinedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -340,13 +341,13 @@ namespace NotesApi.Migrations
                 name: "GameParticipants",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    GameId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    CharacterId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    DisplayName = table.Column<string>(type: "TEXT", maxLength: 160, nullable: false),
-                    JoinToken = table.Column<string>(type: "TEXT", maxLength: 80, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    LastSeenAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    GameId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CharacterId = table.Column<Guid>(type: "uuid", nullable: false),
+                    DisplayName = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    JoinToken = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastSeenAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -369,37 +370,37 @@ namespace NotesApi.Migrations
                 name: "ActionRequests",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    SessionId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    ActorCharacterId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    ActorNpcId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    ActorName = table.Column<string>(type: "TEXT", maxLength: 160, nullable: false),
-                    ActionText = table.Column<string>(type: "TEXT", maxLength: 240, nullable: false),
-                    ActionKey = table.Column<string>(type: "TEXT", maxLength: 80, nullable: true),
-                    TargetCharacterId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    TargetNpcId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    TargetName = table.Column<string>(type: "TEXT", maxLength: 160, nullable: true),
-                    Description = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
-                    Status = table.Column<int>(type: "INTEGER", nullable: false),
-                    Sequence = table.Column<int>(type: "INTEGER", nullable: false),
-                    CombatEncounterId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    SkillCheckBatchId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    SkillCheckGroupLabel = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
-                    RollChainStateJson = table.Column<string>(type: "TEXT", nullable: true),
-                    PendingChainEffectsJson = table.Column<string>(type: "TEXT", nullable: false),
-                    ParentActionId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    FollowUpType = table.Column<string>(type: "TEXT", maxLength: 20, nullable: true),
-                    ChainStep = table.Column<int>(type: "INTEGER", nullable: true),
-                    SessionModeAtSubmit = table.Column<string>(type: "TEXT", maxLength: 20, nullable: true),
-                    CombatRound = table.Column<int>(type: "INTEGER", nullable: true),
-                    DmDifficultyModifier = table.Column<int>(type: "INTEGER", nullable: true),
-                    EffectiveDc = table.Column<int>(type: "INTEGER", nullable: true),
-                    RollMode = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    RollDataJson = table.Column<string>(type: "TEXT", nullable: true),
-                    FlavourText = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    SubmittedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    PublishedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    ResolvedAt = table.Column<DateTime>(type: "TEXT", nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    SessionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ActorCharacterId = table.Column<Guid>(type: "uuid", nullable: true),
+                    ActorNpcId = table.Column<Guid>(type: "uuid", nullable: true),
+                    ActorName = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    ActionText = table.Column<string>(type: "character varying(240)", maxLength: 240, nullable: false),
+                    ActionKey = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                    TargetCharacterId = table.Column<Guid>(type: "uuid", nullable: true),
+                    TargetNpcId = table.Column<Guid>(type: "uuid", nullable: true),
+                    TargetName = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: true),
+                    Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    Status = table.Column<int>(type: "integer", nullable: false),
+                    Sequence = table.Column<int>(type: "integer", nullable: false),
+                    CombatEncounterId = table.Column<Guid>(type: "uuid", nullable: true),
+                    SkillCheckBatchId = table.Column<Guid>(type: "uuid", nullable: true),
+                    SkillCheckGroupLabel = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    RollChainStateJson = table.Column<string>(type: "text", nullable: true),
+                    PendingChainEffectsJson = table.Column<string>(type: "text", nullable: false),
+                    ParentActionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    FollowUpType = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
+                    ChainStep = table.Column<int>(type: "integer", nullable: true),
+                    SessionModeAtSubmit = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
+                    CombatRound = table.Column<int>(type: "integer", nullable: true),
+                    DmDifficultyModifier = table.Column<int>(type: "integer", nullable: true),
+                    EffectiveDc = table.Column<int>(type: "integer", nullable: true),
+                    RollMode = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    RollDataJson = table.Column<string>(type: "text", nullable: true),
+                    FlavourText = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    SubmittedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    PublishedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ResolvedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -416,14 +417,14 @@ namespace NotesApi.Migrations
                 name: "ActionResolutions",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    ActionRequestId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    ResolutionText = table.Column<string>(type: "TEXT", nullable: false),
-                    RollSummary = table.Column<string>(type: "TEXT", nullable: true),
-                    AdditionalActions = table.Column<string>(type: "TEXT", nullable: true),
-                    StatChangesJson = table.Column<string>(type: "TEXT", nullable: false),
-                    Outcome = table.Column<int>(type: "INTEGER", nullable: true),
-                    PublishedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ActionRequestId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ResolutionText = table.Column<string>(type: "text", nullable: false),
+                    RollSummary = table.Column<string>(type: "text", nullable: true),
+                    AdditionalActions = table.Column<string>(type: "text", nullable: true),
+                    StatChangesJson = table.Column<string>(type: "text", nullable: false),
+                    Outcome = table.Column<int>(type: "integer", nullable: true),
+                    PublishedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -440,26 +441,26 @@ namespace NotesApi.Migrations
                 name: "ActionRollPrompts",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    ActionRequestId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    TargetCharacterId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    PromptLabel = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
-                    GuidanceText = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    CheckMode = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    ResultKind = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    ActionKey = table.Column<string>(type: "TEXT", maxLength: 80, nullable: true),
-                    SkillKey = table.Column<string>(type: "TEXT", maxLength: 80, nullable: true),
-                    AttributeKey = table.Column<string>(type: "TEXT", maxLength: 80, nullable: true),
-                    CustomCheckText = table.Column<string>(type: "TEXT", maxLength: 240, nullable: true),
-                    Status = table.Column<int>(type: "INTEGER", nullable: false),
-                    RollSummary = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    RollResultJson = table.Column<string>(type: "TEXT", nullable: true),
-                    ChainStepKey = table.Column<string>(type: "TEXT", maxLength: 80, nullable: true),
-                    AutoResolveOutcome = table.Column<string>(type: "TEXT", maxLength: 20, nullable: true),
-                    Dc = table.Column<int>(type: "INTEGER", nullable: true),
-                    DmRolled = table.Column<bool>(nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "TEXT", nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    ActionRequestId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TargetCharacterId = table.Column<Guid>(type: "uuid", nullable: false),
+                    PromptLabel = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    GuidanceText = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    CheckMode = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    ResultKind = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    ActionKey = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                    SkillKey = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                    AttributeKey = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                    CustomCheckText = table.Column<string>(type: "character varying(240)", maxLength: 240, nullable: true),
+                    Status = table.Column<int>(type: "integer", nullable: false),
+                    RollSummary = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    RollResultJson = table.Column<string>(type: "text", nullable: true),
+                    ChainStepKey = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                    AutoResolveOutcome = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
+                    Dc = table.Column<int>(type: "integer", nullable: true),
+                    DmRolled = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -482,13 +483,13 @@ namespace NotesApi.Migrations
                 name: "CombatEncounters",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    SessionId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Sequence = table.Column<int>(type: "INTEGER", nullable: false),
-                    Round = table.Column<int>(type: "INTEGER", nullable: false),
-                    PromptedTurnCharacterId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    StartedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    EndedAt = table.Column<DateTime>(type: "TEXT", nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    SessionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Sequence = table.Column<int>(type: "integer", nullable: false),
+                    Round = table.Column<int>(type: "integer", nullable: false),
+                    PromptedTurnCharacterId = table.Column<Guid>(type: "uuid", nullable: true),
+                    StartedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    EndedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -499,19 +500,19 @@ namespace NotesApi.Migrations
                 name: "GameSessions",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    GameId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    JoinCode = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
-                    IsActive = table.Column<bool>(nullable: false),
-                    State = table.Column<int>(type: "INTEGER", nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
-                    StartedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    EndedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    NpcVisibilitiesJson = table.Column<string>(type: "TEXT", nullable: false),
-                    DiceRollMode = table.Column<int>(type: "INTEGER", nullable: false),
-                    ActiveTurnParticipantId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    ActiveCombatEncounterId = table.Column<Guid>(type: "TEXT", nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    GameId = table.Column<Guid>(type: "uuid", nullable: false),
+                    JoinCode = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    State = table.Column<int>(type: "integer", nullable: false),
+                    Version = table.Column<int>(type: "integer", nullable: false),
+                    StartedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    EndedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    NpcVisibilitiesJson = table.Column<string>(type: "text", nullable: false),
+                    DiceRollMode = table.Column<int>(type: "integer", nullable: false),
+                    ActiveTurnParticipantId = table.Column<Guid>(type: "uuid", nullable: true),
+                    ActiveCombatEncounterId = table.Column<Guid>(type: "uuid", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -534,15 +535,15 @@ namespace NotesApi.Migrations
                 name: "InitiativeEntries",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    SessionId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    CombatantType = table.Column<int>(type: "INTEGER", nullable: false),
-                    CombatantId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    CombatantName = table.Column<string>(type: "TEXT", maxLength: 160, nullable: false),
-                    SortOrder = table.Column<int>(type: "INTEGER", nullable: false),
-                    InitiativeScore = table.Column<int>(type: "INTEGER", nullable: false),
-                    IsCurrentTurn = table.Column<bool>(nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    SessionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CombatantType = table.Column<int>(type: "integer", nullable: false),
+                    CombatantId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CombatantName = table.Column<string>(type: "character varying(160)", maxLength: 160, nullable: false),
+                    SortOrder = table.Column<int>(type: "integer", nullable: false),
+                    InitiativeScore = table.Column<int>(type: "integer", nullable: false),
+                    IsCurrentTurn = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -559,17 +560,17 @@ namespace NotesApi.Migrations
                 name: "ScheduledSessions",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    CampaignId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Title = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Notes = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
-                    ScheduledAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    DurationMinutes = table.Column<int>(type: "INTEGER", nullable: false),
-                    Recurrence = table.Column<int>(type: "INTEGER", nullable: false),
-                    RecurrenceCron = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    LinkedSessionId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    IsCancelled = table.Column<bool>(nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    CampaignId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Notes = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    ScheduledAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    DurationMinutes = table.Column<int>(type: "integer", nullable: false),
+                    Recurrence = table.Column<int>(type: "integer", nullable: false),
+                    RecurrenceCron = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    LinkedSessionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    IsCancelled = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -592,13 +593,13 @@ namespace NotesApi.Migrations
                 name: "SessionNotes",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    SessionId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    OwnerKind = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
-                    OwnerId = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
-                    Content = table.Column<string>(type: "TEXT", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    SessionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    OwnerKind = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
+                    OwnerId = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    Content = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -615,24 +616,24 @@ namespace NotesApi.Migrations
                 name: "SessionRollPrompts",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    SessionId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    TargetCharacterId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    PromptLabel = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
-                    GuidanceText = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    CheckMode = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    ResultKind = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    ActionKey = table.Column<string>(type: "TEXT", maxLength: 80, nullable: true),
-                    SkillKey = table.Column<string>(type: "TEXT", maxLength: 80, nullable: true),
-                    AttributeKey = table.Column<string>(type: "TEXT", maxLength: 80, nullable: true),
-                    CustomCheckText = table.Column<string>(type: "TEXT", maxLength: 240, nullable: true),
-                    Status = table.Column<int>(type: "INTEGER", nullable: false),
-                    RollSummary = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    RollResultJson = table.Column<string>(type: "TEXT", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    SkillCheckBatchId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    ActionRequestId = table.Column<Guid>(type: "TEXT", nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    SessionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TargetCharacterId = table.Column<Guid>(type: "uuid", nullable: false),
+                    PromptLabel = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    GuidanceText = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    CheckMode = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    ResultKind = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    ActionKey = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                    SkillKey = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                    AttributeKey = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                    CustomCheckText = table.Column<string>(type: "character varying(240)", maxLength: 240, nullable: true),
+                    Status = table.Column<int>(type: "integer", nullable: false),
+                    RollSummary = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    RollResultJson = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    SkillCheckBatchId = table.Column<Guid>(type: "uuid", nullable: true),
+                    ActionRequestId = table.Column<Guid>(type: "uuid", nullable: true)
                 },
                 constraints: table =>
                 {

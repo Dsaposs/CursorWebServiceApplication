@@ -39,6 +39,7 @@ services:
     labels:
       com.ttrpg.service: redis
       com.ttrpg.version: "7"
+    command: redis-server --protected-mode no
     ports:
       - "6379:6379"
     healthcheck:
@@ -57,7 +58,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       DATABASE_URL: "Host=postgres;Port=5432;Database=ttrpg;Username=ttrpg;Password=ttrpg_dev"
-      ConnectionStrings__Redis: "redis:6379"
+      ConnectionStrings__Redis: "redis:6379,abortConnect=false"
       Jwt__Key: "TtrpgApi-Dev-Signing-Key-Min-32-Chars-Long!"
       Jwt__Issuer: "TtrpgApi"
       Jwt__Audience: "TtrpgApi"
@@ -74,10 +75,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5294/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5294/health"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   ui:
     build:
@@ -142,7 +144,7 @@ services:
       - postgres
       - ollama
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5

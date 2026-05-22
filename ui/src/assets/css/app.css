@@ -30,6 +30,8 @@
   --radius-xl: 22px;
   --shadow: 0 4px 32px rgba(0, 0, 0, 0.55);
   --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.35);
+  --session-wide-min-width: 58rem;
+  --session-wide-max-width: 74rem;
 }
 
 * {
@@ -326,6 +328,12 @@ p:last-child { margin-bottom: 0; }
   box-sizing: border-box;
 }
 
+/* Keep extra breathing room on the right edge so cards do not visually clip. */
+.dm-screen-main {
+  max-width: min(var(--page-max), calc(100vw - 2.5rem));
+  padding-inline-end: max(1.5rem, calc(1rem + env(safe-area-inset-right)));
+}
+
 .session-primary-column,
 .session-feed-column,
 .session-action-column,
@@ -349,6 +357,13 @@ p:last-child { margin-bottom: 0; }
   min-width: 0;
 }
 
+.dm-exploration-tools {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
+}
+
 /* ─── DM two-column layout ───────────────────────────────── */
 
 .dm-two-col-grid {
@@ -364,6 +379,32 @@ p:last-child { margin-bottom: 0; }
   display: grid;
   gap: 1rem;
   align-content: start;
+  min-width: 0;
+}
+
+.dm-two-col-grid,
+.session-dashboard-grid,
+.dm-screen-main > .panel,
+.session-screen-main > .panel {
+  width: min(100%, var(--session-wide-max-width));
+  min-width: min(100%, var(--session-wide-min-width));
+  margin-inline: auto;
+}
+
+.dm-action-column > .panel,
+.dm-reference-column > .panel,
+.dm-exploration-tools > .panel,
+.dm-participant-section > .panel,
+.session-primary-column > .panel,
+.session-feed-column > .panel,
+.pending-player-actions > .action-card,
+.pending-actions-list > .action-card,
+.action-log-scroll > .action-card,
+.action-log-groups > .action-log-group,
+.action-evaluation-panel,
+.initiative-list > .initiative-item {
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 
@@ -1052,14 +1093,22 @@ select option {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.75rem 0.85rem;
   cursor: pointer;
+  min-width: 0;
+}
+
+.entity-stat-details summary > span:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .entity-stat-details summary strong,
 .entity-stat-details summary small {
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .entity-stat-details summary strong {
@@ -1076,13 +1125,17 @@ select option {
 .entity-stat-summary {
   flex: 0 0 auto;
   font-family: 'Menlo', 'Consolas', monospace;
+  overflow-wrap: anywhere;
 }
 
 .entity-stat-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.5rem;
   flex: 0 0 auto;
+  max-width: 100%;
 }
 
 /* NPC visibility cycle button */
@@ -1761,8 +1814,10 @@ select option {
 .initiative-item-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.8rem 0.9rem;
+  min-width: 0;
 }
 
 .initiative-turn-body {
@@ -1829,6 +1884,7 @@ select option {
 .initiative-name {
   font-weight: 600;
   color: var(--ink-bright);
+  overflow-wrap: anywhere;
 }
 
 .initiative-type {
@@ -2296,6 +2352,8 @@ tr:hover td { background: var(--panel-alt); }
     grid-template-rows: auto auto auto;
     gap: clamp(0.75rem, 1.2vw, 1rem);
     padding: clamp(0.75rem, 1.2vw, 1.25rem);
+    padding-inline-end: calc(clamp(0.75rem, 1.2vw, 1.25rem) + 1.4rem);
+    max-width: min(var(--page-max), calc(100vw - 2.9rem));
   }
 
   .dm-screen-main > .session-dashboard-grid {
@@ -2341,7 +2399,7 @@ tr:hover td { background: var(--panel-alt); }
 
   /* DM two-column layout: wider left (action column) + narrower right (reference) */
   .dm-two-col-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(22rem, 28rem);
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
     align-items: start;
   }
 }
@@ -2399,12 +2457,14 @@ tr:hover td { background: var(--panel-alt); }
      1. dm-combat-section  (combat tracker + skill prompts + NPC actions)
      2. pending-actions-panel (review & resolve submissions)
      3. action-log-panel  (published outcomes)
-     4. dm-participant-section (character/NPC reference — scrolled to when needed)
+     4. dm-exploration-tools (player skill checks + NPC quick actions)
+     5. dm-participant-section (character/NPC reference — scrolled to when needed)
   */
   .dm-combat-section         { order: 1; }
   .pending-actions-panel     { order: 2; }
   .action-log-panel          { order: 3; }
-  .dm-participant-section    { order: 4; }
+  .dm-exploration-tools      { order: 4; }
+  .dm-participant-section    { order: 5; }
 
   /* Collapse DM two-column to single column on portrait */
   .dm-two-col-grid {

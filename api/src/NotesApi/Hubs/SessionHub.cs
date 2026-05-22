@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using NotesApi.Data;
 using NotesApi.Services;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 namespace NotesApi.Hubs;
 
@@ -68,23 +69,43 @@ public class SessionHub : Hub
 
 /// <summary>
 /// SignalR implementation of IActionBroadcaster — replaces the Phase 2 no-op.
-/// Registered in DI when SignalR hub is available.
+/// All broadcasts are fire-and-forget: a Redis connection failure is logged but never
+/// propagates to the caller, so HTTP requests always succeed even when the backplane
+/// is temporarily unavailable.
 /// </summary>
 public class SignalRActionBroadcaster : IActionBroadcaster
 {
     private readonly IHubContext<SessionHub> _hub;
+    private readonly ILogger<SignalRActionBroadcaster> _logger;
 
-    public SignalRActionBroadcaster(IHubContext<SessionHub> hub)
+    public SignalRActionBroadcaster(IHubContext<SessionHub> hub, ILogger<SignalRActionBroadcaster> logger)
     {
         _hub = hub;
+        _logger = logger;
     }
 
     public Task BroadcastToSessionAsync(Guid sessionId, string eventName, object payload, CancellationToken ct = default) =>
-        _hub.Clients.Group($"session:{sessionId}").SendAsync(eventName, payload, ct);
+        SafeSendAsync(_hub.Clients.Group($"session:{sessionId}").SendAsync(eventName, payload, ct), eventName);
 
     public Task BroadcastToDmAsync(Guid sessionId, string dmUserId, string eventName, object payload, CancellationToken ct = default) =>
-        _hub.Clients.Group($"dm:{sessionId}:{dmUserId}").SendAsync(eventName, payload, ct);
+        SafeSendAsync(_hub.Clients.Group($"dm:{sessionId}:{dmUserId}").SendAsync(eventName, payload, ct), eventName);
 
     public Task BroadcastToParticipantAsync(Guid sessionId, string participantToken, string eventName, object payload, CancellationToken ct = default) =>
-        _hub.Clients.Group($"player:{participantToken}").SendAsync(eventName, payload, ct);
+        SafeSendAsync(_hub.Clients.Group($"player:{participantToken}").SendAsync(eventName, payload, ct), eventName);
+
+    private async Task SafeSendAsync(Task sendTask, string eventName)
+    {
+        try
+        {
+            await sendTask;
+        }
+        catch (RedisConnectionException ex)
+        {
+            _logger.LogWarning("SignalR broadcast skipped for '{Event}': Redis not connected — {Message}", eventName, ex.Message.Split('\n')[0]);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("SignalR broadcast failed for '{Event}': {Message}", eventName, ex.Message);
+        }
+    }
 }

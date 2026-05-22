@@ -115,28 +115,6 @@ const explorationPendingActions = computed(() =>
 );
 const publishedActions = computed(() => [...(state.value?.actions.filter(a => a.status === 'Published') ?? [])].reverse());
 
-// DM Resolution Workspace
-const workspaceAction = ref<ActionQueueItemResponse | null>(null);
-
-function openWorkspace(action: ActionQueueItemResponse) {
-  workspaceAction.value = action;
-}
-
-function onWorkspaceResolved(updated: ActionQueueItemResponse) {
-  if (state.value) {
-    const idx = state.value.actions.findIndex(a => a.id === updated.id);
-    if (idx >= 0) state.value.actions[idx] = updated;
-  }
-  if (updated.status === 'Published' || updated.status === 'Rejected') {
-    workspaceAction.value = null;
-  } else {
-    workspaceAction.value = updated;
-  }
-}
-
-function onWorkspaceRejected() {
-  workspaceAction.value = null;
-}
 const game = computed<GameResponse | null>(() => state.value?.game ?? null);
 const combatEncounters = computed(() => state.value?.combatEncounters ?? []);
 const activeEncounter = computed(() =>
@@ -262,6 +240,9 @@ async function submitNpcAction() {
     toastError('Enter a target name for Other.');
     return;
   }
+  if (!validateNpcRollRequirements()) {
+    return;
+  }
 
   const npcDescription = [
     npcRollResult.value ? `🎲 Roll: ${npcRollResult.value}` : '',
@@ -339,6 +320,7 @@ async function submitAndResolveNpcAction() {
   const payload = buildNpcActionSubmitPayload();
   if (!payload) { toastError('Choose or describe an NPC action first.'); return; }
   if (!npcActionTargetPickerRef.value?.isValid()) { toastError('Enter a target name for Other.'); return; }
+  if (!validateNpcRollRequirements()) return;
   const npcDescription = [
     npcRollResult.value ? `🎲 Roll: ${npcRollResult.value}` : '',
     npcDamageRollResult.value || '',
@@ -938,6 +920,30 @@ const npcAttackOutcome = computed(() => {
 const showNpcDamageRoll = computed(() =>
   Boolean(effectiveNpcActionRoll.value?.damageRoll && npcAttackOutcome.value === 'Pass'),
 );
+const npcActionNeedsRoll = computed(() =>
+  npcActionMode.value === 'action' && Boolean(selectedNpcActionDef.value?.roll),
+);
+const npcActionHasRollChain = computed(() =>
+  npcActionMode.value === 'action' && Boolean(selectedNpcActionDef.value?.rollChain?.length),
+);
+const npcHasPrimaryRoll = computed(() => Boolean(npcRollResult.value.trim()));
+const npcHasFollowUpRoll = computed(() => Boolean(npcDamageRollResult.value.trim()));
+const npcNeedsFollowUpRoll = computed(() =>
+  npcActionHasRollChain.value && showNpcDamageRoll.value,
+);
+
+function validateNpcRollRequirements() {
+  if (!npcActionNeedsRoll.value) return true;
+  if (!npcHasPrimaryRoll.value) {
+    toastError('Roll the NPC action before submitting.');
+    return false;
+  }
+  if (npcNeedsFollowUpRoll.value && !npcHasFollowUpRoll.value) {
+    toastError('This NPC roll chain needs a follow-up damage roll before submitting.');
+    return false;
+  }
+  return true;
+}
 
 const npcRollContext = computed(() => {
   const def = rulesetDefinition.value;
@@ -1321,7 +1327,9 @@ onUnmounted(() => {
                 />
 
                 <template v-if="npcHasTarget">
-                  <p class="text-sm muted" style="margin: 0.25rem 0 0.25rem;">Roll on the table (optional).</p>
+                  <p class="text-sm muted" style="margin: 0.25rem 0 0.25rem;">
+                    {{ npcActionNeedsRoll ? 'Roll before resolving this NPC action.' : 'Roll on the table (optional).' }}
+                  </p>
                   <RulesetDiceRoller v-if="npcRollContext" v-model="npcRollResult" :context="npcRollContext" />
                   <DamageRollRoller
                     v-if="showNpcDamageRoll && effectiveNpcActionRoll?.damageRoll && rulesetDefinition"
@@ -1356,143 +1364,19 @@ onUnmounted(() => {
                   @update:inventory-deltas="npcInlineInventoryDeltas = $event"
                   @update:status-changes="npcInlineStatusChanges = $event"
                 />
-                <button class="btn success" type="submit" :disabled="isSaving" style="margin-top: 0.75rem;">
+                <button
+                  class="btn success"
+                  type="submit"
+                  :disabled="isSaving || (npcActionNeedsRoll && !npcHasPrimaryRoll) || (npcNeedsFollowUpRoll && !npcHasFollowUpRoll)"
+                  style="margin-top: 0.75rem;"
+                >
                   {{ isSaving ? 'Resolving…' : 'Resolve NPC action' }}
                 </button>
               </form>
             </template>
           </DmCombatWorkflow>
 
-          <DmPlayerSkillCheckPanel
-            v-if="!isCombat && game?.characters.length"
-            :characters="game.characters"
-            :roll-prompts="sessionRollPrompts"
-            :ruleset-definition="rulesetDefinition"
-            :is-busy="isSaving"
-            @send="sendSessionRollPrompts"
-            @cancel="cancelRollPrompt"
-          />
-
-          <!-- NPC quick action — exploration only; combat drives this through the turn overlay -->
-          <div v-if="game?.npcsAndMonsters.length && !isCombat" class="panel">
-            <div class="panel-title">
-              <div>
-                <h2>NPC Actions</h2>
-                <p class="text-sm">Queue an NPC or monster action for DM resolution.</p>
-              </div>
-              <button
-                v-if="!showNpcActionForm"
-                class="btn"
-                type="button"
-                @click="showNpcActionForm = true"
-              >
-                Take NPC Action
-              </button>
-            </div>
-            <form v-if="showNpcActionForm" @submit.prevent="submitNpcAction">
-              <label>
-                NPC
-                <select v-model="selectedNpcId" required @change="resetNpcActionSelection">
-                  <option value="">Choose NPC / Monster</option>
-                  <option v-for="npc in game.npcsAndMonsters" :key="npc.id" :value="npc.id">{{ npc.name }}</option>
-                </select>
-              </label>
-              <label>
-                Action type
-                <select v-model="npcActionMode" :disabled="!selectedNpcId">
-                  <option v-if="availableNpcActions.length" value="action">Action</option>
-                  <option value="stat-check">Stat check</option>
-                </select>
-              </label>
-              <label v-if="npcActionMode === 'action'">
-                Action
-                <select v-model="selectedNpcActionKey" required>
-                  <option value="">Choose an action</option>
-                  <option v-for="action in availableNpcActions" :key="action.key" :value="action.key">
-                    {{ action.label }}
-                  </option>
-                </select>
-              </label>
-              <label v-else>
-                Stat
-                <select v-model="selectedNpcStatKey" required>
-                  <option value="">Choose a stat</option>
-                  <optgroup label="Skills">
-                    <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'skill')" :key="stat.key" :value="stat.key">
-                      {{ stat.label }}
-                    </option>
-                  </optgroup>
-                  <optgroup label="Attributes">
-                    <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'attribute')" :key="stat.key" :value="stat.key">
-                      {{ stat.label }}
-                    </option>
-                  </optgroup>
-                </select>
-              </label>
-              <div v-if="npcActionMode === 'action' && selectedNpcActionDetail" class="alert info">
-                <div>
-                  <strong>{{ selectedNpcActionDetail.dice }}</strong>
-                  <p class="text-sm">
-                    Roll {{ selectedNpcActionDetail.attribute }} + {{ selectedNpcActionDetail.skill }}.
-                    Modifiers: {{ selectedNpcActionDetail.modifiers }}.
-                  </p>
-                  <p class="text-sm">{{ selectedNpcActionDetail.successRule }}</p>
-                </div>
-              </div>
-              <div v-else-if="npcActionMode === 'stat-check' && selectedNpcStatDetail" class="alert info">
-                <div>
-                  <strong>{{ selectedNpcStatDetail.actionText }}</strong>
-                  <p class="text-sm">Suggested roll: {{ selectedNpcStatDetail.rollSummary }}.</p>
-                </div>
-              </div>
-              <p class="text-sm muted" style="margin: 0 0 0.75rem;">
-                Roll on the table (optional) — NPC actions are resolved by you; dice here are recorded in the queue, not sent to players.
-              </p>
-              <RulesetDiceRoller
-                v-if="npcRollContext"
-                v-model="npcRollResult"
-                :context="npcRollContext"
-              />
-
-              <DamageRollRoller
-                v-if="showNpcDamageRoll && effectiveNpcActionRoll?.damageRoll && rulesetDefinition"
-                v-model="npcDamageRollResult"
-                :damage-roll="effectiveNpcActionRoll.damageRoll"
-                :definition="rulesetDefinition"
-                :attributes="npcStats.attributes"
-              />
-
-              <ActionTargetPicker
-                v-if="game"
-                ref="npcActionTargetPickerRef"
-                :characters="game.characters"
-                :npcs="game.npcsAndMonsters"
-                :disabled="isSaving"
-              />
-              <div class="btn-row">
-                <button class="btn" type="submit" :disabled="isSaving">
-                  {{ isSaving ? 'Sending…' : 'Send to Queue' }}
-                </button>
-                <button class="btn ghost" type="button" :disabled="isSaving" @click="showNpcActionForm = false">
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-
           </div><!-- /dm-combat-section -->
-
-          <!-- Pending actions — hidden during combat (resolve from initiative instead) -->
-          <!-- DM Resolution Workspace (shown above the queue when open) -->
-          <DmResolutionWorkspace
-            v-if="workspaceAction"
-            :action="workspaceAction"
-            :game-id="state?.game.id ?? ''"
-            class="workspace-overlay"
-            @resolved="onWorkspaceResolved"
-            @rejected="onWorkspaceRejected"
-            @closed="workspaceAction = null"
-          />
 
           <div v-if="!isCombat" class="panel dashboard-primary-panel pending-actions-panel">
             <div class="panel-title">
@@ -1540,15 +1424,7 @@ onUnmounted(() => {
                       {{ actionRollFlowLabel(pendingRollFlowStatus(action)) }}
                     </span>
                   </div>
-                  <div class="flex gap-1">
-                    <button
-                      class="btn ghost sm"
-                      type="button"
-                      title="Open in resolution workspace"
-                      @click.stop="openWorkspace(action)"
-                    >⚡ Workspace</button>
-                    <span class="badge pending">{{ expandedPendingActions.has(action.id) ? 'Hide' : 'Resolve' }}</span>
-                  </div>
+                  <span class="badge pending">{{ expandedPendingActions.has(action.id) ? 'Hide' : 'Resolve' }}</span>
                 </button>
 
                 <ActionEvaluationPanel
@@ -1605,6 +1481,131 @@ onUnmounted(() => {
 
         <!-- RIGHT: Reference column — participants, skill checks, exploration NPC form -->
         <div class="dm-reference-column">
+          <div v-if="!isCombat" class="dm-exploration-tools">
+            <DmPlayerSkillCheckPanel
+              v-if="game?.characters.length"
+              :characters="game.characters"
+              :roll-prompts="sessionRollPrompts"
+              :ruleset-definition="rulesetDefinition"
+              :is-busy="isSaving"
+              @send="sendSessionRollPrompts"
+              @cancel="cancelRollPrompt"
+            />
+
+            <!-- NPC quick action — exploration only; combat drives this through the turn overlay -->
+            <div v-if="game?.npcsAndMonsters.length" class="panel">
+              <div class="panel-title">
+                <div>
+                  <h2>NPC Actions</h2>
+                  <p class="text-sm">Queue an NPC or monster action for DM resolution.</p>
+                </div>
+                <button
+                  v-if="!showNpcActionForm"
+                  class="btn"
+                  type="button"
+                  @click="showNpcActionForm = true"
+                >
+                  Take NPC Action
+                </button>
+              </div>
+              <form v-if="showNpcActionForm" @submit.prevent="submitNpcAction">
+                <label>
+                  NPC
+                  <select v-model="selectedNpcId" required @change="resetNpcActionSelection">
+                    <option value="">Choose NPC / Monster</option>
+                    <option v-for="npc in game.npcsAndMonsters" :key="npc.id" :value="npc.id">{{ npc.name }}</option>
+                  </select>
+                </label>
+                <label>
+                  Action type
+                  <select v-model="npcActionMode" :disabled="!selectedNpcId">
+                    <option v-if="availableNpcActions.length" value="action">Action</option>
+                    <option value="stat-check">Stat check</option>
+                  </select>
+                </label>
+                <label v-if="npcActionMode === 'action'">
+                  Action
+                  <select v-model="selectedNpcActionKey" required>
+                    <option value="">Choose an action</option>
+                    <option v-for="action in availableNpcActions" :key="action.key" :value="action.key">
+                      {{ action.label }}
+                    </option>
+                  </select>
+                </label>
+                <label v-else>
+                  Stat
+                  <select v-model="selectedNpcStatKey" required>
+                    <option value="">Choose a stat</option>
+                    <optgroup label="Skills">
+                      <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'skill')" :key="stat.key" :value="stat.key">
+                        {{ stat.label }}
+                      </option>
+                    </optgroup>
+                    <optgroup label="Attributes">
+                      <option v-for="stat in availableNpcStatChecks.filter(s => s.type === 'attribute')" :key="stat.key" :value="stat.key">
+                        {{ stat.label }}
+                      </option>
+                    </optgroup>
+                  </select>
+                </label>
+                <div v-if="npcActionMode === 'action' && selectedNpcActionDetail" class="alert info">
+                  <div>
+                    <strong>{{ selectedNpcActionDetail.dice }}</strong>
+                    <p class="text-sm">
+                      Roll {{ selectedNpcActionDetail.attribute }} + {{ selectedNpcActionDetail.skill }}.
+                      Modifiers: {{ selectedNpcActionDetail.modifiers }}.
+                    </p>
+                    <p class="text-sm">{{ selectedNpcActionDetail.successRule }}</p>
+                  </div>
+                </div>
+                <div v-else-if="npcActionMode === 'stat-check' && selectedNpcStatDetail" class="alert info">
+                  <div>
+                    <strong>{{ selectedNpcStatDetail.actionText }}</strong>
+                    <p class="text-sm">Suggested roll: {{ selectedNpcStatDetail.rollSummary }}.</p>
+                  </div>
+                </div>
+                <p class="text-sm muted" style="margin: 0 0 0.75rem;">
+                  {{ npcActionNeedsRoll
+                    ? 'Roll before sending this NPC action. Dice are recorded in the queue for your review workflow.'
+                    : 'Roll on the table (optional) — NPC actions are resolved by you; dice here are recorded in the queue, not sent to players.' }}
+                </p>
+                <RulesetDiceRoller
+                  v-if="npcRollContext"
+                  v-model="npcRollResult"
+                  :context="npcRollContext"
+                />
+
+                <DamageRollRoller
+                  v-if="showNpcDamageRoll && effectiveNpcActionRoll?.damageRoll && rulesetDefinition"
+                  v-model="npcDamageRollResult"
+                  :damage-roll="effectiveNpcActionRoll.damageRoll"
+                  :definition="rulesetDefinition"
+                  :attributes="npcStats.attributes"
+                />
+
+                <ActionTargetPicker
+                  v-if="game"
+                  ref="npcActionTargetPickerRef"
+                  :characters="game.characters"
+                  :npcs="game.npcsAndMonsters"
+                  :disabled="isSaving"
+                />
+                <div class="btn-row">
+                  <button
+                    class="btn"
+                    type="submit"
+                    :disabled="isSaving || (npcActionNeedsRoll && !npcHasPrimaryRoll) || (npcNeedsFollowUpRoll && !npcHasFollowUpRoll)"
+                  >
+                    {{ isSaving ? 'Sending…' : 'Send to Queue' }}
+                  </button>
+                  <button class="btn ghost" type="button" :disabled="isSaving" @click="showNpcActionForm = false">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
           <div class="dm-participant-section">
             <DmParticipantPanels
               v-if="state?.game"

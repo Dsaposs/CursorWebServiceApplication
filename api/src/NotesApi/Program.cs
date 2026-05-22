@@ -146,7 +146,12 @@ var redisConnectionString = builder.Configuration.GetConnectionString("Redis")
     ?? builder.Configuration["REDIS_URL"];
 if (!string.IsNullOrWhiteSpace(redisConnectionString))
 {
-    signalR.AddStackExchangeRedis(redisConnectionString);
+    signalR.AddStackExchangeRedis(redisConnectionString, options =>
+    {
+        options.Configuration.AbortOnConnectFail = false;
+        options.Configuration.ConnectRetry = 5;
+        options.Configuration.ReconnectRetryPolicy = new StackExchange.Redis.ExponentialRetry(1000);
+    });
 }
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -934,7 +939,11 @@ static async Task SeedDefaultUsersAsync(RoleManager<IdentityRole> roleManager, U
         await userManager.RemoveFromRoleAsync(admin, userRole);
     }
 
-    foreach (var user in userManager.Users.Where(user => user.UserName != adminUserName))
+    var nonAdminUsers = await userManager.Users
+        .Where(u => u.UserName != adminUserName)
+        .ToListAsync();
+
+    foreach (var user in nonAdminUsers)
     {
         if (!await userManager.IsInRoleAsync(user, userRole))
         {

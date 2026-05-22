@@ -1,14 +1,11 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'player-auth' });
 import type { InitiativeEntryResponse, RulesetResponse, SessionStateResponse } from '~/types/api';
-import { useRulesetActionChooser } from '~/composables/useRulesetActionChooser';
 import { parseCharacterStats } from '~/utils/dice';
-import { parseInventory } from '~/utils/inventory';
 import { parseRulesetDefinition } from '~/utils/rulesets';
 import { useRulesetTheme } from '~/composables/useRulesetTheme';
 import { useThemePreference } from '~/composables/useThemePreference';
 import ActionForm from '~/components/ActionForm.vue';
-import ActionBuilder from '~/components/ActionBuilder.vue';
 import PlayerRollPromptOverlay from '~/components/PlayerRollPromptOverlay.vue';
 import PlayerCombatTurnOverlay from '~/components/PlayerCombatTurnOverlay.vue';
 import { isSameGuid } from '~/utils/rollPrompt';
@@ -21,9 +18,7 @@ const { error: toastError, success: toastSuccess } = useToast();
 const playerToken = ref<string | null>(null);
 const ruleset = ref<RulesetResponse | null>(null);
 const showCharacterSheet = ref(false);
-const actionTargetPickerRef = ref<{ isValid: () => boolean; reset: () => void; toSubmitFields: () => { targetCharacterId?: string; targetNpcId?: string; targetName?: string } } | null>(null);
 const actionFormRef = ref<{ reset: () => void } | null>(null);
-const description = ref('');
 const isSubmitting = ref(false);
 const isSubmittingRollPrompt = ref(false);
 const isSkippingTurn = ref(false);
@@ -85,20 +80,6 @@ const isMyTurn = computed(() => {
 
 const isCombat = computed(() => state.value?.state === 'Combat');
 const rulesetDefinition = computed(() => parseRulesetDefinition(ruleset.value));
-const actingClassKey = computed(() => state.value?.character?.classKey ?? '');
-const playerInventory = computed(() => parseInventory(state.value?.character?.inventoryJson));
-const {
-  actionMode,
-  selectedActionKey,
-  selectedStatKey,
-  customActionText: actionText,
-  availableActions,
-  availableStatChecks,
-  selectedActionDetail,
-  selectedStatDetail,
-  resetSelection: resetActionSelection,
-  buildSubmitPayload,
-} = useRulesetActionChooser(rulesetDefinition, actingClassKey, playerInventory);
 const pendingPlayerActions = computed(() =>
   state.value?.actions.filter(action =>
     action.status === 'Pending'
@@ -137,9 +118,7 @@ const combatTurnWaiting = computed(() =>
 
 watch(isMyTurn, (mine, wasMine) => {
   if (mine && !wasMine) {
-    resetActionSelection();
-    actionTargetPickerRef.value?.reset();
-    description.value = '';
+    actionFormRef.value?.reset();
   }
 });
 
@@ -274,45 +253,6 @@ async function submitActionFromForm(payload: ActionFormPayload) {
       },
     });
     actionFormRef.value?.reset();
-    await refresh();
-    if (!isCombat.value) {
-      showActionForm.value = false;
-    }
-    toastSuccess('Action sent to DM! The DM will call for your roll.');
-  } catch (err) {
-    toastError(err instanceof Error ? err.message : String(err));
-  } finally {
-    isSubmitting.value = false;
-  }
-}
-
-async function submitAction() {
-  if (!playerToken.value || !state.value) return;
-  const payload = buildSubmitPayload(description.value);
-  if (!payload) {
-    toastError('Choose or describe an action first.');
-    return;
-  }
-  if (!actionTargetPickerRef.value?.isValid()) {
-    toastError('Enter a target name for Other.');
-    return;
-  }
-
-  isSubmitting.value = true;
-  try {
-    await api(`/api/sessions/${state.value.joinCode}/actions`, {
-      method: 'POST',
-      playerToken: playerToken.value,
-      body: {
-        actionKey: payload.actionKey,
-        actionText: payload.actionText,
-        ...actionTargetPickerRef.value.toSubmitFields(),
-        description: description.value.trim() || undefined,
-      },
-    });
-    resetActionSelection();
-    actionTargetPickerRef.value?.reset();
-    description.value = '';
     await refresh();
     if (!isCombat.value) {
       showActionForm.value = false;
@@ -468,29 +408,15 @@ async function skipTurn() {
           </button>
         </div>
 
-        <!-- Phase 2: ActionBuilder (structured action wizard) -->
-        <ActionBuilder
-          v-if="showActionForm && rulesetDefinition && state"
-          :session-join-code="String(route.params.code)"
-          :ruleset-definition="rulesetDefinition"
-          :session-mode="(state.state as 'Exploration' | 'Combat' | 'Downtime')"
-          :dice-roll-mode="(state.diceRollMode ?? 'App') as 'App' | 'Manual' | 'Hybrid'"
-          :is-my-turn="!isCombat"
-          :character-class-key="state.character?.classKey"
-          :player-token="playerToken"
-          @submitted="showActionForm = false; void refresh()"
-          @cancelled="showActionForm = false"
-        />
-
-        <!-- Legacy ActionForm (kept as fallback if ruleset has no structured actions) -->
         <ActionForm
-          v-else-if="showActionForm && !rulesetDefinition"
+          v-if="showActionForm"
           ref="actionFormRef"
           :ruleset-definition="rulesetDefinition"
           :class-key="state.character?.classKey"
           :inventory-json="state.character?.inventoryJson"
           :characters="state.game.characters"
           :npcs="state.game.npcsAndMonsters"
+          :require-target-for-combat="false"
           :is-submitting="isSubmitting"
           @submit="submitActionFromForm"
           @cancel="showActionForm = false"
